@@ -10,7 +10,12 @@ export function errorInterceptor(req: HttpRequest<unknown>, next: HttpHandlerFn)
 
   return next(req).pipe(
     catchError((err: HttpErrorResponse) => {
-      if (err.status === 401 && !req.url.includes('/auth/login') && !req.url.includes('/auth/refresh')) {
+      if (
+        err.status === 401
+        && auth.isAuthenticated()
+        && !req.url.includes('/auth/login')
+        && !req.url.includes('/auth/refresh')
+      ) {
         auth.logout(false);
         router.navigate(['/auth/login']);
       }

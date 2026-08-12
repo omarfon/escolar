@@ -32,7 +32,7 @@ export class TareasEstudianteService {
 
   readonly pendientes = computed(() => this._tareas().filter(t => t.estado === 'PENDING'));
   readonly entregadas = computed(() => this._tareas().filter(t => t.estado === 'SUBMITTED'));
-  readonly vencidas = computed(() => this._tareas().filter(t => t.estado === 'OVERDUE'));
+  readonly vencidas = computed(() => this._tareas().filter(t => t.vencida || t.estado === 'OVERDUE'));
   readonly calificadas = computed(() => this._tareas().filter(t => t.estado === 'GRADED'));
 
   readonly cursosDisponibles = computed(() =>
@@ -48,7 +48,7 @@ export class TareasEstudianteService {
   load(): void {
     this.loading.set(true);
 
-    const perfil$ = this.auth.hasRole('ESTUDIANTE')
+    const perfil$ = this.auth.isPortalEstudiante()
       ? this.portal.ensureLoaded()
       : of(null);
 
@@ -72,10 +72,10 @@ export class TareasEstudianteService {
     return this._tareas().filter(t => {
       if (vista === 'pendientes' && t.estado !== 'PENDING') return false;
       if (vista === 'entregadas' && t.estado !== 'SUBMITTED') return false;
-      if (vista === 'vencidas' && t.estado !== 'OVERDUE') return false;
+      if (vista === 'vencidas' && !t.vencida && t.estado !== 'OVERDUE') return false;
       if (vista === 'calificadas' && t.estado !== 'GRADED') return false;
       if (curso && t.curso !== curso) return false;
-      if (q && !`${t.titulo} ${t.curso}`.toLowerCase().includes(q)) return false;
+      if (q && !t.titulo.toLowerCase().includes(q)) return false;
       return true;
     });
   }

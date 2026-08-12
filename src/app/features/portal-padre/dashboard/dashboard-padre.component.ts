@@ -147,7 +147,7 @@ const TIPO_COM_CFG: Record<TipoCom, { badge: string; label: string }> = {
                   {{ faltasPendientes().length }} periodo(s)
                 </p>
               </div>
-              <a routerLink="/portal-padre/seguimiento" class="btn btn-secondary btn-sm">Justificar</a>
+              <a routerLink="/portal-padre/justificaciones" class="btn btn-secondary btn-sm">Justificar</a>
             </div>
           }
 
@@ -334,7 +334,7 @@ export class DashboardPadreComponent implements OnInit {
     { label: 'Clases', icon: 'menu_book', route: '/portal-padre/clases' },
     { label: 'Horarios', icon: 'schedule', route: '/portal-padre/horarios' },
     { label: 'Finanzas', icon: 'account_balance_wallet', route: '/portal-padre/finanzas' },
-    { label: 'Comunicación', icon: 'chat', route: '/portal-padre/comunicacion' },
+    { label: 'Comunicados', icon: 'campaign', route: '/portal-padre/comunicacion' },
     { label: 'Correo', icon: 'mail', route: '/portal-padre/correo-docentes' },
     { label: 'Ficha', icon: 'badge', route: '/portal-padre/ficha' },
   ];
@@ -402,7 +402,7 @@ export class DashboardPadreComponent implements OnInit {
   });
 
   readonly comunicadosUrgentes = computed(() =>
-    this.comunicadosSvc.paraPadres().filter(c => c.prioridad === 'alta' || c.tipo === 'urgente').slice(0, 3),
+    this.comunicadosSvc.urgentesNoLeidosPadre().slice(0, 3),
   );
 
   readonly comunicadosPreview = computed(() => this.comunicadosSvc.paraPadres().slice(0, 3));
@@ -463,7 +463,7 @@ export class DashboardPadreComponent implements OnInit {
         value: String(this.comunicadosSvc.paraPadres().length),
         color: 'text-blue-700',
         route: '/portal-padre/comunicacion',
-        hint: `${this.comunicadosUrgentes().length} urgentes`,
+        hint: `${this.comunicadosSvc.urgentesNoLeidosPadre().length} urgentes`,
       },
     ];
   });

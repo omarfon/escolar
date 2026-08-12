@@ -67,7 +67,10 @@ export class AuthService {
 
   refreshToken(): Observable<LoginResponse> {
     const rt = this._loadRefreshToken();
-    if (!rt) { this.logout(); return throwError(() => new Error('No refresh token')); }
+    if (!rt) {
+      if (this.isAuthenticated()) this.logout();
+      return throwError(() => new Error('No refresh token'));
+    }
     return this.http.post<LoginResponse>(`${this.API}/refresh`, { refreshToken: rt } as RefreshTokenRequest).pipe(
       tap(res => { this._setSession(res); this._scheduleRefresh(res.expiresIn); this.gradingConfig.load().subscribe(); }),
       catchError(err => { this.logout(); return throwError(() => err); })
@@ -122,10 +125,10 @@ export class AuthService {
 
   /** Ruta inicial según rol (después del login). */
   defaultHomeRoute(): string {
+    if (this.isPortalDocente()) return '/portal-docente/inicio';
+    if (this.isPortalEstudiante()) return '/portal-estudiante/inicio';
+    if (this.isPortalPadre()) return '/portal-padre/inicio';
     if (this.isAdmin() || this.hasRole('DIRECTOR')) return '/dashboard';
-    if (this.hasRole('DOCENTE')) return '/portal-docente';
-    if (this.hasRole('ESTUDIANTE')) return '/portal-estudiante/dashboard';
-    if (this.hasRole('PADRE')) return '/portal-padre/inicio';
     if (this.hasRole('SECRETARIA')) return '/matricula/matriculados';
     if (this.hasRole('TESORERO')) return '/tesoreria/pagos';
     if (this.hasRole('BIBLIOTECARIO')) return '/biblioteca/catalogo';
@@ -141,9 +144,9 @@ export class AuthService {
       if (this.isPortalDocente() || this.isPortalEstudiante() || this.isPortalPadre()) return false;
       return true;
     }
-    if (zone === 'portal-docente') return this.isAdmin() || this.hasRole('DOCENTE');
-    if (zone === 'portal-estudiante') return this.isAdmin() || this.hasRole('ESTUDIANTE');
-    if (zone === 'portal-padre') return this.isAdmin() || this.hasRole('PADRE');
+    if (zone === 'portal-docente') return this.isPortalDocente();
+    if (zone === 'portal-estudiante') return this.isPortalEstudiante();
+    if (zone === 'portal-padre') return this.isPortalPadre();
     return true;
   }
 

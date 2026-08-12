@@ -52,9 +52,7 @@ import {
 
       <div class="grid grid-cols-2 lg:grid-cols-5 gap-3">
         @for (kpi of kpis(); track kpi.label) {
-          <button type="button" class="card p-4 text-left hover:shadow-md transition-shadow"
-            [ngClass]="vista() === kpi.vista ? 'ring-2 ring-indigo-400' : ''"
-            (click)="vista.set(kpi.vista)">
+          <div class="card p-4">
             <div class="flex items-center gap-3">
               <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" [ngClass]="kpi.bg">
                 <span class="text-lg">{{ kpi.emoji }}</span>
@@ -64,15 +62,25 @@ import {
                 <p class="text-xl font-bold" [ngClass]="kpi.text ?? 'text-gray-900'">{{ kpi.value }}</p>
               </div>
             </div>
-          </button>
+          </div>
         }
       </div>
 
       <div class="card p-4">
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
-            <label class="form-label mb-1 block">Curso</label>
-            <select class="form-select" [ngModel]="filtroCurso()" (ngModelChange)="filtroCurso.set($event)">
+            <label class="form-label mb-1 block" for="filtro-estado">Estado</label>
+            <select id="filtro-estado" class="form-select"
+              [ngModel]="vista()" (ngModelChange)="vista.set($event)">
+              @for (opt of opcionesEstado(); track opt.value) {
+                <option [value]="opt.value">{{ opt.label }}</option>
+              }
+            </select>
+          </div>
+          <div>
+            <label class="form-label mb-1 block" for="filtro-curso">Curso</label>
+            <select id="filtro-curso" class="form-select"
+              [ngModel]="filtroCurso()" (ngModelChange)="filtroCurso.set($event)">
               <option value="">Todos los cursos</option>
               @for (c of svc.cursosDisponibles(); track c) {
                 <option [value]="c">{{ c }}</option>
@@ -80,10 +88,10 @@ import {
             </select>
           </div>
           <div>
-            <label class="form-label mb-1 block">Buscar</label>
+            <label class="form-label mb-1 block" for="filtro-nombre">Buscar por nombre</label>
             <div class="relative">
               <span class="icon absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">search</span>
-              <input class="form-input pl-10" placeholder="Título o curso..."
+              <input id="filtro-nombre" class="form-input pl-10" placeholder="Nombre de la tarea..."
                 [ngModel]="filtroBusqueda()" (ngModelChange)="filtroBusqueda.set($event)">
             </div>
           </div>
@@ -491,12 +499,20 @@ export class TareasComponent implements OnInit {
     this.svc.filtrar(this.vista(), this.filtroCurso(), this.filtroBusqueda()),
   );
 
+  readonly opcionesEstado = computed(() => [
+    { label: 'Todos los estados', value: 'todas' as TareaVista },
+    { label: 'Pendientes', value: 'pendientes' as TareaVista },
+    { label: 'Vencidas', value: 'vencidas' as TareaVista },
+    { label: 'Entregadas', value: 'entregadas' as TareaVista },
+    { label: 'Calificadas', value: 'calificadas' as TareaVista },
+  ]);
+
   readonly kpis = computed(() => [
-    { label: 'Total', value: this.svc.tareas().length, emoji: '📋', bg: 'bg-indigo-50', vista: 'todas' as TareaVista },
-    { label: 'Pendientes', value: this.svc.pendientes().length, emoji: '⏳', bg: 'bg-amber-50', text: 'text-amber-700', vista: 'pendientes' as TareaVista },
-    { label: 'Entregadas', value: this.svc.entregadas().length, emoji: '📤', bg: 'bg-emerald-50', text: 'text-emerald-700', vista: 'entregadas' as TareaVista },
-    { label: 'Calificadas', value: this.svc.calificadas().length, emoji: '🎓', bg: 'bg-indigo-50', text: 'text-indigo-700', vista: 'calificadas' as TareaVista },
-    { label: 'Vencidas', value: this.svc.vencidas().length, emoji: '⚠️', bg: 'bg-red-50', text: 'text-red-600', vista: 'vencidas' as TareaVista },
+    { label: 'Total', value: this.svc.tareas().length, emoji: '📋', bg: 'bg-indigo-50' },
+    { label: 'Pendientes', value: this.svc.pendientes().length, emoji: '⏳', bg: 'bg-amber-50', text: 'text-amber-700' },
+    { label: 'Entregadas', value: this.svc.entregadas().length, emoji: '📤', bg: 'bg-emerald-50', text: 'text-emerald-700' },
+    { label: 'Calificadas', value: this.svc.calificadas().length, emoji: '🎓', bg: 'bg-indigo-50', text: 'text-indigo-700' },
+    { label: 'Vencidas', value: this.svc.vencidas().length, emoji: '⚠️', bg: 'bg-red-50', text: 'text-red-600' },
   ]);
 
   cursoStyle = cursoStyle;

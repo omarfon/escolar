@@ -37,7 +37,7 @@ export class PortalEstudianteService {
   private loadRequest$: Observable<PerfilEstudiantePortal | null> | null = null;
 
   constructor() {
-    if (this.auth.isAuthenticated() && this.auth.hasRole('ESTUDIANTE')) {
+    if (this.auth.isAuthenticated() && this.auth.isPortalEstudiante()) {
       this.load().subscribe();
     }
   }

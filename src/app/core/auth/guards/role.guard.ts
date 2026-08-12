@@ -6,6 +6,16 @@ function redirectSinPermiso(): ReturnType<Router['createUrlTree']> {
   return inject(Router).createUrlTree(['/sin-permiso']);
 }
 
+/** Redirige al home correcto sin volver al portal que se intentó abrir. */
+function redirectHomeForUser(): ReturnType<Router['createUrlTree']> {
+  const auth = inject(AuthService);
+  const router = inject(Router);
+  if (!auth.isAuthenticated()) {
+    return router.createUrlTree(['/auth/login']);
+  }
+  return router.createUrlTree([auth.defaultHomeRoute()]);
+}
+
 /** Acceso al dashboard según permiso en BD (p. ej. dashboard.ver). */
 export const dashboardGuard: CanActivateFn = () => {
   const auth = inject(AuthService);
@@ -14,10 +24,10 @@ export const dashboardGuard: CanActivateFn = () => {
     return router.createUrlTree(['/portal-padre/inicio']);
   }
   if (auth.isPortalEstudiante()) {
-    return router.createUrlTree(['/portal-estudiante/dashboard']);
+    return router.createUrlTree(['/portal-estudiante/inicio']);
   }
   if (auth.isPortalDocente()) {
-    return router.createUrlTree(['/portal-docente']);
+    return router.createUrlTree(['/portal-docente/inicio']);
   }
   if (!auth.hasAnyPermiso('dashboard.ver')) {
     return router.createUrlTree(['/sin-permiso']);
@@ -33,6 +43,24 @@ export const staffAreaGuard: CanActivateFn = () => {
     return redirectSinPermiso();
   }
   return true;
+};
+
+/** Acceso exclusivo al portal docente (solo docente puro, no staff). */
+export const portalDocenteGuard: CanActivateFn = () => {
+  const auth = inject(AuthService);
+  return auth.isPortalDocente() ? true : redirectHomeForUser();
+};
+
+/** Acceso exclusivo al portal estudiante (solo alumno puro, no staff). */
+export const portalEstudianteGuard: CanActivateFn = () => {
+  const auth = inject(AuthService);
+  return auth.isPortalEstudiante() ? true : redirectHomeForUser();
+};
+
+/** Acceso exclusivo al portal padre (solo apoderado puro, no staff). */
+export const portalPadreGuard: CanActivateFn = () => {
+  const auth = inject(AuthService);
+  return auth.isPortalPadre() ? true : redirectHomeForUser();
 };
 
 /** Requiere al menos uno de los roles indicados */

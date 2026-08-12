@@ -5,23 +5,12 @@ import { LayoutService } from '../../core/layout/services/layout.service';
 import { AuthService } from '../../core/auth/services/auth.service';
 import { PortalDocenteService } from './portal-docente.service';
 import { PortalDocenteCursoCard, PortalDocenteMiAulaResponse } from './portal-docente.model';
-import { ComunicadosService, TipoCom } from '../comunicaciones/comunicados/comunicados.service';
-import { EventosService } from '../comunicaciones/eventos/eventos.service';
-import { EventoItem, TIPOS_EVENTO } from '../comunicaciones/eventos/eventos.model';
 
 interface CursoCardView extends PortalDocenteCursoCard {
   emoji: string;
   iconBg: string;
   borderColor: string;
 }
-
-const TIPO_COM_CFG: Record<TipoCom, { badge: string; label: string }> = {
-  general:         { badge: 'badge-gray',    label: 'General'         },
-  academico:       { badge: 'badge-indigo',  label: 'Académico'       },
-  administrativo:  { badge: 'badge-gray',    label: 'Administrativo'  },
-  urgente:         { badge: 'badge-red',     label: 'Urgente'         },
-  evento:          { badge: 'badge-purple',  label: 'Evento'          },
-};
 
 @Component({
   selector: 'app-portal-docente',
@@ -31,16 +20,12 @@ const TIPO_COM_CFG: Record<TipoCom, { badge: string; label: string }> = {
     <div class="animate-fade-in space-y-5">
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h2 class="text-2xl font-bold text-gray-900">Mi Portal Docente</h2>
+          <h2 class="text-2xl font-bold text-gray-900">Mi Aula</h2>
           <p class="text-sm text-gray-500 mt-0.5">
-            Bienvenido, {{ auth.nombreCompleto() }}
+            Cursos y salones asignados
             @if (data(); as d) {
               · {{ d.docente.especialidad }} · {{ d.docente.sede }}
             }
-          </p>
-          <p class="text-xs text-gray-400 mt-1">
-            Cursos y salones asignados desde la BD · API
-            <span class="font-mono">/maestros/docentes/me/mi-aula</span>
           </p>
         </div>
         @if (data(); as d) {
@@ -49,8 +34,12 @@ const TIPO_COM_CFG: Record<TipoCom, { badge: string; label: string }> = {
       </div>
 
       @if (error()) {
-        <div class="rounded-xl bg-red-50 border border-red-200 text-red-700 px-4 py-3 text-sm">
-          {{ error() }}
+        <div class="rounded-xl bg-red-50 border border-red-200 text-red-700 px-4 py-3 text-sm space-y-1">
+          <p>{{ error() }}</p>
+          <p class="text-xs text-red-600/90">
+            El portal docente solo muestra datos del docente vinculado a tu sesión.
+            Inicia sesión con un usuario docente que tenga perfil en la BD (p. ej. <strong>docente / admin123</strong>).
+          </p>
         </div>
       }
 
@@ -65,90 +54,6 @@ const TIPO_COM_CFG: Record<TipoCom, { badge: string; label: string }> = {
               <p class="text-2xl font-bold text-gray-900 mt-1">{{ kpi.value }}</p>
             </div>
           }
-        </div>
-
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <div class="card p-5">
-            <div class="flex items-center justify-between mb-4">
-              <h3 class="font-semibold text-gray-800 flex items-center gap-2">
-                <span class="icon text-indigo-600">campaign</span> Anuncios
-              </h3>
-              <span class="text-xs text-gray-400">{{ anunciosPreview().length }} de {{ anunciosActivos() }}</span>
-            </div>
-
-            @if (comunicadosSvc.loading()) {
-              <p class="text-sm text-gray-400 py-6 text-center">Cargando anuncios…</p>
-            } @else if (!anunciosPreview().length) {
-              <p class="text-sm text-gray-400 py-6 text-center">No hay anuncios publicados para docentes.</p>
-            } @else {
-              <div class="space-y-3">
-                @for (c of anunciosPreview(); track c.id) {
-                  <div class="p-3 rounded-xl border border-gray-100 hover:bg-gray-50/80 transition-colors">
-                    <div class="flex items-start justify-between gap-2 mb-1">
-                      <p class="text-sm font-medium text-gray-800">{{ c.titulo }}</p>
-                      <div class="flex items-center gap-1 shrink-0">
-                        <span class="badge text-[10px]" [ngClass]="tipoComCfg(c.tipo).badge">
-                          {{ tipoComCfg(c.tipo).label }}
-                        </span>
-                        @if (c.prioridad === 'alta' || c.tipo === 'urgente') {
-                          <span class="badge badge-red text-[10px]">Urgente</span>
-                        }
-                      </div>
-                    </div>
-                    <p class="text-xs text-gray-500 line-clamp-2">{{ c.cuerpo }}</p>
-                    <p class="text-[11px] text-gray-400 mt-1">{{ c.fechaPublicacion }}</p>
-                  </div>
-                }
-              </div>
-            }
-          </div>
-
-          <div class="card p-5">
-            <div class="flex items-center justify-between mb-4">
-              <h3 class="font-semibold text-gray-800 flex items-center gap-2">
-                <span class="icon text-purple-600">event</span> Próximos eventos
-              </h3>
-              <span class="text-xs text-gray-400">{{ eventosPreview().length }} próximo(s)</span>
-            </div>
-
-            @if (eventosLoading()) {
-              <p class="text-sm text-gray-400 py-6 text-center">Cargando eventos…</p>
-            } @else if (!eventosPreview().length) {
-              <p class="text-sm text-gray-400 py-6 text-center">No hay eventos programados para docentes.</p>
-            } @else {
-              <div class="space-y-3">
-                @for (e of eventosPreview(); track e.id) {
-                  <div class="p-3 rounded-xl border border-gray-100 hover:bg-gray-50/80 transition-colors">
-                    <div class="flex items-start justify-between gap-2 mb-1">
-                      <p class="text-sm font-medium text-gray-800">{{ e.titulo }}</p>
-                      <span class="badge text-[10px] shrink-0" [ngClass]="tipoEventoCfg(e.tipo).badge">
-                        {{ tipoEventoCfg(e.tipo).label }}
-                      </span>
-                    </div>
-                    <p class="text-xs text-gray-500 line-clamp-2">{{ e.descripcion }}</p>
-                    <div class="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-[11px] text-gray-400">
-                      <span class="inline-flex items-center gap-1">
-                        <span class="icon icon-sm">calendar_today</span>
-                        {{ rangoEvento(e) }}
-                      </span>
-                      @if (e.horario) {
-                        <span class="inline-flex items-center gap-1">
-                          <span class="icon icon-sm">schedule</span>
-                          {{ e.horario }}
-                        </span>
-                      }
-                      @if (e.lugar) {
-                        <span class="inline-flex items-center gap-1">
-                          <span class="icon icon-sm">place</span>
-                          {{ e.lugar }}
-                        </span>
-                      }
-                    </div>
-                  </div>
-                }
-              </div>
-            }
-          </div>
         </div>
 
         <div>
@@ -237,25 +142,10 @@ export class PortalDocenteComponent implements OnInit {
   private readonly router = inject(Router);
   readonly auth = inject(AuthService);
   readonly svc = inject(PortalDocenteService);
-  readonly comunicadosSvc = inject(ComunicadosService);
-  private readonly eventosSvc = inject(EventosService);
 
   private readonly _data = signal<PortalDocenteMiAulaResponse | null>(null);
-  private readonly _eventos = signal<EventoItem[]>([]);
-  readonly eventosLoading = signal(false);
   readonly data = this._data.asReadonly();
   readonly error = signal('');
-
-  readonly anunciosActivos = computed(() => this.comunicadosSvc.paraDocentes().length);
-  readonly anunciosPreview = computed(() => this.comunicadosSvc.paraDocentes().slice(0, 4));
-
-  readonly eventosPreview = computed(() =>
-    this._eventos()
-      .filter((e) => e.publicado && !e.cancelado)
-      .filter((e) => e.destinatarios === 'docentes' || e.destinatarios === 'todos')
-      .filter((e) => e.estado === 'programado' || e.estado === 'en_curso')
-      .slice(0, 4),
-  );
 
   readonly cursosView = computed(() =>
     (this._data()?.cursos ?? []).map((c) => this.toCardView(c)),
@@ -272,38 +162,8 @@ export class PortalDocenteComponent implements OnInit {
   });
 
   ngOnInit(): void {
-    this.layout.setTitle('Portal Docente');
+    this.layout.setTitle('Mi Aula');
     this.cargar();
-    this.cargarEventos();
-  }
-
-  cargarEventos(): void {
-    this.eventosLoading.set(true);
-    this.eventosSvc.load().subscribe({
-      next: (items) => {
-        this._eventos.set(items);
-        this.eventosLoading.set(false);
-      },
-      error: () => {
-        this._eventos.set([]);
-        this.eventosLoading.set(false);
-      },
-    });
-  }
-
-  tipoComCfg(tipo: TipoCom) {
-    return TIPO_COM_CFG[tipo] ?? TIPO_COM_CFG.general;
-  }
-
-  tipoEventoCfg(tipo: EventoItem['tipo']) {
-    return TIPOS_EVENTO.find((t) => t.value === tipo) ?? TIPOS_EVENTO[TIPOS_EVENTO.length - 1];
-  }
-
-  rangoEvento(e: EventoItem): string {
-    if (e.fechaFinDisplay && e.fechaFinDisplay !== e.fechaInicioDisplay) {
-      return `${e.fechaInicioDisplay} – ${e.fechaFinDisplay}`;
-    }
-    return e.fechaInicioDisplay;
   }
 
   cargar(): void {

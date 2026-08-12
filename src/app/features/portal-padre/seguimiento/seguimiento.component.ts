@@ -8,12 +8,10 @@ import { LayoutService } from '../../../core/layout/services/layout.service';
 import { AuthService } from '../../../core/auth/services/auth.service';
 import { SeguimientoService } from './seguimiento.service';
 import { JustificacionesPadreService } from '../justificaciones/justificaciones-padre.service';
-import { OverlayPortalDirective } from '../../../core/overlay/overlay-portal.directive';
 import {
   JustificacionItem,
-  MOTIVOS_JUSTIFICACION,
   PendienteJustificacion,
-  justificacionAdjuntoUrl,
+  DIAS_PLAZO_JUSTIFICACION,
 } from '../../asistencia/justificaciones/justificaciones.model';
 import {
   SeguimientoVista,
@@ -32,7 +30,7 @@ import {
 
 @Component({
   standalone: true,
-  imports: [FormsModule, NgClass, DecimalPipe, RouterLink, OverlayPortalDirective],
+  imports: [FormsModule, NgClass, DecimalPipe, RouterLink],
   template: `
     <div class="space-y-5 animate-fade-in">
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -350,10 +348,9 @@ import {
                         </button>
                       }
                       @if (pendienteActual()) {
-                        <button type="button" class="btn btn-primary btn-sm"
-                          (click)="abrirModalJustificarDesdeFalta()">
+                        <a routerLink="/portal-padre/justificaciones" class="btn btn-primary btn-sm">
                           Justificar
-                        </button>
+                        </a>
                       }
                     </div>
                   </div>
@@ -370,16 +367,18 @@ import {
                       Faltas sin justificar
                     </p>
                     <p class="text-sm text-gray-600 mt-1">
-                      {{ p.faltasSinJustificar }} falta(s) pendiente(s)
-                      @if (p.ultimaFalta) {
-                        · última: {{ p.ultimaFalta }}
-                      }
+                      {{ p.faltasSinJustificar }} falta(s) dentro del plazo de {{ diasPlazo }} días
+                      @if (p.ultimaFalta) { · última: {{ p.ultimaFalta }} }
                     </p>
+                    @if (p.faltasFueraDePlazo) {
+                      <p class="text-xs text-amber-700 mt-1">
+                        {{ p.faltasFueraDePlazo }} falta(s) con plazo vencido (no se pueden justificar).
+                      </p>
+                    }
                   </div>
-                  <button type="button" class="btn btn-primary btn-sm shrink-0"
-                    (click)="abrirModalJustificar(p)" [disabled]="justSvc.saving()">
-                    <span class="icon icon-sm">fact_check</span> Justificar falta
-                  </button>
+                  <a routerLink="/portal-padre/justificaciones" class="btn btn-primary btn-sm shrink-0">
+                    <span class="icon icon-sm">upload_file</span> Subir justificación
+                  </a>
                 </div>
               </div>
             } @else if (!justSvc.loading()) {
@@ -391,36 +390,30 @@ import {
               </div>
             }
 
+            <div class="card p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-indigo-50/40 border-indigo-100">
+              <div>
+                <p class="font-semibold text-gray-900">Centro de justificaciones</p>
+                <p class="text-sm text-gray-600 mt-1">
+                  Adjunta certificados o sustentos. Al enviar, la falta pasa a estado <strong>J — Justificada</strong>.
+                  Plazo máximo: {{ diasPlazo }} días desde la fecha de la falta.
+                </p>
+              </div>
+              <a routerLink="/portal-padre/justificaciones" class="btn btn-secondary btn-sm shrink-0">
+                Ir a justificaciones
+              </a>
+            </div>
+
             @if (historialJustificaciones().length) {
               <div class="card overflow-hidden">
-                <div class="px-4 py-3 border-b border-gray-100 font-semibold text-gray-800">
-                  Justificaciones registradas
+                <div class="px-4 py-3 border-b border-gray-100 font-semibold text-gray-800 flex items-center justify-between">
+                  <span>Justificaciones registradas</span>
+                  <a routerLink="/portal-padre/justificaciones" class="text-xs text-indigo-600 hover:underline">Ver todas</a>
                 </div>
                 <div class="divide-y divide-gray-50">
-                  @for (j of historialJustificaciones(); track j.id) {
+                  @for (j of historialJustificaciones().slice(0, 3); track j.id) {
                     <div class="px-4 py-3">
-                      <div class="flex flex-wrap items-start justify-between gap-2">
-                        <div>
-                          <p class="text-sm font-medium text-gray-900">{{ j.motivo }}</p>
-                          <p class="text-xs text-gray-500 mt-0.5">
-                            {{ j.cantidad }} falta(s) · {{ j.fechas.join(', ') }}
-                          </p>
-                          @if (j.observacion) {
-                            <p class="text-xs text-gray-400 mt-1">{{ j.observacion }}</p>
-                          }
-                          @if (j.adjuntos?.length) {
-                            <div class="flex flex-wrap gap-2 mt-2">
-                              @for (a of j.adjuntos; track a.url) {
-                                <a [href]="justificacionAdjuntoUrl(a.url)" target="_blank" rel="noopener"
-                                  class="text-xs text-indigo-600 hover:underline inline-flex items-center gap-1">
-                                  <span class="icon icon-sm">attach_file</span>{{ a.nombreArchivo }}
-                                </a>
-                              }
-                            </div>
-                          }
-                        </div>
-                        <span class="text-[11px] text-gray-400 whitespace-nowrap">{{ j.fechaRegistro }}</span>
-                      </div>
+                      <p class="text-sm font-medium text-gray-900">{{ j.motivo }}</p>
+                      <p class="text-xs text-gray-500 mt-0.5">{{ j.cantidad }} falta(s) · {{ j.fechas.join(', ') }}</p>
                     </div>
                   }
                 </div>
@@ -446,10 +439,11 @@ import {
                           {{ estadoAsistenciaLabel(a.estado) }}
                         </span>
                         @if (a.estado === 'F') {
-                          <button type="button" class="btn btn-secondary btn-sm"
-                            (click)="abrirModalJustificarDesdeFalta()" [disabled]="justSvc.saving()">
+                          <a routerLink="/portal-padre/justificaciones"
+                            [queryParams]="{ faltaId: a.id }"
+                            class="btn btn-secondary btn-sm">
                             Justificar
-                          </button>
+                          </a>
                         }
                       </div>
                     </div>
@@ -512,193 +506,6 @@ import {
         }
       }
     </div>
-
-    @if (modalJustificar()) {
-      <div appOverlayPortal class="fixed inset-0 z-[80]">
-        <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-[2px]"
-          (click)="cerrarModalJustificar()"></div>
-
-        <aside class="absolute inset-y-0 right-0 w-full max-w-lg bg-white shadow-2xl border-l border-gray-200
-          flex flex-col animate-slide-in-r"
-          (click)="$event.stopPropagation()">
-
-          <div class="shrink-0 bg-gradient-to-br from-indigo-600 via-indigo-600 to-violet-700 text-white px-5 py-5">
-            <div class="flex items-start justify-between gap-3">
-              <div class="flex items-start gap-3 min-w-0">
-                <div class="w-12 h-12 rounded-2xl bg-white/15 backdrop-blur flex items-center justify-center shrink-0 border border-white/20">
-                  <span class="icon text-2xl">fact_check</span>
-                </div>
-                <div class="min-w-0">
-                  <p class="text-[11px] uppercase tracking-wider text-indigo-100 font-semibold">Justificar inasistencias</p>
-                  <h3 class="font-bold text-lg leading-tight truncate">{{ data()?.estudiante?.nombreCompleto }}</h3>
-                  @if (data()?.estudiante) {
-                    <div class="flex flex-wrap items-center gap-2 mt-2">
-                      <span class="text-[11px] px-2 py-0.5 rounded-full bg-white/15 border border-white/20">
-                        {{ data()!.estudiante.grado }} · Sec. {{ data()!.estudiante.seccion }}
-                      </span>
-                    </div>
-                  }
-                </div>
-              </div>
-              <button type="button" class="btn-icon text-white/80 hover:text-white hover:bg-white/10 shrink-0"
-                (click)="cerrarModalJustificar()">
-                <span class="icon">close</span>
-              </button>
-            </div>
-
-            <div class="grid grid-cols-2 gap-2 mt-4">
-              <div class="rounded-xl bg-white/10 border border-white/15 px-3 py-2.5">
-                <p class="text-[10px] uppercase tracking-wide text-indigo-100">Sin justificar</p>
-                <p class="text-2xl font-bold">{{ pendienteActual()?.faltasSinJustificar ?? 0 }}</p>
-              </div>
-              <div class="rounded-xl bg-white/10 border border-white/15 px-3 py-2.5">
-                <p class="text-[10px] uppercase tracking-wide text-indigo-100">Seleccionadas</p>
-                <p class="text-2xl font-bold">{{ faltasSeleccionadas().length }}</p>
-              </div>
-            </div>
-          </div>
-
-          <div class="flex-1 overflow-y-auto px-5 py-5 space-y-5 min-h-0">
-            <section>
-              <div class="flex items-center justify-between mb-2">
-                <h4 class="text-sm font-semibold text-gray-800 flex items-center gap-1.5">
-                  <span class="icon icon-sm text-red-500">event_busy</span>
-                  Faltas en base de datos
-                </h4>
-                @if ((pendienteActual()?.faltasPendientes?.length ?? 0) > 1) {
-                  <button type="button" class="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
-                    (click)="toggleTodasFaltasJustificar()">
-                    {{ todasFaltasJustificarSeleccionadas() ? 'Quitar todas' : 'Seleccionar todas' }}
-                  </button>
-                }
-              </div>
-              <div class="space-y-2">
-                @for (f of pendienteActual()?.faltasPendientes ?? []; track f.id) {
-                  <label class="flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all"
-                    [ngClass]="faltasSeleccionadas().includes(f.id)
-                      ? 'border-indigo-300 bg-indigo-50/80 ring-1 ring-indigo-200'
-                      : 'border-gray-200 bg-gray-50/50 hover:border-gray-300 hover:bg-white'">
-                    <input type="checkbox" class="mt-1 accent-indigo-600"
-                      [checked]="faltasSeleccionadas().includes(f.id)"
-                      (change)="toggleFaltaJustificar(f.id)">
-                    <div class="flex-1 min-w-0">
-                      <div class="flex items-center gap-2">
-                        <span class="font-semibold text-gray-900">{{ f.fechaLabel }}</span>
-                        <span class="text-[10px] px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-medium">F</span>
-                      </div>
-                      @if (f.observacion) {
-                        <p class="text-xs text-gray-500 mt-1">{{ f.observacion }}</p>
-                      }
-                    </div>
-                  </label>
-                } @empty {
-                  <div class="text-center py-8 rounded-xl border border-dashed border-gray-200 bg-gray-50">
-                    <span class="icon text-3xl text-gray-300">event_available</span>
-                    <p class="text-sm text-gray-400 mt-2">No hay registros F en BD</p>
-                  </div>
-                }
-              </div>
-            </section>
-
-            <section>
-              <h4 class="text-sm font-semibold text-gray-800 mb-2 flex items-center gap-1.5">
-                <span class="icon icon-sm text-indigo-500">label</span>
-                Motivo <span class="text-red-500">*</span>
-              </h4>
-              <div class="flex flex-wrap gap-2 mb-3">
-                @for (m of motivosJustificacion; track m) {
-                  <button type="button"
-                    class="px-3 py-1.5 rounded-full text-xs font-medium border transition-all"
-                    [ngClass]="formJustificar.motivo === m
-                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
-                      : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-300 hover:text-indigo-700'"
-                    (click)="seleccionarMotivoJustificar(m)">
-                    {{ m }}
-                  </button>
-                }
-              </div>
-              @if (formJustificar.motivo === 'Otro') {
-                <input class="form-input" placeholder="Describe el motivo..." [(ngModel)]="formJustificar.motivoOtro">
-              }
-            </section>
-
-            <section>
-              <h4 class="text-sm font-semibold text-gray-800 mb-2 flex items-center gap-1.5">
-                <span class="icon icon-sm text-indigo-500">attach_file</span>
-                Documentos de sustento
-                <span class="text-xs font-normal text-gray-400">(opcional)</span>
-              </h4>
-              <label class="flex flex-col items-center justify-center gap-2 p-6 rounded-xl border-2 border-dashed
-                border-gray-200 bg-gray-50/80 hover:border-indigo-300 hover:bg-indigo-50/30 cursor-pointer transition-colors">
-                <span class="icon text-3xl text-indigo-400">cloud_upload</span>
-                <span class="text-sm font-medium text-gray-700">Arrastra o haz clic para adjuntar</span>
-                <span class="text-[11px] text-gray-400">PDF, imágenes u Office · máx. 5 archivos · 10 MB c/u</span>
-                <input type="file" class="hidden" multiple
-                  accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,.txt,.zip"
-                  (change)="onAdjuntosJustificarChange($event)">
-              </label>
-              @if (adjuntosJustificar().length) {
-                <ul class="mt-3 space-y-2">
-                  @for (f of adjuntosJustificar(); track f.name + f.size) {
-                    <li class="flex items-center gap-2 p-2.5 rounded-lg bg-white border border-gray-200 text-sm">
-                      <span class="icon icon-sm text-indigo-500 shrink-0">description</span>
-                      <div class="flex-1 min-w-0">
-                        <p class="font-medium text-gray-800 truncate">{{ f.name }}</p>
-                        <p class="text-[11px] text-gray-400">{{ formatTamano(f.size) }}</p>
-                      </div>
-                      <button type="button" class="btn-icon text-red-500 hover:bg-red-50 shrink-0"
-                        (click)="quitarAdjuntoJustificar(f)">
-                        <span class="icon icon-sm">close</span>
-                      </button>
-                    </li>
-                  }
-                </ul>
-              }
-            </section>
-
-            <section>
-              <h4 class="text-sm font-semibold text-gray-800 mb-2 flex items-center gap-1.5">
-                <span class="icon icon-sm text-indigo-500">notes</span>
-                Observaciones
-              </h4>
-              <textarea class="form-input min-h-[88px] resize-none" rows="3"
-                placeholder="Adjunta detalle del certificado o constancia..."
-                [(ngModel)]="formJustificar.observacion"></textarea>
-            </section>
-
-            @if (errorJustificar()) {
-              <div class="p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700 flex items-start gap-2">
-                <span class="icon icon-sm shrink-0 mt-0.5">error</span>
-                {{ errorJustificar() }}
-              </div>
-            }
-          </div>
-
-          <div class="shrink-0 px-5 py-4 border-t border-gray-100 bg-gray-50/90 backdrop-blur flex items-center gap-3">
-            <button type="button" class="btn btn-secondary flex-1" (click)="cerrarModalJustificar()">Cancelar</button>
-            <button type="button" class="btn btn-primary flex-1 flex items-center justify-center gap-2"
-              (click)="confirmarJustificacion()"
-              [disabled]="justSvc.saving() || !motivoJustificarValido() || faltasSeleccionadas().length === 0">
-              @if (justSvc.saving()) {
-                <span class="icon icon-sm animate-spin">progress_activity</span>
-                Enviando...
-              } @else {
-                <span class="icon icon-sm">send</span>
-                Enviar justificación
-              }
-            </button>
-          </div>
-        </aside>
-      </div>
-    }
-
-    @if (toastJustificar()) {
-      <div class="fixed bottom-5 right-5 px-5 py-3 rounded-xl shadow-lg z-50 text-white flex items-center gap-2"
-        [ngClass]="toastJustificar()!.tipo === 'success' ? 'bg-green-500' : 'bg-red-500'">
-        <span class="icon">{{ toastJustificar()!.tipo === 'success' ? 'check_circle' : 'error' }}</span>
-        {{ toastJustificar()!.mensaje }}
-      </div>
-    }
   `,
 })
 export class SeguimientoComponent implements OnInit {
@@ -706,19 +513,12 @@ export class SeguimientoComponent implements OnInit {
   readonly auth = inject(AuthService);
   readonly svc = inject(SeguimientoService);
   readonly justSvc = inject(JustificacionesPadreService);
+  readonly diasPlazo = DIAS_PLAZO_JUSTIFICACION;
 
-  readonly motivosJustificacion = MOTIVOS_JUSTIFICACION;
   readonly hijoSeleccionado = signal<number | null>(null);
   readonly vista = signal<SeguimientoVista>('resumen');
   readonly pendienteActual = signal<PendienteJustificacion | null>(null);
-  readonly faltasSeleccionadas = signal<number[]>([]);
-  readonly adjuntosJustificar = signal<File[]>([]);
   readonly historialJustificaciones = signal<JustificacionItem[]>([]);
-  readonly modalJustificar = signal(false);
-  readonly errorJustificar = signal('');
-  readonly toastJustificar = signal<{ mensaje: string; tipo: 'success' | 'error' } | null>(null);
-
-  formJustificar = { motivo: '', motivoOtro: '', observacion: '' };
 
   readonly tabs: { id: SeguimientoVista; label: string; icon: string }[] = [
     { id: 'resumen', label: 'Resumen', icon: 'dashboard' },
@@ -821,112 +621,6 @@ export class SeguimientoComponent implements OnInit {
       next: items => this.historialJustificaciones.set(items),
       error: () => this.historialJustificaciones.set([]),
     });
-  }
-
-  abrirModalJustificar(p: PendienteJustificacion): void {
-    this.pendienteActual.set(p);
-    this.faltasSeleccionadas.set(p.faltasPendientes?.map((f) => f.id) ?? []);
-    this.adjuntosJustificar.set([]);
-    this.formJustificar = { motivo: '', motivoOtro: '', observacion: '' };
-    this.errorJustificar.set('');
-    this.modalJustificar.set(true);
-  }
-
-  toggleFaltaJustificar(id: number): void {
-    this.faltasSeleccionadas.update((ids) =>
-      ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id],
-    );
-  }
-
-  seleccionarMotivoJustificar(motivo: string): void {
-    this.formJustificar.motivo = this.formJustificar.motivo === motivo ? '' : motivo;
-    if (motivo !== 'Otro') this.formJustificar.motivoOtro = '';
-  }
-
-  readonly todasFaltasJustificarSeleccionadas = computed(() => {
-    const pendientes = this.pendienteActual()?.faltasPendientes ?? [];
-    if (!pendientes.length) return false;
-    const ids = this.faltasSeleccionadas();
-    return pendientes.every((f) => ids.includes(f.id));
-  });
-
-  toggleTodasFaltasJustificar(): void {
-    const pendientes = this.pendienteActual()?.faltasPendientes ?? [];
-    if (this.todasFaltasJustificarSeleccionadas()) {
-      this.faltasSeleccionadas.set([]);
-    } else {
-      this.faltasSeleccionadas.set(pendientes.map((f) => f.id));
-    }
-  }
-
-  onAdjuntosJustificarChange(event: Event): void {
-    const input = event.target as HTMLInputElement;
-    const nuevos = Array.from(input.files ?? []);
-    this.adjuntosJustificar.update((list) => [...list, ...nuevos].slice(0, 5));
-    input.value = '';
-  }
-
-  quitarAdjuntoJustificar(file: File): void {
-    this.adjuntosJustificar.update((list) => list.filter((f) => f !== file));
-  }
-
-  formatTamano(bytes: number): string {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  }
-
-  readonly justificacionAdjuntoUrl = justificacionAdjuntoUrl;
-
-  abrirModalJustificarDesdeFalta(): void {
-    const p = this.pendienteActual();
-    if (p) this.abrirModalJustificar(p);
-  }
-
-  cerrarModalJustificar(): void {
-    this.modalJustificar.set(false);
-    this.errorJustificar.set('');
-  }
-
-  motivoJustificarValido(): boolean {
-    if (!this.formJustificar.motivo) return false;
-    if (this.formJustificar.motivo === 'Otro') {
-      return this.formJustificar.motivoOtro.trim().length >= 2;
-    }
-    return true;
-  }
-
-  confirmarJustificacion(): void {
-    const studentId = this.hijoSeleccionado();
-    const p = this.pendienteActual();
-    const attendanceIds = this.faltasSeleccionadas();
-    if (!studentId || !p || !this.motivoJustificarValido() || !attendanceIds.length) return;
-
-    const cantidad = attendanceIds.length;
-    const motivo = this.formJustificar.motivo === 'Otro'
-      ? this.formJustificar.motivoOtro.trim()
-      : this.formJustificar.motivo;
-
-    this.errorJustificar.set('');
-    this.justSvc.create(studentId, {
-      cantidad,
-      motivo,
-      observacion: this.formJustificar.observacion.trim() || undefined,
-      attendanceIds,
-      adjuntos: this.adjuntosJustificar(),
-    }).subscribe({
-      next: () => {
-        this.cerrarModalJustificar();
-        this.mostrarToastJustificar('Justificación enviada correctamente');
-        this.seleccionarHijo(studentId);
-      },
-      error: (err) => this.errorJustificar.set(err.message),
-    });
-  }
-
-  private mostrarToastJustificar(mensaje: string, tipo: 'success' | 'error' = 'success'): void {
-    this.toastJustificar.set({ mensaje, tipo });
-    setTimeout(() => this.toastJustificar.set(null), 3500);
   }
 
   formatFecha(fecha: string): string {

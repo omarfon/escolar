@@ -46,7 +46,7 @@ export class NotasEstudianteService {
   load(): void {
     this.loading.set(true);
 
-    const request$ = this.auth.hasRole('ESTUDIANTE')
+    const request$ = this.auth.isPortalEstudiante()
       ? this.portal.ensureLoaded().pipe(
           switchMap(() =>
             this.http.get<ApiStudentGrades>(this.base, {

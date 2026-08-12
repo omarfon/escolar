@@ -37,7 +37,7 @@ export class AsistenciaEstudianteService {
   load(): void {
     this.loading.set(true);
 
-    const request$ = this.auth.hasRole('ESTUDIANTE')
+    const request$ = this.auth.isPortalEstudiante()
       ? this.portal.ensureLoaded().pipe(
           switchMap((perfil) => {
             const studentId = perfil?.studentId;

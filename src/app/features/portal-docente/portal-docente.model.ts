@@ -121,6 +121,7 @@ export function mapMiAulaToDocenteDetail(
     email: user?.email ?? '',
     username: user?.username ?? '',
     telefono: '—',
+    direccion: '',
     sede: aula.docente.sede,
     estado: (user?.estado ?? 'activo') as DocenteEstado,
     especialidad: aula.docente.especialidad,

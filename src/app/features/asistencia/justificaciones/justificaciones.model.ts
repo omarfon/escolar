@@ -12,6 +12,8 @@ export interface FaltaPendienteDetalle {
   fecha: string;
   fechaLabel: string;
   observacion?: string;
+  /** Días restantes para justificar (0 = último día de plazo). */
+  diasRestantes?: number;
 }
 
 export interface PendienteJustificacion {
@@ -24,6 +26,8 @@ export interface PendienteJustificacion {
   faltasJustificadas: number;
   totalFaltas: number;
   ultimaFalta: string | null;
+  /** Faltas injustificadas cuyo plazo de 5 días ya venció. */
+  faltasFueraDePlazo?: number;
   faltasPendientes: FaltaPendienteDetalle[];
 }
 
@@ -68,6 +72,8 @@ export interface JustificacionFilters {
   mes?: string;
   busqueda?: string;
 }
+
+export const DIAS_PLAZO_JUSTIFICACION = 5;
 
 export const MOTIVOS_JUSTIFICACION = [
   'Enfermedad',

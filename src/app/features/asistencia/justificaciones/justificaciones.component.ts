@@ -12,6 +12,7 @@ import {
   JustificacionItem,
   MOTIVOS_JUSTIFICACION,
   PendienteJustificacion,
+  DIAS_PLAZO_JUSTIFICACION,
   justificacionAdjuntoUrl,
 } from './justificaciones.model';
 
@@ -28,7 +29,7 @@ import {
             Registro y seguimiento de inasistencias justificadas
           </p>
           <p class="text-xs text-gray-400 mt-1">
-            Solo se pueden justificar faltas injustificadas (estado F) registradas en base de datos.
+            Solo se pueden justificar faltas injustificadas (estado F) dentro del plazo de {{ diasPlazo }} días desde la fecha de la falta.
           </p>
         </div>
         <button class="btn btn-secondary btn-sm" (click)="cargar()">
@@ -328,6 +329,13 @@ import {
                       @if (f.observacion) {
                         <p class="text-xs text-gray-500 mt-1">{{ f.observacion }}</p>
                       }
+                      @if (f.diasRestantes !== undefined) {
+                        <p class="text-[11px] mt-1"
+                          [ngClass]="f.diasRestantes === 0 ? 'text-amber-600 font-medium' : 'text-gray-400'">
+                          @if (f.diasRestantes === 0) { Último día de plazo }
+                          @else { {{ f.diasRestantes }} día(s) restante(s) }
+                        </p>
+                      }
                     </div>
                   </label>
                 } @empty {
@@ -451,6 +459,7 @@ export class JustificacionesComponent implements OnInit {
   private readonly institucional = inject(InstitucionalService);
 
   readonly motivos = MOTIVOS_JUSTIFICACION;
+  readonly diasPlazo = DIAS_PLAZO_JUSTIFICACION;
 
   readonly tab = signal<'pendientes' | 'historial'>('pendientes');
   readonly modalAbierto = signal(false);

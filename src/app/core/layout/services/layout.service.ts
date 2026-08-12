@@ -52,9 +52,48 @@ export class LayoutService {
   setPhone(v: boolean): void { this._isPhone.set(v); }
   setTitle(t: string): void { this._pageTitle.set(t); }
 
+  /** Navegación lateral plana del portal docente */
+  readonly docenteSidebarNav: NavItem[] = [
+    { label: 'Inicio', icon: 'home', route: '/portal-docente/inicio', exact: true },
+    { label: 'Mi Aula', icon: 'class', route: '/portal-docente/mi-aula' },
+    { label: 'Asistencia', icon: 'fact_check', route: '/portal-docente/asistencia' },
+    { label: 'Notas', icon: 'grading', route: '/portal-docente/notas' },
+    { label: 'Tareas', icon: 'assignment', route: '/portal-docente/tareas' },
+    { label: 'Recursos', icon: 'folder', route: '/portal-docente/recursos' },
+    { label: 'Comunicados', icon: 'campaign', route: '/portal-docente/comunicados' },
+    { label: 'Temario', icon: 'calendar_month', route: '/portal-docente/temario' },
+  ];
+
+  /** Navegación lateral plana del portal padre (Inicio primero) */
+  readonly padreSidebarNav: NavItem[] = [
+    { label: 'Inicio', icon: 'home', route: '/portal-padre/inicio', exact: true },
+    { label: 'Seguimiento', icon: 'insights', route: '/portal-padre/seguimiento' },
+    { label: 'Justificaciones', icon: 'fact_check', route: '/portal-padre/justificaciones' },
+    { label: 'Ficha del alumno', icon: 'badge', route: '/portal-padre/ficha' },
+    { label: 'Tareas', icon: 'assignment', route: '/portal-padre/tareas' },
+    { label: 'Clases', icon: 'menu_book', route: '/portal-padre/clases' },
+    { label: 'Horarios', icon: 'schedule', route: '/portal-padre/horarios' },
+    { label: 'Comunicados', icon: 'campaign', route: '/portal-padre/comunicacion' },
+    { label: 'Correo a docentes', icon: 'mail', route: '/portal-padre/correo-docentes' },
+    { label: 'Estado de Cuenta', icon: 'account_balance_wallet', route: '/portal-padre/finanzas' },
+  ];
+
+  /** Navegación lateral plana del portal estudiante (Inicio primero) */
+  readonly studentSidebarNav: NavItem[] = [
+    { label: 'Inicio', icon: 'home', route: '/portal-estudiante/inicio', exact: true },
+    { label: 'Mis Horarios', icon: 'schedule', route: '/portal-estudiante/horarios' },
+    { label: 'Mis Notas', icon: 'grading', route: '/portal-estudiante/notas' },
+    { label: 'Asistencia', icon: 'fact_check', route: '/portal-estudiante/asistencia' },
+    { label: 'Tareas', icon: 'assignment', route: '/portal-estudiante/tareas' },
+    { label: 'Clases', icon: 'menu_book', route: '/portal-estudiante/clases' },
+    { label: 'Comunicados', icon: 'campaign', route: '/portal-estudiante/comunicados' },
+    { label: 'Contactos', icon: 'contacts', route: '/portal-estudiante/contactos' },
+    { label: 'Mi ficha', icon: 'badge', route: '/portal-estudiante/perfil' },
+  ];
+
   /** Navegación principal tipo app móvil del portal estudiante */
   readonly studentAppNav: NavItem[] = [
-    { label: 'Home', icon: 'home', route: '/portal-estudiante/dashboard', exact: true },
+    { label: 'Inicio', icon: 'home', route: '/portal-estudiante/inicio', exact: true },
     { label: 'Mis cursos', icon: 'menu_book', route: '/portal-estudiante/clases' },
     { label: 'Notificaciones', icon: 'notifications', route: '/portal-estudiante/comunicados' },
     { label: 'Tareas', icon: 'assignment', route: '/portal-estudiante/tareas' },
@@ -129,7 +168,7 @@ export class LayoutService {
     {
       label: 'Portal Docente', icon: 'co_present', zone: 'portal-docente', roles: ['DOCENTE'],
       children: [
-        { label: 'Mis datos',  icon: 'badge',      route: '/portal-docente/mis-datos'  },
+        { label: 'Inicio',       icon: 'home',         route: '/portal-docente/inicio', exact: true },
         { label: 'Mi Aula',    icon: 'class',      route: '/portal-docente/mi-aula'    },
         { label: 'Asistencia', icon: 'fact_check', route: '/portal-docente/asistencia' },
         { label: 'Notas',      icon: 'grading',    route: '/portal-docente/notas'      },
@@ -141,6 +180,7 @@ export class LayoutService {
     {
       label: 'Portal Estudiante', icon: 'person', zone: 'portal-estudiante', roles: ['ESTUDIANTE'],
       children: [
+        { label: 'Inicio',       icon: 'home',         route: '/portal-estudiante/inicio', exact: true },
         { label: 'Mis Horarios', icon: 'schedule',   route: '/portal-estudiante/horarios'   },
         { label: 'Mis Notas',    icon: 'grading',    route: '/portal-estudiante/notas'      },
         { label: 'Asistencia',   icon: 'fact_check', route: '/portal-estudiante/asistencia' },
@@ -155,11 +195,12 @@ export class LayoutService {
       children: [
         { label: 'Inicio',        icon: 'home',                   route: '/portal-padre/inicio', exact: true },
         { label: 'Seguimiento',   icon: 'insights',               route: '/portal-padre/seguimiento'  },
+        { label: 'Justificaciones', icon: 'fact_check',           route: '/portal-padre/justificaciones' },
         { label: 'Ficha del alumno', icon: 'badge',               route: '/portal-padre/ficha'        },
         { label: 'Tareas',        icon: 'assignment',             route: '/portal-padre/tareas'       },
         { label: 'Clases',        icon: 'menu_book',              route: '/portal-padre/clases'       },
         { label: 'Horarios',      icon: 'schedule',               route: '/portal-padre/horarios'     },
-        { label: 'Comunicación',  icon: 'chat',                   route: '/portal-padre/comunicacion' },
+        { label: 'Comunicados', icon: 'campaign', route: '/portal-padre/comunicacion' },
         { label: 'Correo a docentes', icon: 'mail',               route: '/portal-padre/correo-docentes' },
         { label: 'Estado de Cuenta', icon: 'account_balance_wallet', route: '/portal-padre/finanzas'  },
       ]

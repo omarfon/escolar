@@ -4,6 +4,7 @@ import { LayoutService, NavItem } from '../../services/layout.service';
 import { AuthService } from '../../../auth/services/auth.service';
 import { GradingConfigService } from '../../../grading/grading-config.service';
 import { matchesEvalNav } from '../../../grading/grading-config.model';
+import { ComunicadosService } from '../../../../features/comunicaciones/comunicados/comunicados.service';
 
 @Component({
   selector: 'app-sidebar',
@@ -31,12 +32,26 @@ import { matchesEvalNav } from '../../../grading/grading-config.model';
       <nav class="flex-1 overflow-y-auto overflow-x-hidden py-3 space-y-0.5 px-2">
         @for (item of visibleNav(); track item.label) {
           @if (!item.children) {
-            <a [routerLink]="item.route" [queryParams]="item.queryParams" routerLinkActive="!bg-indigo-600 !text-white"
+            <a [routerLink]="item.route" [queryParams]="item.queryParams"
+              routerLinkActive="!bg-indigo-600 !text-white"
+              [routerLinkActiveOptions]="{ exact: item.exact ?? false }"
               [title]="layout.miniMode() && !layout.isMobile() ? item.label : ''"
               class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300 hover:bg-slate-700/60 hover:text-white transition-colors cursor-pointer">
-              <span class="icon icon-lg shrink-0">{{ item.icon }}</span>
+              <span class="icon icon-lg shrink-0 relative">
+                {{ item.icon }}
+                @if (navBadge(item) && layout.miniMode() && !layout.isMobile()) {
+                  <span class="absolute -top-1.5 -right-1.5 min-w-[1rem] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
+                    {{ badgeLabel(navBadge(item)!) }}
+                  </span>
+                }
+              </span>
               @if (!layout.miniMode() || layout.isMobile()) {
-                <span class="text-sm font-medium truncate">{{ item.label }}</span>
+                <span class="text-sm font-medium truncate flex-1">{{ item.label }}</span>
+                @if (navBadge(item)) {
+                  <span class="ml-auto min-w-[1.25rem] h-5 px-1.5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center leading-none">
+                    {{ badgeLabel(navBadge(item)!) }}
+                  </span>
+                }
               }
             </a>
           } @else {
@@ -54,7 +69,9 @@ import { matchesEvalNav } from '../../../grading/grading-config.model';
               @if ((!layout.miniMode() || layout.isMobile()) && openGroups().has(item.label)) {
                 <div class="ml-3 mt-0.5 space-y-0.5 border-l border-slate-700/50 pl-3">
                   @for (child of item.children; track child.route) {
-                    <a [routerLink]="child.route" [queryParams]="child.queryParams" routerLinkActive="!text-indigo-300 !font-semibold"
+                    <a [routerLink]="child.route" [queryParams]="child.queryParams"
+                      routerLinkActive="!text-indigo-300 !font-semibold"
+                      [routerLinkActiveOptions]="{ exact: child.exact ?? false }"
                       class="flex items-center gap-2 px-2 py-2 rounded-lg text-slate-400 hover:bg-slate-700/50 hover:text-white text-sm transition-colors">
                       <span class="icon text-base shrink-0">{{ child.icon }}</span>
                       <span class="truncate">{{ child.label }}</span>
@@ -88,15 +105,50 @@ export class SidebarComponent {
   readonly layout = inject(LayoutService);
   readonly auth   = inject(AuthService);
   private readonly grading = inject(GradingConfigService);
+  private readonly comunicados = inject(ComunicadosService);
   private readonly _openGroups = signal<Set<string>>(new Set());
   readonly openGroups = this._openGroups.asReadonly();
 
   readonly visibleNav = computed(() => {
-    const cfg = this.grading.config();
-    return this.layout.nav
-      .map((item) => this.filterNavItem(item, cfg))
-      .filter((item): item is NavItem => item !== null);
+    const padreUnread = this.comunicados.noLeidosPadre();
+    const estudianteUnread = this.comunicados.noLeidosEstudiante();
+    const docenteUnread = this.comunicados.noLeidosDocente();
+
+    let nav: NavItem[];
+    if (this.auth.isPortalEstudiante()) {
+      nav = this.layout.studentSidebarNav;
+    } else if (this.auth.isPortalDocente()) {
+      nav = this.layout.docenteSidebarNav;
+    } else if (this.auth.isPortalPadre()) {
+      nav = this.layout.padreSidebarNav;
+    } else {
+      const cfg = this.grading.config();
+      nav = this.layout.nav
+        .map((item) => this.filterNavItem(item, cfg))
+        .filter((item): item is NavItem => item !== null);
+      return nav;
+    }
+
+    return nav.map((item) => this.withComunicadosBadge(item, padreUnread, estudianteUnread, docenteUnread));
   });
+
+  private withComunicadosBadge(
+    item: NavItem,
+    padreUnread: number,
+    estudianteUnread: number,
+    docenteUnread: number,
+  ): NavItem {
+    if (item.route === '/portal-padre/comunicacion') {
+      return padreUnread > 0 ? { ...item, badge: padreUnread } : { ...item, badge: undefined };
+    }
+    if (item.route === '/portal-estudiante/comunicados') {
+      return estudianteUnread > 0 ? { ...item, badge: estudianteUnread } : { ...item, badge: undefined };
+    }
+    if (item.route === '/portal-docente/comunicados') {
+      return docenteUnread > 0 ? { ...item, badge: docenteUnread } : { ...item, badge: undefined };
+    }
+    return item;
+  }
 
   private filterNavItem(item: NavItem, cfg: ReturnType<GradingConfigService['config']>, parentZone?: NavItem['zone']): NavItem | null {
     const zone = item.zone ?? parentZone;
@@ -154,5 +206,13 @@ export class SidebarComponent {
   rolLabel(): string {
     const roles = this.auth.userRoles();
     return roles[0] ?? this.auth.currentUser()?.email ?? '';
+  }
+
+  navBadge(item: NavItem): number | undefined {
+    return item.badge && item.badge > 0 ? item.badge : undefined;
+  }
+
+  badgeLabel(count: number): string {
+    return count > 99 ? '99+' : String(count);
   }
 }

@@ -142,7 +142,7 @@ export class LoginComponent {
   private readonly alumnoDemo = { user: 'estudiante', pass: 'admin123' };
 
   ingresarComoAlumno(): void {
-    this.loginDemo(this.alumnoDemo.user, this.alumnoDemo.pass, '/portal-estudiante');
+    this.loginDemo(this.alumnoDemo.user, this.alumnoDemo.pass, '/portal-estudiante/inicio');
   }
 
   loginDemo(user: string, pass: string, returnUrl?: string): void {

@@ -4,7 +4,7 @@ import { addMonths, addWeeks, subMonths, subWeeks } from 'date-fns';
 import { LayoutService } from '../../../core/layout/services/layout.service';
 import { AuthService } from '../../../core/auth/services/auth.service';
 import { HorariosService } from '../../academico/horarios/services/horarios.service';
-import { DIAS } from '../../academico/horarios/data/horario.constants';
+import { DIAS, DIAS_SEMANA_CAB, CALENDARIO_MES_GRID, esFinDeSemanaCalendario } from '../../academico/horarios/data/horario.constants';
 import { CeldaCalendario } from '../../academico/horarios/models/horario.model';
 import { HorariosPadreService } from './horarios-padre.service';
 import { HijoResumen, parentescoLabel } from '../seguimiento/seguimiento.model';
@@ -127,36 +127,41 @@ type VistaHorario = 'mes' | 'semana';
           </div>
 
           <div class="p-4">
-            <div class="grid grid-cols-7 gap-px bg-gray-200 rounded-xl overflow-hidden border border-gray-200">
-              @for (d of diasSemanaCab; track d) {
-                <div class="bg-gray-50 text-center py-2 text-xs font-semibold text-gray-500 uppercase">
+            <div [class]="CALENDARIO_MES_GRID">
+              @for (d of DIAS_SEMANA_CAB; track d; let i = $index) {
+                <div class="bg-gray-50 text-center font-semibold text-gray-500 uppercase"
+                  [ngClass]="esFinDeSemanaCalendario(i) ? 'py-1.5 text-[10px] text-gray-400' : 'py-2 text-xs'">
                   {{ d }}
                 </div>
               }
               @for (semana of calendario(); track $index) {
-                @for (celda of semana; track celda.fecha.getTime()) {
+                @for (celda of semana; track celda.fecha.getTime(); let i = $index) {
                   <button
                     type="button"
-                    class="bg-white min-h-[100px] p-1.5 text-left transition-colors relative"
+                    class="bg-white text-left transition-colors relative"
                     [ngClass]="{
+                      'min-h-[100px] p-1.5': !esFinDeSemanaCalendario(i),
+                      'min-h-[64px] p-1 bg-gray-50/80': esFinDeSemanaCalendario(i),
                       'opacity-40': !celda.enMes,
                       'ring-2 ring-inset ring-indigo-500 z-10': diaSeleccionado() && svc.esMismaFecha(celda.fecha, diaSeleccionado()!),
-                      'bg-indigo-50/60': celda.esHoy,
+                      'bg-indigo-50/60': celda.esHoy && !esFinDeSemanaCalendario(i),
                       'hover:bg-gray-50 cursor-pointer': celda.esEscolar && celda.enMes,
                       'cursor-default': !celda.esEscolar || !celda.enMes
                     }"
                     [disabled]="!celda.esEscolar || !celda.enMes"
                     (click)="seleccionarDia(celda)">
                     <div class="flex items-center justify-between mb-1">
-                      <span class="text-xs font-semibold w-6 h-6 flex items-center justify-center rounded-full"
-                        [ngClass]="celda.esHoy ? 'bg-indigo-600 text-white' : 'text-gray-700'">
+                      <span class="font-semibold flex items-center justify-center rounded-full"
+                        [ngClass]="esFinDeSemanaCalendario(i)
+                          ? (celda.esHoy ? 'w-5 h-5 text-[10px] bg-indigo-600 text-white' : 'w-5 h-5 text-[10px] text-gray-500')
+                          : (celda.esHoy ? 'w-6 h-6 text-xs bg-indigo-600 text-white' : 'w-6 h-6 text-xs text-gray-700')">
                         {{ celda.fecha.getDate() }}
                       </span>
-                      @if (celda.esEscolar && celda.enMes && celda.clases.length) {
+                      @if (!esFinDeSemanaCalendario(i) && celda.esEscolar && celda.enMes && celda.clases.length) {
                         <span class="text-[10px] text-gray-400">{{ celda.clases.length }} cls</span>
                       }
                     </div>
-                    @if (celda.esEscolar && celda.enMes) {
+                    @if (!esFinDeSemanaCalendario(i) && celda.esEscolar && celda.enMes) {
                       <div class="space-y-0.5">
                         @for (cl of celda.clases.slice(0, 3); track cl.periodo.id) {
                           <div class="text-[10px] leading-tight px-1 py-0.5 rounded truncate border"
@@ -313,8 +318,10 @@ export class HorariosPadreComponent implements OnInit {
   readonly padre = inject(HorariosPadreService);
 
   readonly DIAS = DIAS;
+  readonly DIAS_SEMANA_CAB = DIAS_SEMANA_CAB;
+  readonly CALENDARIO_MES_GRID = CALENDARIO_MES_GRID;
+  readonly esFinDeSemanaCalendario = esFinDeSemanaCalendario;
   readonly parentescoLabel = parentescoLabel;
-  readonly diasSemanaCab = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
   readonly hoy = new Date();
 
   vista = signal<VistaHorario>('mes');

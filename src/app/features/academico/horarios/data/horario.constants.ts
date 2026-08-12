@@ -2,6 +2,15 @@ import { Curso, Docente, EntradaHorario, Nivel, Periodo } from '../models/horari
 
 export const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
 export const DIAS_CORTO = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie'];
+export const DIAS_SEMANA_CAB = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+
+/** Grid mensual: días lectivos más anchos, fin de semana compacto */
+export const CALENDARIO_MES_GRID =
+  'grid grid-cols-[repeat(5,minmax(0,1fr))_minmax(0,0.38fr)_minmax(0,0.38fr)] gap-px bg-gray-200 rounded-xl overflow-hidden border border-gray-200';
+
+export function esFinDeSemanaCalendario(indice: number): boolean {
+  return indice >= 5;
+}
 
 const ALL: Nivel[] = ['Inicial', 'Primaria', 'Secundaria'];
 const PRI_SEC: Nivel[] = ['Primaria', 'Secundaria'];

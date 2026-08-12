@@ -13,9 +13,11 @@ export function authInterceptor(req: HttpRequest<unknown>, next: HttpHandlerFn):
 
   const token = auth.accessToken();
   return next(token ? _addToken(req, token) : req).pipe(
-    catchError((err: HttpErrorResponse) =>
-      err.status === 401 ? _handle401(req, next, auth) : throwError(() => err)
-    )
+    catchError((err: HttpErrorResponse) => {
+      if (err.status !== 401) return throwError(() => err);
+      if (!auth.isAuthenticated()) return throwError(() => err);
+      return _handle401(req, next, auth);
+    }),
   );
 }
 

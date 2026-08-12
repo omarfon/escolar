@@ -17,23 +17,22 @@ const TIPO_CFG: Record<TipoCom, { badge: string; label: string; icon: string }> 
   template: `
 <div class="space-y-5 animate-fade-in">
 
-  <!-- Header -->
   <div class="flex items-center justify-between">
     <div>
       <h2 class="text-xl font-bold text-gray-800">Comunicados</h2>
-      <p class="text-sm text-gray-500">Avisos y comunicados de la instituci\u00f3n educativa</p>
+      <p class="text-sm text-gray-500">Avisos y comunicados de la instituci\u00f3n para docentes</p>
     </div>
     <div class="flex items-center gap-2 text-sm text-gray-500">
       <span class="icon text-base text-indigo-400">notifications</span>
-      <span>{{ svc.leidosEstudiante().size }} le\u00eddos de {{ svc.paraAlumnos().length }}</span>
+      <span>{{ svc.leidosDocente().size }} le\u00eddos de {{ svc.paraDocentes().length }}</span>
     </div>
   </div>
 
-  @if (!svc.paraAlumnos().length) {
+  @if (!svc.paraDocentes().length) {
     <div class="card p-16 flex flex-col items-center justify-center text-center text-gray-400">
       <div class="text-5xl mb-4">📭</div>
       <div class="font-semibold text-gray-600 mb-1">Sin comunicados activos</div>
-      <div class="text-sm">No hay comunicados publicados para estudiantes en este momento</div>
+      <div class="text-sm">No hay comunicados publicados para docentes en este momento</div>
     </div>
   }
 
@@ -52,8 +51,6 @@ const TIPO_CFG: Record<TipoCom, { badge: string; label: string; icon: string }> 
               <div class="flex items-start justify-between gap-2 mb-1 flex-wrap">
                 <div class="flex items-center gap-2">
                   <span class="font-semibold text-gray-800">{{ c.titulo }}</span>
-                  @if (svc.leidosEstudiante().has(c.id)) { <span class="badge badge-gray text-xs">Le\u00eddo</span> }
-                  @else { <span class="badge badge-red text-xs shrink-0">Nuevo</span> }
                 </div>
                 <span class="badge badge-red text-xs shrink-0">Urgente</span>
               </div>
@@ -71,7 +68,7 @@ const TIPO_CFG: Record<TipoCom, { badge: string; label: string; icon: string }> 
                   <button class="text-xs text-indigo-500 hover:text-indigo-700 font-medium" (click)="toggleExpandir(c.id)">
                     {{ expandidos().has(c.id) ? 'Ver menos' : 'Ver m\u00e1s' }}
                   </button>
-                  @if (svc.noLeido(c.id, 'estudiante')) {
+                  @if (svc.noLeido(c.id, 'docente')) {
                     <button class="text-xs text-emerald-600 hover:text-emerald-800 font-medium flex items-center gap-1" (click)="marcarLeido(c.id)">
                       <span class="icon text-xs">done</span> Marcar como le\u00eddo
                     </button>
@@ -93,7 +90,7 @@ const TIPO_CFG: Record<TipoCom, { badge: string; label: string; icon: string }> 
         </div>
       }
       @for (c of normalesActivos(); track c.id) {
-        <div class="card border rounded-xl p-5" [ngClass]="svc.leidosEstudiante().has(c.id) ? 'opacity-70' : ''">
+        <div class="card border rounded-xl p-5" [ngClass]="svc.leidosDocente().has(c.id) ? 'opacity-70' : ''">
           <div class="flex items-start gap-4">
             <div class="w-10 h-10 rounded-full flex items-center justify-center shrink-0 mt-0.5"
                  [ngClass]="c.tipo === 'academico' ? 'bg-indigo-100' : c.tipo === 'evento' ? 'bg-purple-100' : c.tipo === 'administrativo' ? 'bg-gray-100' : 'bg-blue-100'">
@@ -106,7 +103,7 @@ const TIPO_CFG: Record<TipoCom, { badge: string; label: string; icon: string }> 
               <div class="flex items-start justify-between gap-2 mb-1 flex-wrap">
                 <div class="flex items-center gap-2">
                   <span class="font-semibold text-gray-800">{{ c.titulo }}</span>
-                  @if (svc.leidosEstudiante().has(c.id)) { <span class="badge badge-gray text-xs">Le\u00eddo</span> }
+                  @if (svc.leidosDocente().has(c.id)) { <span class="badge badge-gray text-xs">Le\u00eddo</span> }
                   @else { <span class="badge badge-red text-xs shrink-0">Nuevo</span> }
                 </div>
                 <div class="flex items-center gap-1.5 shrink-0">
@@ -130,7 +127,7 @@ const TIPO_CFG: Record<TipoCom, { badge: string; label: string; icon: string }> 
                   <button class="text-xs text-indigo-500 hover:text-indigo-700 font-medium" (click)="toggleExpandir(c.id)">
                     {{ expandidos().has(c.id) ? 'Ver menos' : 'Ver m\u00e1s' }}
                   </button>
-                  @if (svc.noLeido(c.id, 'estudiante')) {
+                  @if (svc.noLeido(c.id, 'docente')) {
                     <button class="text-xs text-emerald-600 hover:text-emerald-800 font-medium flex items-center gap-1" (click)="marcarLeido(c.id)">
                       <span class="icon text-xs">done</span> Marcar como le\u00eddo
                     </button>
@@ -147,7 +144,7 @@ const TIPO_CFG: Record<TipoCom, { badge: string; label: string; icon: string }> 
 </div>
   `,
 })
-export class ComunicadosEstudianteComponent implements OnInit {
+export class ComunicadosDocenteComponent implements OnInit {
   private readonly layout = inject(LayoutService);
   readonly svc = inject(ComunicadosService);
 
@@ -159,14 +156,14 @@ export class ComunicadosEstudianteComponent implements OnInit {
   expandidos = signal<Set<number>>(new Set());
 
   urgentesActivos = computed(() =>
-    this.svc.urgentesNoLeidosEstudiante()
+    this.svc.urgentesNoLeidosDocente()
       .sort((a, b) => (a.fechaPublicacion > b.fechaPublicacion ? -1 : 1)),
   );
   normalesActivos = computed(() =>
-    this.svc.paraAlumnos()
+    this.svc.paraDocentes()
       .filter(c => {
         const esUrgente = c.tipo === 'urgente' || c.prioridad === 'alta';
-        return !esUrgente || this.svc.leidosEstudiante().has(c.id);
+        return !esUrgente || this.svc.leidosDocente().has(c.id);
       })
       .sort((a, b) => (a.fechaPublicacion > b.fechaPublicacion ? -1 : 1)),
   );
@@ -176,7 +173,7 @@ export class ComunicadosEstudianteComponent implements OnInit {
   tipoIcon(t: TipoCom)  { return TIPO_CFG[t].icon;  }
 
   marcarLeido(id: number) {
-    this.svc.marcarLeido(id, 'estudiante');
+    this.svc.marcarLeido(id, 'docente');
   }
   toggleExpandir(id: number) {
     this.expandidos.update(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });

@@ -70,9 +70,9 @@ import { EstadoAsistencia } from '../../asistencia/models/asistencia-estudiante.
           <p class="text-xs text-amber-600">Tardanzas</p>
           <p class="text-2xl font-bold text-amber-600">{{ r.tardanzas }}</p>
         </div>
-        <div class="card p-4 border-l-4 border-l-indigo-400">
-          <p class="text-xs text-indigo-600">Inasist. netas</p>
-          <p class="text-2xl font-bold text-indigo-600">{{ r.inasistenciasNetas }}</p>
+        <div class="card p-4 border-l-4 border-l-blue-400">
+          <p class="text-xs text-blue-600">Inasist. justificadas</p>
+          <p class="text-2xl font-bold text-blue-600">{{ r.justificadas }}</p>
         </div>
       </div>
 

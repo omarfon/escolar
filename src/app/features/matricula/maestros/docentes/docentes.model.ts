@@ -29,6 +29,7 @@ export interface DocenteItem {
   email: string;
   username: string;
   telefono: string;
+  direccion: string;
   sede: string;
   estado: DocenteEstado;
   especialidad: string;
@@ -66,6 +67,7 @@ export interface DocentePayload {
   email: string;
   username?: string;
   telefono?: string;
+  direccion?: string;
   sede?: string;
   estado?: DocenteEstado;
   especialidad: string;

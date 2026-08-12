@@ -346,7 +346,7 @@ export class ClasesEstudianteComponent implements OnInit {
       esperar();
     };
 
-    if (this.auth.hasRole('ESTUDIANTE')) {
+    if (this.auth.isPortalEstudiante()) {
       this.portal.ensureLoaded().subscribe(() => iniciar());
     } else {
       iniciar();

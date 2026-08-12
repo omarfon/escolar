@@ -21,7 +21,10 @@ import { GradingConfigService } from '../../../grading/grading-config.service';
       }
       <div class="flex flex-col flex-1 min-w-0 overflow-hidden transition-all duration-300 ease-in-out">
         <app-header />
-        <main class="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-6 pt-6 pb-6">
+        <main
+          class="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-4 sm:px-6 pt-4 sm:pt-6"
+          [class.pb-24]="auth.isPortalEstudiante() && layout.isPhone()"
+          [class.pb-6]="!auth.isPortalEstudiante() || !layout.isPhone()">
           <router-outlet />
         </main>
         @if (!auth.isPortalEstudiante() || !layout.isPhone()) {

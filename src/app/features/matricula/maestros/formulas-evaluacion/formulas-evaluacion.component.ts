@@ -1,5 +1,4 @@
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
-import { FormsModule } from '@angular/forms';
 import { NgClass } from '@angular/common';
 import { LayoutService } from '../../../../core/layout/services/layout.service';
 import { InstitucionalService } from '../../../administracion/institucional/institucional.service';
@@ -14,11 +13,12 @@ import {
   slugCodigo,
   sumaPesos,
 } from './formulas-evaluacion.model';
+import { FormulaEvaluacionDrawerComponent } from './formula-evaluacion-drawer.component';
 
 @Component({
   selector: 'app-maestros-formulas-evaluacion',
   standalone: true,
-  imports: [FormsModule, NgClass],
+  imports: [NgClass, FormulaEvaluacionDrawerComponent],
   template: `
 <div class="space-y-4">
   <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -109,111 +109,22 @@ import {
     }
   </div>
 
-  @if (modal()) {
-    <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" (click)="cerrarModal()">
-      <div class="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto" (click)="$event.stopPropagation()">
-        <div class="p-5 border-b border-gray-100 flex items-center justify-between">
-          <h4 class="font-bold text-gray-900">{{ editId() ? 'Editar fórmula' : 'Nueva fórmula' }}</h4>
-          <button class="btn btn-ghost btn-sm" (click)="cerrarModal()"><span class="icon">close</span></button>
-        </div>
-        <div class="p-5 space-y-4">
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div class="sm:col-span-2">
-              <label class="form-label">Nombre</label>
-              <input class="form-input mt-1" [(ngModel)]="form.nombre" (ngModelChange)="syncCodigo()">
-            </div>
-            <div>
-              <label class="form-label">Código</label>
-              <input class="form-input mt-1 font-mono text-sm" [(ngModel)]="form.codigo">
-            </div>
-            <div>
-              <label class="form-label">Nivel (opcional)</label>
-              <select class="form-select mt-1" [(ngModel)]="form.nivel" (ngModelChange)="onNivelChange()">
-                <option value="">Todos</option>
-                @for (n of niveles(); track n.id) {
-                  <option [value]="n.nombre">{{ n.nombre }}</option>
-                }
-              </select>
-            </div>
-            <div>
-              <label class="form-label">Grado (opcional)</label>
-              <select class="form-select mt-1" [(ngModel)]="form.grado" [disabled]="!form.nivel">
-                <option value="">Todos</option>
-                @for (g of grados(); track g) {
-                  <option [value]="g">{{ g }}</option>
-                }
-              </select>
-            </div>
-            <div>
-              <label class="form-label">Curso (opcional)</label>
-              <input class="form-input mt-1" [(ngModel)]="form.curso" placeholder="Ej. Matemática">
-            </div>
-            <div>
-              <label class="form-label">Bimestre (opcional)</label>
-              <select class="form-select mt-1" [(ngModel)]="form.bimestre">
-                <option [ngValue]="null">Todos</option>
-                @for (b of [1,2,3,4]; track b) {
-                  <option [ngValue]="b">Bimestre {{ b }}</option>
-                }
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <div class="flex items-center justify-between mb-2">
-              <label class="form-label mb-0">Componentes de evaluación</label>
-              <button type="button" class="btn btn-secondary btn-xs" (click)="agregarComponente()">
-                <span class="icon icon-sm">add</span> Agregar
-              </button>
-            </div>
-            <div class="rounded-xl border border-gray-200 overflow-hidden">
-              <table class="w-full text-sm">
-                <thead class="bg-gray-50 text-xs text-gray-500 uppercase">
-                  <tr>
-                    <th class="px-3 py-2 text-left">Nombre</th>
-                    <th class="px-3 py-2 text-left">Código</th>
-                    <th class="px-3 py-2 text-center">Peso %</th>
-                    <th class="px-3 py-2"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  @for (c of form.componentes; track $index; let i = $index) {
-                    <tr class="border-t border-gray-100">
-                      <td class="px-3 py-2"><input class="form-input py-1" [(ngModel)]="c.nombre" (ngModelChange)="syncComponenteCodigo(c)"></td>
-                      <td class="px-3 py-2"><input class="form-input py-1 font-mono text-xs" [(ngModel)]="c.codigo"></td>
-                      <td class="px-3 py-2 text-center"><input type="number" min="1" max="100" class="form-input py-1 w-20 mx-auto text-center" [(ngModel)]="c.peso"></td>
-                      <td class="px-3 py-2 text-right">
-                        @if (form.componentes.length > 1) {
-                          <button type="button" class="btn btn-ghost btn-icon text-red-500" title="Quitar componente"
-                            (click)="quitarComponente(i)">
-                            <span class="icon icon-sm">delete</span>
-                          </button>
-                        }
-                      </td>
-                    </tr>
-                  }
-                </tbody>
-              </table>
-            </div>
-            <p class="text-xs mt-2" [ngClass]="sumaPesosForm() === 100 ? 'text-green-600' : 'text-red-600'">
-              Suma de pesos: {{ sumaPesosForm() }}% (debe ser 100%)
-            </p>
-          </div>
-
-          <label class="inline-flex items-center gap-2 text-sm">
-            <input type="checkbox" [(ngModel)]="form.esDefault">
-            Usar como fórmula predeterminada
-          </label>
-        </div>
-        <div class="p-5 border-t border-gray-100 flex justify-end gap-2">
-          <button class="btn btn-secondary" (click)="cerrarModal()">Cancelar</button>
-          <button class="btn btn-primary" [disabled]="svc.saving() || sumaPesosForm() !== 100" (click)="guardar()">
-            {{ svc.saving() ? 'Guardando...' : 'Guardar' }}
-          </button>
-        </div>
-      </div>
-    </div>
-  }
+  <app-formula-evaluacion-drawer
+    [abierto]="drawerAbierto()"
+    [editId]="editId()"
+    [form]="form"
+    [niveles]="niveles()"
+    [grados]="grados()"
+    [saving]="svc.saving()"
+    [sumaPesos]="sumaPesosForm()"
+    (cerrar)="cerrarDrawer()"
+    (guardar)="guardar()"
+    (nombreChange)="syncCodigo()"
+    (nivelChange)="onNivelChange()"
+    (agregarComponente)="agregarComponente()"
+    (quitarComponente)="quitarComponente($event)"
+    (componenteNombreChange)="syncComponenteCodigo($event)"
+  />
 
   @if (confirmGuardarModal()) {
     <div class="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm flex items-center justify-center p-4"
@@ -321,7 +232,7 @@ export class MaestrosFormulasEvaluacionComponent implements OnInit {
   readonly niveles = signal<Nivel[]>([]);
   readonly error = signal('');
   readonly toast = signal<{ type: 'ok' | 'err'; msg: string } | null>(null);
-  readonly modal = signal(false);
+  readonly drawerAbierto = signal(false);
   readonly editId = signal<number | null>(null);
   readonly confirmGuardarModal = signal(false);
   readonly confirmDesactivarModal = signal(false);
@@ -358,7 +269,7 @@ export class MaestrosFormulasEvaluacionComponent implements OnInit {
   abrirModal(): void {
     this.editId.set(null);
     this.form = this.emptyForm();
-    this.modal.set(true);
+    this.drawerAbierto.set(true);
   }
 
   editar(item: MaestroFormulaEvaluacionItem): void {
@@ -376,11 +287,11 @@ export class MaestrosFormulasEvaluacionComponent implements OnInit {
       orden: item.orden,
       estado: item.activo ? 'activo' : 'inactivo',
     };
-    this.modal.set(true);
+    this.drawerAbierto.set(true);
   }
 
-  cerrarModal(): void {
-    this.modal.set(false);
+  cerrarDrawer(): void {
+    this.drawerAbierto.set(false);
   }
 
   syncCodigo(): void {
@@ -483,7 +394,7 @@ export class MaestrosFormulasEvaluacionComponent implements OnInit {
       next: () => {
         this.toast.set({ type: 'ok', msg: okMsg });
         onOk?.();
-        this.cerrarModal();
+        this.cerrarDrawer();
         this.cargar();
       },
       error: err => this.toast.set({ type: 'err', msg: err.message ?? 'Error al guardar' }),

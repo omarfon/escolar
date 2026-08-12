@@ -140,7 +140,7 @@ export class HorariosService {
   load(): void {
     this.loading.set(true);
 
-    const perfil$ = this.auth.hasRole('ESTUDIANTE')
+    const perfil$ = this.auth.isPortalEstudiante()
       ? this.portal.ensureLoaded()
       : of(null);
 

@@ -1,25 +1,34 @@
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { NgClass } from '@angular/common';
 import { LayoutService } from '../../../core/layout/services/layout.service';
-import { AuthService } from '../../../core/auth/services/auth.service';
 import { PortalDocenteService } from '../portal-docente.service';
 import { DocenteDetail } from '../../matricula/maestros/docentes/docentes.model';
 
 @Component({
   selector: 'app-mis-datos-docente',
   standalone: true,
-  imports: [NgClass],
+  imports: [NgClass, FormsModule],
   template: `
     <div class="animate-fade-in space-y-5">
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h2 class="text-2xl font-bold text-gray-900">Mis datos</h2>
+          <h2 class="text-2xl font-bold text-gray-900">Mi Perfil</h2>
           <p class="text-sm text-gray-500 mt-0.5">
-            Información de tu perfil docente registrada en el sistema
+            Consulta tu información y actualiza teléfono y dirección
           </p>
         </div>
         <span class="badge badge-indigo">A.E. {{ anioEscolar }}</span>
       </div>
+
+      @if (mensaje()) {
+        <div class="rounded-xl px-4 py-3 text-sm border"
+          [ngClass]="mensaje()!.tipo === 'ok'
+            ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+            : 'bg-red-50 border-red-200 text-red-700'">
+          {{ mensaje()!.texto }}
+        </div>
+      }
 
       @if (error()) {
         <div class="rounded-xl bg-red-50 border border-red-200 text-red-700 px-4 py-3 text-sm">
@@ -40,8 +49,8 @@ import { DocenteDetail } from '../../matricula/maestros/docentes/docentes.model'
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div class="card p-5 lg:col-span-1">
-            <div class="flex items-center gap-4 mb-5">
+          <div class="card p-5 lg:col-span-1 space-y-5">
+            <div class="flex items-center gap-4">
               <div class="w-16 h-16 rounded-2xl bg-indigo-600 text-white flex items-center justify-center text-2xl font-bold shrink-0">
                 {{ iniciales() }}
               </div>
@@ -53,13 +62,75 @@ import { DocenteDetail } from '../../matricula/maestros/docentes/docentes.model'
             </div>
 
             <dl class="space-y-3 text-sm">
-              @for (campo of datosPersonales(); track campo.label) {
+              @for (campo of datosSoloLectura(); track campo.label) {
                 <div>
                   <dt class="text-[11px] font-semibold uppercase tracking-wide text-gray-400">{{ campo.label }}</dt>
                   <dd class="text-gray-800 mt-0.5 break-all">{{ campo.value || '—' }}</dd>
                 </div>
               }
             </dl>
+
+            <div class="pt-4 border-t border-gray-100 space-y-3">
+              <div class="flex items-center justify-between gap-2">
+                <h4 class="text-sm font-semibold text-gray-800">Contacto</h4>
+                @if (!editando()) {
+                  <button type="button" class="btn-icon text-indigo-600 hover:bg-indigo-50"
+                    title="Editar teléfono y dirección"
+                    (click)="iniciarEdicion()">
+                    <span class="icon icon-sm">edit</span>
+                  </button>
+                } @else {
+                  <span class="text-[11px] text-indigo-600 font-medium">Editando</span>
+                }
+              </div>
+
+              @if (!editando()) {
+                <dl class="space-y-3 text-sm">
+                  <div>
+                    <dt class="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Teléfono</dt>
+                    <dd class="text-gray-800 mt-0.5 break-all">{{ valorMostrar(d.telefono) }}</dd>
+                  </div>
+                  <div>
+                    <dt class="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Dirección</dt>
+                    <dd class="text-gray-800 mt-0.5 break-all whitespace-pre-line">{{ valorMostrar(d.direccion) }}</dd>
+                  </div>
+                </dl>
+              } @else {
+                <div class="space-y-4">
+                  <div>
+                    <label class="form-label" for="telefono-docente">Teléfono</label>
+                    <input id="telefono-docente" type="tel" class="form-input w-full"
+                      [(ngModel)]="telefonoEdit"
+                      [disabled]="svc.savingPerfil()"
+                      maxlength="30"
+                      placeholder="Ej. 987 654 321" />
+                  </div>
+
+                  <div>
+                    <label class="form-label" for="direccion-docente">Dirección</label>
+                    <textarea id="direccion-docente" class="form-input w-full min-h-[88px] resize-y"
+                      [(ngModel)]="direccionEdit"
+                      [disabled]="svc.savingPerfil()"
+                      maxlength="200"
+                      placeholder="Av. o calle, número, distrito"></textarea>
+                    <p class="text-[11px] text-gray-400 mt-1">{{ direccionEdit.length }}/200</p>
+                  </div>
+
+                  <div class="flex flex-wrap gap-2">
+                    <button type="button" class="btn btn-primary btn-sm"
+                      (click)="guardar()"
+                      [disabled]="svc.savingPerfil() || !hayCambios()">
+                      {{ svc.savingPerfil() ? 'Guardando…' : 'Guardar' }}
+                    </button>
+                    <button type="button" class="btn btn-secondary btn-sm"
+                      (click)="cancelarEdicion()"
+                      [disabled]="svc.savingPerfil()">
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              }
+            </div>
           </div>
 
           <div class="card p-5 lg:col-span-2 space-y-5">
@@ -151,7 +222,6 @@ import { DocenteDetail } from '../../matricula/maestros/docentes/docentes.model'
 })
 export class MisDatosDocenteComponent implements OnInit {
   private readonly layout = inject(LayoutService);
-  readonly auth = inject(AuthService);
   readonly svc = inject(PortalDocenteService);
 
   readonly anioEscolar = 2026;
@@ -159,6 +229,13 @@ export class MisDatosDocenteComponent implements OnInit {
   private readonly _docente = signal<DocenteDetail | null>(null);
   readonly docente = this._docente.asReadonly();
   readonly error = signal('');
+  readonly mensaje = signal<{ tipo: 'ok' | 'err'; texto: string } | null>(null);
+  readonly editando = signal(false);
+
+  telefonoEdit = '';
+  direccionEdit = '';
+  private telefonoOriginal = '';
+  private direccionOriginal = '';
 
   readonly kpis = computed(() => {
     const d = this._docente();
@@ -170,7 +247,7 @@ export class MisDatosDocenteComponent implements OnInit {
     ];
   });
 
-  readonly datosPersonales = computed(() => {
+  readonly datosSoloLectura = computed(() => {
     const d = this._docente();
     if (!d) return [];
     return [
@@ -179,7 +256,6 @@ export class MisDatosDocenteComponent implements OnInit {
       { label: 'DNI', value: d.dni },
       { label: 'Correo', value: d.email },
       { label: 'Usuario', value: d.username },
-      { label: 'Teléfono', value: d.telefono },
     ];
   });
 
@@ -195,14 +271,19 @@ export class MisDatosDocenteComponent implements OnInit {
   });
 
   ngOnInit(): void {
-    this.layout.setTitle('Mis datos');
+    this.layout.setTitle('Mi Perfil');
     this.cargar();
   }
 
   cargar(): void {
     this.error.set('');
+    this.mensaje.set(null);
     this.svc.loadMisDatos(this.anioEscolar).subscribe({
-      next: (res) => this._docente.set(res),
+      next: (res) => {
+        this._docente.set(res);
+        this.syncCamposEditables(res);
+        this.editando.set(false);
+      },
       error: (err) => {
         const msg = err?.error?.message;
         this.error.set(
@@ -211,6 +292,62 @@ export class MisDatosDocenteComponent implements OnInit {
         this._docente.set(null);
       },
     });
+  }
+
+  iniciarEdicion(): void {
+    const d = this._docente();
+    if (!d) return;
+    this.syncCamposEditables(d);
+    this.editando.set(true);
+    this.mensaje.set(null);
+  }
+
+  cancelarEdicion(): void {
+    this.telefonoEdit = this.telefonoOriginal;
+    this.direccionEdit = this.direccionOriginal;
+    this.editando.set(false);
+  }
+
+  hayCambios(): boolean {
+    return (
+      this.telefonoEdit.trim() !== this.telefonoOriginal ||
+      this.direccionEdit.trim() !== this.direccionOriginal
+    );
+  }
+
+  guardar(): void {
+    if (!this.hayCambios()) return;
+    this.mensaje.set(null);
+    this.error.set('');
+
+    this.svc.updateMiPerfil(
+      {
+        telefono: this.telefonoEdit.trim(),
+        direccion: this.direccionEdit.trim(),
+      },
+      this.anioEscolar,
+    ).subscribe({
+      next: (res) => {
+        this._docente.set(res);
+        this.syncCamposEditables(res);
+        this.editando.set(false);
+        this.mensaje.set({ tipo: 'ok', texto: 'Teléfono y dirección actualizados correctamente.' });
+      },
+      error: (err) => {
+        const msg = err?.error?.message;
+        this.mensaje.set({
+          tipo: 'err',
+          texto: Array.isArray(msg) ? msg.join(', ') : msg ?? 'No se pudo guardar los cambios',
+        });
+      },
+    });
+  }
+
+  private syncCamposEditables(d: DocenteDetail): void {
+    this.telefonoOriginal = d.telefono?.trim() ?? '';
+    this.direccionOriginal = d.direccion?.trim() ?? '';
+    this.telefonoEdit = this.telefonoOriginal;
+    this.direccionEdit = this.direccionOriginal;
   }
 
   iniciales(): string {
@@ -236,5 +373,10 @@ export class MisDatosDocenteComponent implements OnInit {
     if (estado === 'activo') return 'badge-green';
     if (estado === 'bloqueado') return 'badge-red';
     return 'badge-gray';
+  }
+
+  valorMostrar(valor?: string | null): string {
+    const v = valor?.trim();
+    return v && v !== '—' ? v : '—';
   }
 }

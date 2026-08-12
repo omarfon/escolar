@@ -39,7 +39,7 @@ import { AuthService } from '../../../auth/services/auth.service';
               }
               <div class="px-4 py-2 border-t border-gray-100 text-center">
                 <a
-                  [routerLink]="auth.isPortalEstudiante() ? '/portal-estudiante/comunicados' : '/comunicaciones/notificaciones'"
+                  [routerLink]="notificacionesRoute()"
                   class="text-xs text-indigo-600 hover:underline"
                   (click)="notifOpen.set(false)">Ver todas</a>
               </div>
@@ -58,7 +58,7 @@ import { AuthService } from '../../../auth/services/auth.service';
               </div>
               <a
                 class="dropdown-item"
-                [routerLink]="auth.isPortalEstudiante() ? '/portal-estudiante/perfil' : '/perfil'"
+                [routerLink]="perfilRoute()"
                 (click)="userOpen.set(false)">
                 <span class="icon icon-sm">person</span> Mi Perfil
               </a>
@@ -86,5 +86,19 @@ export class HeaderComponent {
   initiales(): string {
     const u = this.auth.currentUser();
     return u ? `${u.nombre[0]??''}${u.apellido[0]??''}`.toUpperCase() : '?';
+  }
+
+  perfilRoute(): string {
+    if (this.auth.isPortalEstudiante()) return '/portal-estudiante/perfil';
+    if (this.auth.isPortalDocente()) return '/portal-docente/mis-datos';
+    if (this.auth.isPortalPadre()) return '/portal-padre/ficha';
+    return '/perfil';
+  }
+
+  notificacionesRoute(): string {
+    if (this.auth.isPortalEstudiante()) return '/portal-estudiante/comunicados';
+    if (this.auth.isPortalDocente()) return '/portal-docente/comunicados';
+    if (this.auth.isPortalPadre()) return '/portal-padre/comunicacion';
+    return '/comunicaciones/notificaciones';
   }
 }

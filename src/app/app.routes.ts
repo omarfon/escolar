@@ -1,6 +1,6 @@
 import { Routes } from '@angular/router';
 import { authGuard } from './core/auth/guards/auth.guard';
-import { roleGuard, permisoGuard, staffAreaGuard, dashboardGuard } from './core/auth/guards/role.guard';
+import { roleGuard, permisoGuard, staffAreaGuard, dashboardGuard, portalDocenteGuard, portalEstudianteGuard, portalPadreGuard } from './core/auth/guards/role.guard';
 import { MainLayoutComponent } from './core/layout/components/main-layout/main-layout.component';
 
 export const routes: Routes = [
@@ -30,22 +30,7 @@ export const routes: Routes = [
       {
         path: 'dashboard',
         canActivate: [dashboardGuard],
-        loadComponent: () => {
-          if (typeof window !== 'undefined') {
-            try {
-              const raw = localStorage.getItem('current_user');
-              const user = raw ? JSON.parse(raw) : null;
-              const roles = (user?.roles ?? []).map((r: any) => r?.codigo);
-              if (roles.includes('ESTUDIANTE')) {
-                return import('./features/portal-estudiante/dashboard/dashboard-estudiante.component')
-                  .then(m => m.DashboardEstudianteComponent);
-              }
-            } catch {
-              // fallback to default dashboard
-            }
-          }
-          return import('./features/dashboard/dashboard.component').then(m => m.DashboardComponent);
-        }
+        loadComponent: () => import('./features/dashboard/dashboard.component').then(m => m.DashboardComponent)
       },
 
       // ── Administración ─────────────────────────────────
@@ -308,11 +293,12 @@ export const routes: Routes = [
       // ── Portal Docente ─────────────────────────────────
       {
         path: 'portal-docente',
-        canActivate: [roleGuard('DOCENTE', 'ADMIN')],
+        canActivate: [portalDocenteGuard],
         children: [
+          { path: '', redirectTo: 'inicio', pathMatch: 'full' },
           {
-            path: '',
-            loadComponent: () => import('./features/portal-docente/portal-docente.component').then(m => m.PortalDocenteComponent)
+            path: 'inicio',
+            loadComponent: () => import('./features/portal-docente/dashboard/dashboard-docente.component').then(m => m.DashboardDocenteComponent),
           },
           {
             path: 'mis-datos',
@@ -342,16 +328,21 @@ export const routes: Routes = [
             path: 'temario',
             loadComponent: () => import('./features/portal-docente/temario/temario-docente.component').then(m => m.TemarioDocenteComponent)
           },
+          {
+            path: 'comunicados',
+            loadComponent: () => import('./features/portal-docente/comunicados/comunicados-docente.component').then(m => m.ComunicadosDocenteComponent)
+          },
         ]
       },
 
       // ── Portal Estudiante ──────────────────────────────
       {
         path: 'portal-estudiante',
-        canActivate: [roleGuard('ESTUDIANTE', 'ADMIN')],
+        canActivate: [portalEstudianteGuard],
         children: [
-          { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
-          { path: 'dashboard', loadComponent: () => import('./features/portal-estudiante/dashboard/dashboard-estudiante.component').then(m => m.DashboardEstudianteComponent) },
+          { path: '', redirectTo: 'inicio', pathMatch: 'full' },
+          { path: 'inicio', loadComponent: () => import('./features/portal-estudiante/dashboard/dashboard-estudiante.component').then(m => m.DashboardEstudianteComponent) },
+          { path: 'dashboard', redirectTo: 'inicio', pathMatch: 'full' },
           { path: 'horarios',   loadComponent: () => import('./features/portal-estudiante/horarios/horarios.component').then(m => m.HorariosEstudianteComponent) },
           { path: 'notas',      loadComponent: () => import('./features/portal-estudiante/notas/notas.component').then(m => m.NotasEstudianteComponent) },
           { path: 'asistencia', loadComponent: () => import('./features/portal-estudiante/asistencia/asistencia.component').then(m => m.AsistenciaEstudianteComponent) },
@@ -367,11 +358,12 @@ export const routes: Routes = [
       // ── Portal Padre ───────────────────────────────────
       {
         path: 'portal-padre',
-        canActivate: [roleGuard('PADRE', 'ADMIN')],
+        canActivate: [portalPadreGuard],
         children: [
           { path: '', redirectTo: 'inicio', pathMatch: 'full' },
           { path: 'inicio',       loadComponent: () => import('./features/portal-padre/dashboard/dashboard-padre.component').then(m => m.DashboardPadreComponent) },
           { path: 'seguimiento',  loadComponent: () => import('./features/portal-padre/seguimiento/seguimiento.component').then(m => m.SeguimientoComponent) },
+          { path: 'justificaciones', loadComponent: () => import('./features/portal-padre/justificaciones/justificaciones-padre.component').then(m => m.JustificacionesPadreComponent) },
           { path: 'ficha',        loadComponent: () => import('./features/portal-padre/ficha/ficha-hijo.component').then(m => m.FichaHijoComponent) },
           { path: 'horarios',     loadComponent: () => import('./features/portal-padre/horarios/horarios-padre.component').then(m => m.HorariosPadreComponent) },
           { path: 'tareas',       loadComponent: () => import('./features/portal-padre/tareas/tareas-padre.component').then(m => m.TareasPadreComponent) },
