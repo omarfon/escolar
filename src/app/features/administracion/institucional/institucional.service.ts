@@ -3,6 +3,8 @@ import { HttpClient } from '@angular/common/http';
 import { catchError, tap } from 'rxjs/operators';
 import { Observable, of } from 'rxjs';
 import { environment } from '@environments/environment';
+import { TenantContextService } from '../../../core/tenant/tenant-context.service';
+import { withInstitutionParams } from '../../../core/tenant/tenant-http.util';
 import {
   ConfigSistema,
   Grado,
@@ -18,6 +20,7 @@ import {
 @Injectable({ providedIn: 'root' })
 export class InstitucionalService {
   private readonly http = inject(HttpClient);
+  private readonly tenant = inject(TenantContextService);
   private readonly base = `${environment.apiUrl}/institution`;
 
   readonly loading = signal(false);
@@ -25,7 +28,9 @@ export class InstitucionalService {
 
   load(): Observable<InstitutionConfigResponse | null> {
     this.loading.set(true);
-    return this.http.get<InstitutionConfigResponse>(this.base).pipe(
+    return this.http.get<InstitutionConfigResponse>(this.base, {
+      params: withInstitutionParams(this.tenant),
+    }).pipe(
       tap(() => this.loading.set(false)),
       catchError(() => {
         this.loading.set(false);
@@ -79,7 +84,9 @@ export class InstitucionalService {
         B: Number(inst.escalaLogro.B),
       };
     }
-    return this.http.patch<InstitutionConfigResponse['institution']>(`${this.base}`, body).pipe(
+    return this.http.patch<InstitutionConfigResponse['institution']>(`${this.base}`, body, {
+      params: withInstitutionParams(this.tenant),
+    }).pipe(
       tap(() => this.saving.set(false)),
       catchError(err => {
         this.saving.set(false);
@@ -90,7 +97,9 @@ export class InstitucionalService {
 
   loadEducationLevels(): Observable<Nivel[]> {
     this.loading.set(true);
-    return this.http.get<Nivel[]>(`${this.base}/education-levels`).pipe(
+    return this.http.get<Nivel[]>(`${this.base}/education-levels`, {
+      params: withInstitutionParams(this.tenant),
+    }).pipe(
       tap(() => this.loading.set(false)),
       catchError(() => {
         this.loading.set(false);
@@ -132,7 +141,9 @@ export class InstitucionalService {
   }
 
   createCampus(payload: Omit<Sede, 'id'>) {
-    return this.http.post<Sede>(`${this.base}/campuses`, payload);
+    return this.http.post<Sede>(`${this.base}/campuses`, payload, {
+      params: withInstitutionParams(this.tenant),
+    });
   }
 
   updateCampus(id: number, payload: Partial<Sede>) {

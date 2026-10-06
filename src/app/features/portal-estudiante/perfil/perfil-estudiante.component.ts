@@ -51,9 +51,9 @@ import { ApiExpediente } from '../../../core/api/api.models';
         <h4 class="font-semibold text-gray-800 flex items-center gap-2">
           <span class="icon text-emerald-600">family_restroom</span> Familia / Apoderados
         </h4>
-        <ng-container *ngTemplateOutlet="repBlock; context: { $implicit: e.apoderado, titulo: 'Apoderado' }"></ng-container>
-        <ng-container *ngTemplateOutlet="repBlock; context: { $implicit: e.padre, titulo: 'Padre' }"></ng-container>
-        <ng-container *ngTemplateOutlet="repBlock; context: { $implicit: e.madre, titulo: 'Madre' }"></ng-container>
+        <ng-container *ngTemplateOutlet="repBlock; context: { $implicit: e.apoderado, titulo: 'Apoderado principal', principal: true }"></ng-container>
+        <ng-container *ngTemplateOutlet="repBlock; context: { $implicit: e.padre, titulo: 'Padre', principal: false }"></ng-container>
+        <ng-container *ngTemplateOutlet="repBlock; context: { $implicit: e.madre, titulo: 'Madre', principal: false }"></ng-container>
       </div>
     </div>
 
@@ -111,10 +111,18 @@ import { ApiExpediente } from '../../../core/api/api.models';
   }
 </div>
 
-<ng-template #repBlock let-rep let-titulo="titulo">
+<ng-template #repBlock let-rep let-titulo="titulo" let-principal="principal">
   @if (rep?.nombres) {
-    <div class="p-3 bg-gray-50 rounded-xl text-sm">
-      <p class="text-xs text-gray-400 mb-1">{{ titulo }}</p>
+    <div class="p-3 rounded-xl text-sm"
+      [ngClass]="principal ? 'bg-indigo-50 border-2 border-indigo-200' : 'bg-gray-50'">
+      <div class="flex flex-wrap items-center gap-1.5 mb-1">
+        <p class="text-xs font-semibold" [ngClass]="principal ? 'text-indigo-700' : 'text-gray-400'">{{ titulo }}</p>
+        @if (principal) {
+          <span class="inline-flex items-center gap-0.5 text-[9px] bg-indigo-600 text-white px-1.5 py-0.5 rounded-full font-semibold">
+            <span class="icon" style="font-size:10px">star</span> Principal
+          </span>
+        }
+      </div>
       <p class="font-semibold">{{ rep.nombres }} {{ rep.apellidos }}</p>
       <p class="text-gray-500 text-xs mt-1">DNI {{ rep.dni || '—' }} · {{ rep.telefono || '—' }}</p>
       @if (rep.email) { <p class="text-gray-500 text-xs">{{ rep.email }}</p> }

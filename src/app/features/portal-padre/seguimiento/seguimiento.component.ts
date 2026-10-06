@@ -7,6 +7,7 @@ import { es } from 'date-fns/locale';
 import { LayoutService } from '../../../core/layout/services/layout.service';
 import { AuthService } from '../../../core/auth/services/auth.service';
 import { SeguimientoService } from './seguimiento.service';
+import { HijoSelectorComponent } from '../shared/hijo-selector.component';
 import { JustificacionesPadreService } from '../justificaciones/justificaciones-padre.service';
 import {
   JustificacionItem,
@@ -18,6 +19,14 @@ import {
   cursoStyle,
   estadoAsistenciaBadge,
   estadoAsistenciaLabel,
+  estadoAsistenciaIcon,
+  estadoAsistenciaIconBg,
+  estadoAsistenciaDot,
+  estadoAsistenciaRowBg,
+  asistenciaPctColor,
+  asistenciaPctConic,
+  asistenciaPctMensaje,
+  asistenciaSegmentos,
   alertaAusentismoBadge,
   alertaAusentismoLabel,
   nivelBadge,
@@ -26,11 +35,12 @@ import {
   tareaEstadoBadge,
   tareaEstadoLabel,
   taskFileUrl,
+  HijoResumen,
 } from './seguimiento.model';
 
 @Component({
   standalone: true,
-  imports: [FormsModule, NgClass, DecimalPipe, RouterLink],
+  imports: [FormsModule, NgClass, DecimalPipe, RouterLink, HijoSelectorComponent],
   template: `
     <div class="space-y-5 animate-fade-in">
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -62,23 +72,7 @@ import {
           <p class="text-gray-500 text-sm">Contacta con la institución para vincular a tus hijos a tu cuenta.</p>
         </div>
       } @else {
-        @if (svc.hijos().length > 1) {
-          <div class="card p-4">
-            <label class="form-label mb-2 block">Seleccionar hijo/a</label>
-            <div class="flex flex-wrap gap-2">
-              @for (h of svc.hijos(); track h.studentId) {
-                <button type="button" class="px-4 py-2.5 rounded-xl border text-sm font-medium transition-all"
-                  [ngClass]="hijoSeleccionado() === h.studentId
-                    ? 'border-indigo-400 bg-indigo-50 text-indigo-700'
-                    : 'border-gray-200 bg-white text-gray-600 hover:border-indigo-200'"
-                  (click)="seleccionarHijo(h.studentId)">
-                  {{ h.nombreCompleto }}
-                  <span class="text-xs text-gray-400 ml-1">· {{ h.aulaLabel }}</span>
-                </button>
-              }
-            </div>
-          </div>
-        }
+        <app-hijo-selector [autoLoad]="false" (hijoChange)="onHijoChange($event)" />
 
         @if (svc.loadingTracking()) {
           <div class="card p-12 flex flex-col items-center text-gray-400">
@@ -170,25 +164,60 @@ import {
 
               <div class="space-y-4">
                 <div class="card p-5">
-                  <h4 class="font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                    <span class="icon text-emerald-500">fact_check</span> Asistencia del mes
-                  </h4>
-                  <div class="flex items-center gap-4 mb-4">
-                    <p class="text-4xl font-bold"
-                      [ngClass]="d.asistencia.asistenciaPct >= 90 ? 'text-emerald-600' : d.asistencia.asistenciaPct >= 75 ? 'text-amber-600' : 'text-red-600'">
-                      {{ d.asistencia.asistenciaPct }}%
-                    </p>
-                    <div class="text-sm text-gray-500">
-                      <p>{{ d.asistencia.presentes }} presentes</p>
-                      <p>{{ d.asistencia.faltas }} faltas · {{ d.asistencia.tardanzas }} tardanzas</p>
+                  <div class="flex items-center justify-between mb-4">
+                    <h4 class="font-semibold text-gray-800 flex items-center gap-2">
+                      <span class="icon text-emerald-500">fact_check</span> Asistencia del mes
+                    </h4>
+                    <button type="button" class="text-xs text-indigo-600 hover:underline font-medium"
+                      (click)="vista.set('asistencia')">
+                      Ver detalle
+                    </button>
+                  </div>
+                  <div class="flex items-center gap-5 mb-4">
+                    <div class="relative w-20 h-20 rounded-full shrink-0"
+                      [style.background]="asistenciaPctConic(d.asistencia.asistenciaPct)">
+                      <div class="absolute inset-1.5 rounded-full bg-white flex flex-col items-center justify-center">
+                        <span class="text-lg font-bold leading-none" [ngClass]="asistenciaPctColor(d.asistencia.asistenciaPct)">
+                          {{ d.asistencia.asistenciaPct }}%
+                        </span>
+                      </div>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                      <p class="text-sm font-medium text-gray-800">{{ asistenciaPctMensaje(d.asistencia.asistenciaPct) }}</p>
+                      <div class="h-2 rounded-full overflow-hidden flex bg-gray-100 mt-2">
+                        @for (seg of asistenciaSegmentos(d.asistencia); track seg.key) {
+                          @if (seg.count > 0) {
+                            <div [class]="seg.color" [style.width.%]="seg.pct" [title]="seg.label + ': ' + seg.count"></div>
+                          }
+                        }
+                      </div>
+                      <div class="flex flex-wrap gap-x-3 gap-y-1 mt-2 text-[11px] text-gray-500">
+                        <span class="inline-flex items-center gap-1">
+                          <span class="w-2 h-2 rounded-full bg-emerald-500"></span>{{ d.asistencia.presentes }} presentes
+                        </span>
+                        <span class="inline-flex items-center gap-1">
+                          <span class="w-2 h-2 rounded-full bg-red-500"></span>{{ d.asistencia.faltas }} faltas
+                        </span>
+                        @if (d.asistencia.tardanzas) {
+                          <span class="inline-flex items-center gap-1">
+                            <span class="w-2 h-2 rounded-full bg-amber-400"></span>{{ d.asistencia.tardanzas }} tardanzas
+                          </span>
+                        }
+                      </div>
                     </div>
                   </div>
                   @if (d.asistencia.reciente.length) {
-                    <div class="space-y-2">
+                    <div class="space-y-1.5">
                       @for (a of d.asistencia.reciente.slice(0, 4); track a.id) {
-                        <div class="flex items-center justify-between text-sm py-1.5 border-b border-gray-50 last:border-0">
-                          <span class="text-gray-600">{{ formatFecha(a.fecha) }}</span>
-                          <span class="badge text-xs" [ngClass]="estadoAsistenciaBadge(a.estado)">
+                        <div class="flex items-center gap-2.5 text-sm py-1.5 px-2 rounded-lg hover:bg-gray-50">
+                          <span class="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+                            [ngClass]="estadoAsistenciaIconBg(a.estado)">
+                            <span class="icon icon-sm">{{ estadoAsistenciaIcon(a.estado) }}</span>
+                          </span>
+                          <div class="flex-1 min-w-0">
+                            <p class="text-gray-800 font-medium">{{ formatFechaConDia(a.fecha) }}</p>
+                          </div>
+                          <span class="badge text-[10px] shrink-0" [ngClass]="estadoAsistenciaBadge(a.estado)">
                             {{ estadoAsistenciaLabel(a.estado) }}
                           </span>
                         </div>
@@ -289,18 +318,63 @@ import {
           }
 
           @if (vista() === 'asistencia') {
-            <div class="grid grid-cols-2 lg:grid-cols-6 gap-3">
-              <div class="card p-4 lg:col-span-2">
-                <p class="text-xs text-gray-500">Asistencia</p>
-                <p class="text-3xl font-bold mt-1"
-                  [ngClass]="d.asistencia.asistenciaPct >= 90 ? 'text-emerald-600' : d.asistencia.asistenciaPct >= 75 ? 'text-amber-600' : 'text-red-600'">
-                  {{ d.asistencia.asistenciaPct }}%
-                </p>
+            <div class="card overflow-hidden">
+              <div class="grid grid-cols-1 lg:grid-cols-5">
+                <div class="lg:col-span-2 p-6 bg-gradient-to-br from-emerald-50/80 via-white to-indigo-50/50 flex flex-col items-center justify-center text-center border-b lg:border-b-0 lg:border-r border-gray-100">
+                  <div class="relative w-32 h-32 rounded-full"
+                    [style.background]="asistenciaPctConic(d.asistencia.asistenciaPct)">
+                    <div class="absolute inset-2 rounded-full bg-white flex flex-col items-center justify-center shadow-inner">
+                      <span class="text-3xl font-bold leading-none" [ngClass]="asistenciaPctColor(d.asistencia.asistenciaPct)">
+                        {{ d.asistencia.asistenciaPct }}%
+                      </span>
+                      <span class="text-[10px] uppercase tracking-wide text-gray-400 mt-1">asistencia</span>
+                    </div>
+                  </div>
+                  <p class="text-sm font-semibold text-gray-800 mt-4">{{ asistenciaPctMensaje(d.asistencia.asistenciaPct) }}</p>
+                  <p class="text-xs text-gray-500 mt-1">{{ d.asistencia.totalDias }} días registrados en el mes</p>
+                </div>
+                <div class="lg:col-span-3 p-6">
+                  <h4 class="font-semibold text-gray-800 mb-1">Desglose del mes</h4>
+                  <p class="text-xs text-gray-500 mb-4">Proporción de cada tipo de registro sobre el total de días</p>
+                  <div class="h-3 rounded-full overflow-hidden flex bg-gray-100 shadow-inner">
+                    @for (seg of asistenciaSegmentos(d.asistencia); track seg.key) {
+                      @if (seg.count > 0) {
+                        <div [class]="seg.color + ' transition-all'" [style.width.%]="seg.pct"
+                          [title]="seg.label + ': ' + seg.count"></div>
+                      }
+                    }
+                  </div>
+                  <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5">
+                    @for (seg of asistenciaSegmentos(d.asistencia); track seg.key) {
+                      <div class="rounded-xl border border-gray-100 p-3 bg-gray-50/60">
+                        <div class="flex items-center gap-2 mb-1">
+                          <span class="w-7 h-7 rounded-lg flex items-center justify-center"
+                            [ngClass]="estadoAsistenciaIconBg(seg.key === 'presentes' ? 'P' : seg.key === 'tardanzas' ? 'T' : seg.key === 'faltas' ? 'F' : 'J')">
+                            <span class="icon icon-sm">{{ seg.icon }}</span>
+                          </span>
+                          <span class="text-xs text-gray-500">{{ seg.label }}</span>
+                        </div>
+                        <p class="text-2xl font-bold" [ngClass]="seg.textColor">{{ seg.count }}</p>
+                      </div>
+                    }
+                  </div>
+                </div>
               </div>
-              <div class="card p-4"><p class="text-xs text-gray-500">Días</p><p class="text-2xl font-bold text-gray-800">{{ d.asistencia.totalDias }}</p></div>
-              <div class="card p-4 border-l-4 border-l-emerald-400"><p class="text-xs text-emerald-600">Presentes</p><p class="text-2xl font-bold text-emerald-600">{{ d.asistencia.presentes }}</p></div>
-              <div class="card p-4 border-l-4 border-l-red-400"><p class="text-xs text-red-600">Faltas</p><p class="text-2xl font-bold text-red-600">{{ d.asistencia.faltas }}</p></div>
-              <div class="card p-4 border-l-4 border-l-blue-400"><p class="text-xs text-blue-600">Justificadas</p><p class="text-2xl font-bold text-blue-600">{{ d.asistencia.justificadas }}</p></div>
+            </div>
+
+            <div class="flex flex-wrap gap-2 text-xs">
+              <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-100">
+                <span class="icon icon-sm">check_circle</span> Presente
+              </span>
+              <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-100">
+                <span class="icon icon-sm">schedule</span> Tardanza
+              </span>
+              <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-50 text-red-800 border border-red-100">
+                <span class="icon icon-sm">cancel</span> Falta
+              </span>
+              <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-50 text-blue-800 border border-blue-100">
+                <span class="icon icon-sm">verified</span> Justificada
+              </span>
             </div>
 
             @if (d.alertasAusentismo?.length) {
@@ -421,20 +495,43 @@ import {
             }
 
             <div class="card overflow-hidden">
-              <div class="px-4 py-3 border-b border-gray-100 font-semibold text-gray-800">Registro reciente</div>
+              <div class="px-5 py-4 border-b border-gray-100 flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h4 class="font-semibold text-gray-800">Historial reciente</h4>
+                  <p class="text-xs text-gray-500 mt-0.5">Cada día con su estado y acción disponible</p>
+                </div>
+                @if (d.asistencia.reciente.length) {
+                  <div class="flex flex-wrap gap-1">
+                    @for (a of d.asistencia.reciente.slice(0, 10); track a.id) {
+                      <span class="w-3 h-3 rounded-sm shrink-0" [ngClass]="estadoAsistenciaDot(a.estado)"
+                        [title]="formatFecha(a.fecha) + ' — ' + estadoAsistenciaLabel(a.estado)"></span>
+                    }
+                  </div>
+                }
+              </div>
               @if (!d.asistencia.reciente.length) {
-                <p class="text-sm text-gray-400 text-center py-8">Sin registros de asistencia</p>
+                <div class="py-12 text-center">
+                  <span class="icon text-4xl text-gray-300 mb-2">event_available</span>
+                  <p class="text-sm text-gray-400">Sin registros de asistencia</p>
+                </div>
               } @else {
-                <div class="divide-y divide-gray-50">
+                <div class="p-4 space-y-2">
                   @for (a of d.asistencia.reciente; track a.id) {
-                    <div class="px-4 py-3 flex flex-wrap items-center justify-between gap-2">
-                      <div>
-                        <p class="text-sm font-medium text-gray-800">{{ formatFecha(a.fecha) }}</p>
+                    <div class="flex flex-wrap items-center gap-3 p-3 rounded-xl border transition-colors"
+                      [ngClass]="estadoAsistenciaRowBg(a.estado)">
+                      <span class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+                        [ngClass]="estadoAsistenciaIconBg(a.estado)">
+                        <span class="icon">{{ estadoAsistenciaIcon(a.estado) }}</span>
+                      </span>
+                      <div class="flex-1 min-w-[140px]">
+                        <p class="text-sm font-semibold text-gray-900">{{ formatFechaConDia(a.fecha) }}</p>
                         @if (a.observacion) {
                           <p class="text-xs text-gray-500 mt-0.5">{{ a.observacion }}</p>
+                        } @else {
+                          <p class="text-xs text-gray-400 mt-0.5">{{ estadoAsistenciaLabel(a.estado) }}</p>
                         }
                       </div>
-                      <div class="flex items-center gap-2">
+                      <div class="flex items-center gap-2 ml-auto">
                         <span class="badge text-xs" [ngClass]="estadoAsistenciaBadge(a.estado)">
                           {{ estadoAsistenciaLabel(a.estado) }}
                         </span>
@@ -442,7 +539,7 @@ import {
                           <a routerLink="/portal-padre/justificaciones"
                             [queryParams]="{ faltaId: a.id }"
                             class="btn btn-secondary btn-sm">
-                            Justificar
+                            <span class="icon icon-sm">upload_file</span> Justificar
                           </a>
                         }
                       </div>
@@ -556,6 +653,14 @@ export class SeguimientoComponent implements OnInit {
   parentescoLabel = parentescoLabel;
   estadoAsistenciaLabel = estadoAsistenciaLabel;
   estadoAsistenciaBadge = estadoAsistenciaBadge;
+  estadoAsistenciaIcon = estadoAsistenciaIcon;
+  estadoAsistenciaIconBg = estadoAsistenciaIconBg;
+  estadoAsistenciaDot = estadoAsistenciaDot;
+  estadoAsistenciaRowBg = estadoAsistenciaRowBg;
+  asistenciaPctColor = asistenciaPctColor;
+  asistenciaPctConic = asistenciaPctConic;
+  asistenciaPctMensaje = asistenciaPctMensaje;
+  asistenciaSegmentos = asistenciaSegmentos;
   alertaAusentismoLabel = alertaAusentismoLabel;
   alertaAusentismoBadge = alertaAusentismoBadge;
   tareaEstadoLabel = tareaEstadoLabel;
@@ -575,17 +680,21 @@ export class SeguimientoComponent implements OnInit {
 
   cargar(): void {
     this.svc.loadHijos().subscribe({
-      next: hijos => {
-        this.svc.hijos.set(hijos);
-        const current = this.hijoSeleccionado();
-        const target = hijos.find(h => h.studentId === current)?.studentId ?? hijos[0]?.studentId ?? null;
-        if (target) this.seleccionarHijo(target);
+      next: () => {
+        const hijo = this.svc.hijoSeleccionado();
+        if (hijo) this.onHijoChange(hijo);
       },
     });
   }
 
+  onHijoChange(hijo: HijoResumen): void {
+    this.seleccionarHijo(hijo.studentId);
+  }
+
   seleccionarHijo(studentId: number): void {
     this.hijoSeleccionado.set(studentId);
+    const hijo = this.svc.hijos().find((h) => h.studentId === studentId);
+    if (hijo) this.svc.seleccionarHijo(hijo);
     this.svc.loadSeguimiento(studentId).subscribe({
       next: data => {
         this.svc.seguimiento.set(data);
@@ -625,5 +734,12 @@ export class SeguimientoComponent implements OnInit {
 
   formatFecha(fecha: string): string {
     return format(parseISO(fecha.slice(0, 10)), 'dd/MM/yyyy', { locale: es });
+  }
+
+  formatFechaConDia(fecha: string): string {
+    const d = parseISO(fecha.slice(0, 10));
+    const dia = format(d, 'EEEE', { locale: es });
+    const diaCap = dia.charAt(0).toUpperCase() + dia.slice(1);
+    return `${diaCap}, ${format(d, 'dd/MM/yyyy', { locale: es })}`;
   }
 }

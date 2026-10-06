@@ -164,27 +164,21 @@ type PanelModo = 'ver' | 'editar';
 
     } @else {
 
-      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
 
         @for (s of salones(); track salonKey(s)) {
 
           <button type="button"
 
-            class="card p-5 text-left hover:shadow-md border-l-4 border-l-teal-500 transition-all"
+            class="card px-3 py-3 text-left hover:shadow-md border-l-4 border-l-teal-500 transition-all"
 
             (click)="seleccionarSalon(s)">
 
-            <div class="text-xs font-semibold uppercase tracking-wide text-teal-600">{{ s.nivel }}</div>
+            <div class="text-[10px] font-semibold uppercase tracking-wide text-teal-600">{{ s.nivel }}</div>
 
-            <h3 class="font-bold text-gray-800 text-lg mt-0.5">{{ s.grado }} "{{ s.seccion }}"</h3>
+            <h3 class="font-bold text-gray-800 text-base leading-snug mt-0.5">{{ s.grado }} "{{ s.seccion }}"</h3>
 
-            <p class="text-sm text-gray-500 mt-1">{{ s.totalAlumnos }} alumno(s) · {{ s.cursos.length }} curso(s)</p>
-
-            <div class="mt-4 text-sm font-medium text-teal-600 flex items-center gap-1">
-
-              Gestionar temario <span class="icon text-base">arrow_forward</span>
-
-            </div>
+            <p class="text-xs text-gray-500 mt-0.5">{{ s.totalAlumnos }} alumno(s) · {{ s.cursos.length }} curso(s)</p>
 
           </button>
 

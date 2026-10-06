@@ -3,7 +3,16 @@ import { FormsModule } from '@angular/forms';
 import { NgClass } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
 import { LayoutService } from '../../../core/layout/services/layout.service';
+import { OverlayPortalDirective } from '../../../core/overlay/overlay-portal.directive';
+import {
+  etiquetaGradoConNivel,
+  normalizeGradoMatriculaKey,
+} from '../../../core/academico/grado-display.util';
 import { CurriculaService } from './curricula.service';
+import { pickCurriculaVigente } from './curricula-vigente.util';
+import { AsignacionService } from '../asignacion/asignacion.service';
+import { MaestrosPeriodosAcademicosService } from '../../matricula/maestros/periodos-academicos/periodos-academicos.service';
+import { AsignacionDocente, DocenteAsignacion } from '../asignacion/asignacion.model';
 import { MaestrosCursosService } from '../../matricula/maestros/cursos/cursos.service';
 import { MaestroCursoItem } from '../../matricula/maestros/cursos/cursos.model';
 import {
@@ -26,16 +35,44 @@ import {
 
 type CfgTab = 'escalas' | 'periodos' | 'docentes';
 
+interface MallaCeldaAsignacion {
+  asignado: boolean;
+  docente: string | null;
+  docenteCompleto: string | null;
+  secciones: string;
+}
+
 // ── Constants ──────────────────────────────────────────────────────────────
 const G_INI = ['3 años', '4 años', '5 años'];
 const G_PRI = ['1°', '2°', '3°', '4°', '5°', '6°'];
 const G_SEC = ['1°', '2°', '3°', '4°', '5°'];
+const SECCIONES_FALLBACK = ['A', 'B', 'C', 'D'];
+
+function gradoAsignacionKey(value: string): string {
+  const t = value.trim().toLowerCase();
+  if (t.includes('año') || t.includes('anos')) {
+    return t.replace(/\s+/g, ' ');
+  }
+  let g = t
+    .replace(/[°º]/g, '')
+    .replace(/\s*(grado|año|ano|anos)\b/g, '')
+    .trim();
+  const withNivel = g.match(/^(.+?)\s+(inicial|primaria|secundaria)$/i);
+  if (withNivel) g = withNivel[1].trim();
+  const num = g.match(/^(\d+)/);
+  return num ? num[1] : g;
+}
+
+function gradosIncluyen(grado: string, grados: string[]): boolean {
+  const key = normalizeGradoMatriculaKey(grado);
+  return grados.some((g) => normalizeGradoMatriculaKey(g) === key);
+}
 
 // ── Component ──────────────────────────────────────────────────────────────
 @Component({
   selector: 'app-curricula',
   standalone: true,
-  imports: [FormsModule, NgClass, RouterLink],
+  imports: [FormsModule, NgClass, RouterLink, OverlayPortalDirective],
   template: `
 <div class="min-h-screen bg-gray-50 animate-fade-in">
 
@@ -669,13 +706,22 @@ const G_SEC = ['1°', '2°', '3°', '4°', '5°'];
                 </button>
               }
             </div>
-            <button class="btn btn-secondary text-sm gap-1.5" (click)="exportarMalla()"
-              [disabled]="!curriculaSelId() || cursosParaMalla().length === 0">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
-              </svg>
-              Exportar malla
-            </button>
+            <div class="flex flex-wrap gap-2">
+              <a routerLink="/academico/asignacion" [queryParams]="{ tab: 'asignaciones' }"
+                class="btn btn-primary text-sm gap-1.5">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                </svg>
+                Gestionar asignaciones
+              </a>
+              <button class="btn btn-secondary text-sm gap-1.5" (click)="exportarMalla()"
+                [disabled]="!curriculaSelId() || cursosParaMalla().length === 0">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                </svg>
+                Exportar malla
+              </button>
+            </div>
           </div>
 
           <div class="card p-4 flex flex-wrap items-end gap-4">
@@ -704,7 +750,8 @@ const G_SEC = ['1°', '2°', '3°', '4°', '5°'];
             Malla para <strong>{{ nivelMalla() }}</strong>
             @if (curriculaSel(); as curr) { · A.E. <strong>{{ curr.anio }}</strong> }
             · {{ areasParaMalla().length }} áreas · {{ cursosParaMalla().length }} cursos ·
-            Docentes: {{ docentes_asignados_malla() }} asignados
+            Docentes: {{ docentes_asignados_malla() }} asignados.
+            <strong class="font-medium">Haz clic en una celda con horas</strong> para asignar o editar docente.
           </span>
         </div>
 
@@ -728,8 +775,8 @@ const G_SEC = ['1°', '2°', '3°', '4°', '5°'];
                 <th class="text-left px-4 py-3 font-semibold text-gray-600 border-b border-r border-gray-200 w-36">Área</th>
                 <th class="text-left px-4 py-3 font-semibold text-gray-600 border-b border-r border-gray-200 w-48">Curso</th>
                 @for (grado of gradosMalla(); track grado) {
-                  <th class="text-center px-3 py-3 font-semibold text-gray-700 border-b border-r border-gray-200 min-w-[90px]">
-                    {{ grado }}
+                  <th class="text-center px-3 py-3 font-semibold text-gray-700 border-b border-r border-gray-200 min-w-[110px]">
+                    {{ etiquetaGrado(nivelMalla(), grado) }}
                   </th>
                 }
               </tr>
@@ -752,18 +799,24 @@ const G_SEC = ['1°', '2°', '3°', '4°', '5°'];
                     <td class="px-4 py-2 text-gray-800 border-r border-b border-gray-100">{{ firstCurso.nombre }}</td>
                     @for (grado of gradosMalla(); track grado) {
                       @let hrs = hrsEnGrado(firstCurso.id, grado);
-                      @let doc = docenteEnGrado(firstCurso.id, grado);
+                      @let cel = mallaCeldaAsignacion(firstCurso.id, grado);
                       <td class="px-2 py-2 text-center border-r border-b border-gray-100"
-                        [ngClass]="hrs ? 'bg-white' : 'bg-gray-50'">
+                        [ngClass]="hrs ? (cel.asignado ? 'bg-emerald-50/60' : 'bg-white') : 'bg-gray-50'">
                         @if (hrs) {
-                          <div>
+                          <button type="button"
+                            class="w-full rounded-md px-1 py-1 transition-colors hover:bg-indigo-50 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                            (click)="abrirAsignacionMalla(firstCurso.id, grado, $event)"
+                            [title]="cel.asignado ? (cel.docenteCompleto + (cel.secciones ? ' · Sec. ' + cel.secciones : '')) : 'Asignar docente'">
                             <div class="font-bold text-indigo-700">{{ hrs }}h</div>
-                            @if (doc) {
-                              <div class="text-xs text-gray-400 truncate max-w-[80px] mx-auto">{{ doc }}</div>
+                            @if (cel.asignado) {
+                              <div class="text-xs font-semibold text-emerald-800 truncate max-w-[88px] mx-auto">{{ cel.docente }}</div>
+                              @if (cel.secciones) {
+                                <div class="text-[10px] text-emerald-600">Sec. {{ cel.secciones }}</div>
+                              }
                             } @else {
-                              <div class="text-xs text-red-400">Sin docente</div>
+                              <div class="text-xs text-red-500 font-medium">+ Asignar docente</div>
                             }
-                          </div>
+                          </button>
                         } @else {
                           <span class="text-gray-300">—</span>
                         }
@@ -777,18 +830,24 @@ const G_SEC = ['1°', '2°', '3°', '4°', '5°'];
                         <td class="px-4 py-2 text-gray-800 border-r border-b border-gray-100">{{ curso.nombre }}</td>
                         @for (grado of gradosMalla(); track grado) {
                           @let hrs2 = hrsEnGrado(curso.id, grado);
-                          @let doc2 = docenteEnGrado(curso.id, grado);
+                          @let cel2 = mallaCeldaAsignacion(curso.id, grado);
                           <td class="px-2 py-2 text-center border-r border-b border-gray-100"
-                            [ngClass]="hrs2 ? 'bg-white' : 'bg-gray-50'">
+                            [ngClass]="hrs2 ? (cel2.asignado ? 'bg-emerald-50/60' : 'bg-white') : 'bg-gray-50'">
                             @if (hrs2) {
-                              <div>
+                              <button type="button"
+                                class="w-full rounded-md px-1 py-1 transition-colors hover:bg-indigo-50 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                                (click)="abrirAsignacionMalla(curso.id, grado, $event)"
+                                [title]="cel2.asignado ? (cel2.docenteCompleto + (cel2.secciones ? ' · Sec. ' + cel2.secciones : '')) : 'Asignar docente'">
                                 <div class="font-bold text-indigo-700">{{ hrs2 }}h</div>
-                                @if (doc2) {
-                                  <div class="text-xs text-gray-400 truncate max-w-[80px] mx-auto">{{ doc2 }}</div>
+                                @if (cel2.asignado) {
+                                  <div class="text-xs font-semibold text-emerald-800 truncate max-w-[88px] mx-auto">{{ cel2.docente }}</div>
+                                  @if (cel2.secciones) {
+                                    <div class="text-[10px] text-emerald-600">Sec. {{ cel2.secciones }}</div>
+                                  }
                                 } @else {
-                                  <div class="text-xs text-red-400">Sin docente</div>
+                                  <div class="text-xs text-red-500 font-medium">+ Asignar docente</div>
                                 }
-                              </div>
+                              </button>
                             } @else {
                               <span class="text-gray-300">—</span>
                             }
@@ -827,8 +886,12 @@ const G_SEC = ['1°', '2°', '3°', '4°', '5°'];
             <span>= Curso no aplica para ese grado</span>
           </div>
           <div class="flex items-center gap-1.5">
-            <span class="text-red-400 font-medium">Sin docente</span>
-            <span>= Requiere asignación de docente</span>
+            <span class="text-emerald-700 font-semibold text-xs">Docente · Sec.</span>
+            <span>= Curso ya asignado a docente</span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <span class="text-red-500 font-medium">+ Asignar docente</span>
+            <span>= Haz clic en la celda para asignar</span>
           </div>
         </div>
         }
@@ -1043,12 +1106,19 @@ const G_SEC = ['1°', '2°', '3°', '4°', '5°'];
         <!-- ── Asignación Docente (redirige a módulo dedicado) ── -->
         @if (cfgTab() === 'docentes') {
           <div class="card p-8 text-center space-y-4">
-            <p class="text-sm text-gray-600">
-              La asignación docente se gestiona en el módulo dedicado con listado paginado y panel lateral de detalle.
+            <p class="text-sm text-gray-600 max-w-xl mx-auto">
+              Puedes asignar docentes directamente desde la pestaña
+              <strong>Malla Curricular</strong> (clic en cualquier celda con horas)
+              o usar el módulo completo con listado, cobertura por sección e impresión.
             </p>
-            <a routerLink="/academico/asignacion" [queryParams]="{ tab: 'docentes' }" class="btn btn-primary inline-flex">
-              Ir a Asignación Docente
-            </a>
+            <div class="flex flex-wrap justify-center gap-3">
+              <button type="button" class="btn btn-secondary" (click)="tab.set('malla'); cambiarTab('malla')">
+                Ir a Malla Curricular
+              </button>
+              <a routerLink="/academico/asignacion" [queryParams]="{ tab: 'asignaciones' }" class="btn btn-primary inline-flex">
+                Ir a Asignación Docente
+              </a>
+            </div>
           </div>
         }
       </div>
@@ -1154,7 +1224,7 @@ const G_SEC = ['1°', '2°', '3°', '4°', '5°'];
                     ? 'bg-indigo-600 text-white border-indigo-600'
                     : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-300'"
                   (click)="toggleGradoCurso(g)">
-                  {{ g }}
+                  {{ etiquetaGrado(nivelArea(), g) }}
                 </button>
               }
             </div>
@@ -1258,9 +1328,97 @@ const G_SEC = ['1°', '2°', '3°', '4°', '5°'];
     </div>
   }
 
+  <!-- ── MODAL: Asignación docente (desde malla) ───────────────────── -->
+  @if (mallaAsigModalOpen()) {
+    @let cursoAsig = mallaAsigCurso();
+    <div appOverlayPortal class="fixed inset-0 z-[200]">
+      <div class="absolute inset-0 bg-black/50" (click)="cerrarAsignacionMalla()"></div>
+      <div class="absolute inset-0 flex items-center justify-center p-4 pointer-events-none">
+      <div class="bg-white rounded-2xl w-full max-w-lg animate-scale-in pointer-events-auto shadow-2xl" (click)="$event.stopPropagation()">
+        <div class="flex items-center justify-between p-5 border-b border-gray-200">
+          <div>
+            <h2 class="text-lg font-bold text-gray-900">
+              {{ mallaAsigEditId() ? 'Editar asignación' : 'Asignar docente' }}
+            </h2>
+            @if (cursoAsig) {
+              <p class="text-sm text-gray-500 mt-0.5">
+                {{ cursoAsig.nombre }} · {{ etiquetaGrado(nivelMalla(), mallaAsigGrado()) }} · {{ cursoAsig.horasSemanales }}h/sem
+              </p>
+            }
+          </div>
+          <button type="button" class="btn btn-ghost btn-icon" (click)="cerrarAsignacionMalla()">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+
+        @if (mallaAsigCtxError()) {
+          <div class="p-8 text-center space-y-3">
+            <p class="text-sm text-red-600">{{ mallaAsigCtxError() }}</p>
+            <button type="button" class="btn btn-secondary text-sm" (click)="recargarCtxAsignacionMalla()">Reintentar</button>
+          </div>
+        } @else if (asignacionSvc.loading()) {
+          <div class="p-8 text-center text-sm text-gray-500 animate-pulse">Cargando docentes…</div>
+        } @else {
+          <div class="p-5 space-y-4">
+            <div>
+              <label class="form-label">Docente <span class="text-red-500">*</span></label>
+              <select class="form-input w-full" [ngModel]="mallaAsigDocId()" (ngModelChange)="mallaAsigDocId.set($event ? +$event : null)">
+                <option [ngValue]="null">— Seleccionar docente —</option>
+                @for (d of _docentesAsig(); track d.id) {
+                  <option [ngValue]="d.id">{{ d.apellidos }}, {{ d.nombres }} — {{ d.especialidad }}</option>
+                }
+              </select>
+            </div>
+
+            <div>
+              <label class="form-label">Secciones <span class="text-red-500">*</span></label>
+              <div class="flex flex-wrap gap-2 mt-1">
+                @for (s of seccionesMallaModal(); track s) {
+                  <button type="button" class="w-10 h-10 rounded-lg font-bold text-sm border-2 transition-all"
+                    [ngClass]="seccionMallaActiva(s)
+                      ? 'bg-indigo-600 text-white border-indigo-600'
+                      : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-400'"
+                    (click)="toggleSeccionMalla(s, $event)">{{ s }}</button>
+                }
+              </div>
+              @if (mallaAsigSecciones().length === 0) {
+                <p class="text-xs text-red-500 mt-1">Selecciona al menos una sección</p>
+              } @else {
+                <p class="text-xs text-gray-500 mt-1">Seleccionadas: {{ mallaAsigSecciones().join(', ') }}</p>
+              }
+            </div>
+
+            @if (mallaAsigFormError()) {
+              <div class="p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+                {{ mallaAsigFormError() }}
+              </div>
+            }
+
+            <p class="text-xs text-gray-500">
+              También puedes gestionar todas las asignaciones en
+              <a routerLink="/academico/asignacion" class="text-indigo-600 underline" (click)="cerrarAsignacionMalla()">Asignación Docente</a>.
+            </p>
+          </div>
+
+          <div class="flex gap-2 p-5 pt-0">
+            <button type="button" class="btn btn-secondary flex-1" (click)="cerrarAsignacionMalla()">Cancelar</button>
+            <button type="button" class="btn btn-primary flex-1"
+              [disabled]="asignacionSvc.saving() || !mallaAsigDocId() || mallaAsigSecciones().length === 0"
+              (click)="guardarAsignacionMalla($event)">
+              {{ asignacionSvc.saving() ? 'Guardando…' : (mallaAsigEditId() ? 'Guardar cambios' : 'Asignar docente') }}
+            </button>
+          </div>
+        }
+      </div>
+      </div>
+    </div>
+  }
+
   <!-- ── TOAST ──────────────────────────────────────────────────────── -->
   @if (toast().show) {
-    <div class="fixed bottom-6 right-6 z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-xl animate-slide-in-r text-sm font-medium"
+    <div class="fixed bottom-6 right-6 z-[300] flex items-center gap-3 px-4 py-3 rounded-xl shadow-xl animate-slide-in-r text-sm font-medium"
       [ngClass]="toast().type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'">
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -1278,7 +1436,11 @@ export class CurriculaComponent implements OnInit {
   private readonly layout = inject(LayoutService);
   private readonly router = inject(Router);
   readonly curriculaSvc = inject(CurriculaService);
+  readonly asignacionSvc = inject(AsignacionService);
+  readonly etiquetaGrado = etiquetaGradoConNivel;
   private readonly maestrosCursosSvc = inject(MaestrosCursosService);
+  private readonly periodosSvc = inject(MaestrosPeriodosAcademicosService);
+  private anioEscolarVigente: number | null = null;
 
   // ── Constants ───────────────────────────────────────────────────────
   readonly NIVELES: NivelCurricula[] = ['Inicial', 'Primaria', 'Secundaria'];
@@ -1371,6 +1533,17 @@ export class CurriculaComponent implements OnInit {
 
   // Malla
   nivelMalla = signal<NivelCurricula>('Primaria');
+  mallaAsigModalOpen = signal(false);
+  mallaAsigEditId = signal<number | null>(null);
+  mallaAsigCursoId = signal<number | null>(null);
+  mallaAsigGrado = signal('');
+  mallaAsigDocId = signal<number | null>(null);
+  mallaAsigSecciones = signal<string[]>([]);
+  _docentesAsig = signal<DocenteAsignacion[]>([]);
+  _seccionesPorGrado = signal<Record<string, string[]>>({});
+  _asignacionCtxLoaded = signal(false);
+  mallaAsigCtxError = signal<string | null>(null);
+  mallaAsigFormError = signal<string | null>(null);
 
   // Toast
   toast = signal<{ show: boolean; msg: string; type: 'success' | 'error' }>({ show: false, msg: '', type: 'success' });
@@ -1462,6 +1635,17 @@ export class CurriculaComponent implements OnInit {
   });
   areasParaMalla  = computed(() => this.areasActuales());
   cursosParaMalla = computed(() => this.cursosActuales());
+  mallaAsigCurso = computed(() => {
+    const id = this.mallaAsigCursoId();
+    return id ? this._cursos().find(c => c.id === id) ?? null : null;
+  });
+  seccionesMallaModal = computed(() => {
+    const gradoNorm = normalizeGradoMatriculaKey(this.mallaAsigGrado());
+    const key = `${this.nivelMalla()}|${gradoNorm}`;
+    const fromSalones = this._seccionesPorGrado()[key];
+    const list = fromSalones?.length ? fromSalones : SECCIONES_FALLBACK;
+    return [...new Set(list.map(s => s.trim().toUpperCase()))].sort();
+  });
   docentes_asignados_malla = computed(() => {
     const fromApi = this._mallaDocentes();
     if (fromApi != null) return fromApi;
@@ -1489,19 +1673,22 @@ export class CurriculaComponent implements OnInit {
   // ── Methods ───────────────────────────────────────────────────────────
   ngOnInit(): void {
     this.layout.setTitle('Gestión Curricular');
-    this.cargarCatalogoInicial();
+    this.periodosSvc.resolveContext().subscribe({
+      next: (ctx) => {
+        this.anioEscolarVigente = ctx.anioEscolar;
+        this.cargarCatalogoInicial();
+      },
+      error: () => this.cargarCatalogoInicial(),
+    });
   }
 
   onCfgTabClick(id: CfgTab): void {
-    if (id === 'docentes') {
-      void this.router.navigate(['/academico/asignacion'], { queryParams: { tab: 'docentes' } });
-      return;
-    }
     this.cfgTab.set(id);
   }
 
   private cargarCatalogoInicial(): void {
-    this.curriculaSvc.loadCatalog().subscribe({
+    const anio = this.anioEscolarVigente ?? undefined;
+    this.curriculaSvc.loadCatalog(undefined, 'Primaria', anio).subscribe({
       next: (data) => {
         this._curriculas.set(data.curriculas as Curricula[]);
         this.seleccionarCurriculaPorNivel('Primaria');
@@ -1518,10 +1705,24 @@ export class CurriculaComponent implements OnInit {
     this.nivelArea.set(nivel);
     this.nivelComp.set(nivel);
     this.nivelMalla.set(nivel);
-    const curr =
-      this._curriculas().find(c => c.nivel === nivel && c.estado === 'activo') ??
-      this._curriculas().find(c => c.nivel === nivel);
-    if (curr) this.seleccionarCurricula(curr.id);
+    const curr = pickCurriculaVigente(
+      this._curriculas(),
+      nivel,
+      this.anioEscolarVigente,
+    );
+    if (curr) {
+      this.seleccionarCurricula(curr.id);
+      return;
+    }
+    this.curriculaSvc.resolveVigente(nivel, this.anioEscolarVigente ?? undefined).subscribe({
+      next: (vigente) => {
+        if (!this._curriculas().some((c) => c.id === vigente.id)) {
+          this._curriculas.update((list) => [...list, vigente as Curricula]);
+        }
+        this.seleccionarCurricula(vigente.id);
+      },
+      error: () => this.showToast(`No hay malla activa para ${nivel}`, 'error'),
+    });
   }
 
   seleccionarCurricula(id: number): void {
@@ -1533,10 +1734,10 @@ export class CurriculaComponent implements OnInit {
       this.nivelMalla.set(curr.nivel);
     }
     if (this.tab() === 'malla') {
-      this.cargarMalla(id);
+      this.cargarMallaVigente();
       return;
     }
-    this.curriculaSvc.loadCatalog(id).subscribe({
+    this.curriculaSvc.loadCatalog(id, curr?.nivel, this.anioEscolarVigente ?? undefined).subscribe({
       next: (data) => this.aplicarCatalogo(data),
       error: () => this.showToast('No se pudo cargar la currícula', 'error'),
     });
@@ -1545,18 +1746,21 @@ export class CurriculaComponent implements OnInit {
   cambiarTab(next: MainTab): void {
     this.tab.set(next);
     if (next === 'malla') {
-      const id = this.curriculaSelId();
-      if (id) {
-        this.cargarMalla(id);
-      } else {
-        this.seleccionarCurriculaPorNivel(this.nivelMalla());
-      }
+      this.cargarMallaVigente();
     }
   }
 
   onNivelMallaChange(nivel: NivelCurricula): void {
     this.nivelMalla.set(nivel);
     this.seleccionarCurriculaPorNivel(nivel);
+  }
+
+  private cargarMallaVigente(): void {
+    const nivel = this.nivelMalla();
+    this.curriculaSvc.loadMallaVigente(nivel, this.anioEscolarVigente ?? undefined).subscribe({
+      next: (data) => this.aplicarMalla(data),
+      error: () => this.showToast('No se pudo cargar la malla curricular activa', 'error'),
+    });
   }
 
   private cargarMalla(id: number): void {
@@ -1894,23 +2098,222 @@ export class CurriculaComponent implements OnInit {
   // Malla
   hrsEnGrado(cursoId: number, grado: string): number | null {
     const c = this._cursos().find(x => x.id === cursoId);
-    if (!c || !c.grados.includes(grado)) return null;
+    if (!c || !gradosIncluyen(grado, c.grados)) return null;
     return c.horasSemanales;
   }
-  docenteEnGrado(cursoId: number, grado: string): string | null {
-    const id = this.curriculaSelId();
-    const a = this._asignaciones().find(
-      x => x.cursoId === cursoId && x.grado === grado && (!id || this._cursos().some(c => c.id === x.cursoId && c.curriculumId === id)),
+  mallaCeldaAsignacion(cursoId: number, grado: string): MallaCeldaAsignacion {
+    const vacio: MallaCeldaAsignacion = {
+      asignado: false,
+      docente: null,
+      docenteCompleto: null,
+      secciones: '',
+    };
+    const asigs = this.findAsignacionesEnGrado(cursoId, grado).filter(
+      a => a.docenteId != null || (a.docenteNombre?.trim() ?? '').length > 0,
     );
-    if (!a) return null;
-    return a.docenteNombre.split(' ').slice(0, 2).join(' ');
+    if (!asigs.length) return vacio;
+
+    const secciones = [
+      ...new Set(asigs.flatMap(a => (a.secciones ?? []).map(s => s.trim().toUpperCase()))),
+    ]
+      .filter(Boolean)
+      .sort();
+    const docenteCompleto = asigs[0].docenteNombre?.trim() || null;
+    const docente = docenteCompleto
+      ? docenteCompleto.split(/\s+/).slice(0, 2).join(' ')
+      : null;
+
+    return {
+      asignado: !!docenteCompleto,
+      docente,
+      docenteCompleto,
+      secciones: secciones.join(', '),
+    };
+  }
+  docenteEnGrado(cursoId: number, grado: string): string | null {
+    return this.mallaCeldaAsignacion(cursoId, grado).docente;
+  }
+  findAsignacionEnGrado(cursoId: number, grado: string): AsignDocente | undefined {
+    return this.findAsignacionesEnGrado(cursoId, grado)[0];
+  }
+  findAsignacionesEnGrado(cursoId: number, grado: string): AsignDocente[] {
+    const id = this.curriculaSelId();
+    const nivel = this.nivelMalla();
+    return this._asignaciones().filter(
+      x => x.cursoId === cursoId
+        && x.activo !== false
+        && x.nivel.trim() === nivel
+        && gradosIncluyen(grado, [x.grado])
+        && (
+          !id
+          || x.curriculumId === id
+          || this._cursos().some(c => c.id === x.cursoId && c.curriculumId === id)
+        ),
+    );
+  }
+  seccionMallaActiva(seccion: string): boolean {
+    const sec = seccion.trim().toUpperCase();
+    return this.mallaAsigSecciones().some(s => s.trim().toUpperCase() === sec);
+  }
+  abrirAsignacionMalla(cursoId: number, grado: string, event?: Event): void {
+    event?.stopPropagation();
+    event?.preventDefault();
+
+    this.mallaAsigCursoId.set(cursoId);
+    this.mallaAsigGrado.set(grado);
+    this.mallaAsigEditId.set(null);
+    this.mallaAsigDocId.set(null);
+    this.mallaAsigSecciones.set([]);
+    this.mallaAsigCtxError.set(null);
+    this.mallaAsigFormError.set(null);
+    this.mallaAsigModalOpen.set(true);
+
+    const existing = this.findAsignacionesEnGrado(cursoId, grado);
+    if (existing.length === 1) {
+      const a = existing[0];
+      this.mallaAsigEditId.set(a.id);
+      this.mallaAsigDocId.set(a.docenteId);
+      this.mallaAsigSecciones.set(this.normalizarSeccionesMalla(a.secciones));
+    } else if (existing.length > 1) {
+      const docenteIds = new Set(existing.map(a => a.docenteId).filter((id): id is number => id != null));
+      if (docenteIds.size === 1) {
+        const principal = existing[0];
+        this.mallaAsigEditId.set(principal.id);
+        this.mallaAsigDocId.set(principal.docenteId);
+        const secciones = existing.flatMap(a => a.secciones ?? []);
+        this.mallaAsigSecciones.set(this.normalizarSeccionesMalla(secciones));
+      }
+    }
+
+    this.cargarCtxAsignacionMalla();
+  }
+  recargarCtxAsignacionMalla(): void {
+    this.mallaAsigCtxError.set(null);
+    this.cargarCtxAsignacionMalla();
+  }
+  private normalizarSeccionesMalla(secciones: string[] | undefined): string[] {
+    return [...new Set((secciones ?? []).map(s => s.trim().toUpperCase()).filter(Boolean))].sort();
+  }
+  private cargarCtxAsignacionMalla(): void {
+    this.asignacionSvc.loadContext(this.anioActivo() ?? undefined).subscribe({
+      next: (ctx) => {
+        this._docentesAsig.set(ctx.docentes);
+        this._seccionesPorGrado.set(ctx.seccionesPorGrado);
+        this._asignacionCtxLoaded.set(true);
+        this.mallaAsigCtxError.set(null);
+      },
+      error: (err: unknown) => {
+        const msg = err instanceof Error ? err.message : 'No se pudo cargar docentes para asignar';
+        this.mallaAsigCtxError.set(msg);
+        this.showToast(msg, 'error');
+      },
+    });
+  }
+  cerrarAsignacionMalla(): void {
+    if (this.asignacionSvc.saving()) return;
+    this.mallaAsigModalOpen.set(false);
+    this.mallaAsigEditId.set(null);
+    this.mallaAsigFormError.set(null);
+  }
+  toggleSeccionMalla(s: string, event?: Event): void {
+    event?.stopPropagation();
+    event?.preventDefault();
+    const sec = s.trim().toUpperCase();
+    const cur = this.normalizarSeccionesMalla(this.mallaAsigSecciones());
+    this.mallaAsigFormError.set(null);
+    this.mallaAsigSecciones.set(
+      cur.includes(sec) ? cur.filter(x => x !== sec) : [...cur, sec],
+    );
+  }
+  guardarAsignacionMalla(event?: Event): void {
+    event?.stopPropagation();
+    event?.preventDefault();
+    this.mallaAsigFormError.set(null);
+
+    const cursoId = this.mallaAsigCursoId();
+    const docId = this.mallaAsigDocId();
+    const curriculumId = this.curriculaSelId();
+    const curso = this.mallaAsigCurso();
+    const secciones = this.normalizarSeccionesMalla(this.mallaAsigSecciones());
+
+    if (!cursoId || docId == null || !curriculumId || !curso) {
+      const msg = 'Seleccione docente y secciones';
+      this.mallaAsigFormError.set(msg);
+      this.showToast(msg, 'error');
+      return;
+    }
+    if (!secciones.length) {
+      const msg = 'Seleccione al menos una sección';
+      this.mallaAsigFormError.set(msg);
+      this.showToast(msg, 'error');
+      return;
+    }
+
+    const payload = {
+      curriculumId,
+      docenteId: docId,
+      cursoId,
+      nivel: this.nivelMalla(),
+      grado: this.mallaAsigGrado(),
+      secciones,
+      horasSemanales: Math.round(curso.horasSemanales ?? 0),
+    };
+
+    const editId = this.mallaAsigEditId();
+    const req = editId
+      ? this.asignacionSvc.update(editId, {
+          docenteId: payload.docenteId,
+          cursoId: payload.cursoId,
+          nivel: payload.nivel,
+          grado: payload.grado,
+          secciones: payload.secciones,
+          horasSemanales: payload.horasSemanales,
+        })
+      : this.asignacionSvc.create(payload);
+
+    req.subscribe({
+      next: (saved) => {
+        this.aplicarAsignacionMallaLocal(saved, editId);
+        this.cerrarAsignacionMalla();
+        const id = this.curriculaSelId();
+        if (id) this.cargarMalla(id);
+        this.showToast(editId ? 'Asignación actualizada' : 'Docente asignado correctamente');
+      },
+      error: (err: unknown) => {
+        const msg = err instanceof Error ? err.message : 'No se pudo guardar la asignación';
+        this.mallaAsigFormError.set(msg);
+        this.showToast(msg, 'error');
+      },
+    });
   }
   totalHorasPorGrado(grado: string): number {
     const fromApi = this._mallaTotales()[grado];
     if (fromApi != null) return fromApi;
     return this.cursosParaMalla()
-      .filter(c => c.grados.includes(grado))
+      .filter(c => gradosIncluyen(grado, c.grados))
       .reduce((s, c) => s + c.horasSemanales, 0);
+  }
+  private aplicarAsignacionMallaLocal(saved: AsignacionDocente, editId: number | null): void {
+    const mapped: AsignDocente = {
+      id: saved.id,
+      docenteId: saved.docenteId,
+      docenteNombre: saved.docenteNombre,
+      cursoId: saved.cursoId,
+      curriculumId: saved.curriculumId,
+      nivel: saved.nivel as NivelCurricula,
+      grado: saved.grado,
+      secciones: [...(saved.secciones ?? [])],
+      horasSemanales: saved.horasSemanales,
+      activo: saved.activo,
+    };
+    if (editId != null) {
+      this._asignaciones.update(list => list.map(a => (a.id === editId ? mapped : a)));
+      return;
+    }
+    this._asignaciones.update(list => {
+      const sinDuplicado = list.filter(a => a.id !== mapped.id);
+      return [...sinDuplicado, mapped];
+    });
   }
 
   // Docentes

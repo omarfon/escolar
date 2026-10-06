@@ -136,6 +136,108 @@ export function estadoAsistenciaBadge(estado: string): string {
   return { P: 'badge-green', F: 'badge-red', T: 'badge-yellow', J: 'badge-blue' }[estado] ?? 'badge-gray';
 }
 
+export function estadoAsistenciaIcon(estado: string): string {
+  return { P: 'check_circle', F: 'cancel', T: 'schedule', J: 'verified' }[estado] ?? 'help';
+}
+
+export function estadoAsistenciaIconBg(estado: string): string {
+  return {
+    P: 'text-emerald-700 bg-emerald-100',
+    F: 'text-red-700 bg-red-100',
+    T: 'text-amber-700 bg-amber-100',
+    J: 'text-blue-700 bg-blue-100',
+  }[estado] ?? 'text-gray-600 bg-gray-100';
+}
+
+export function estadoAsistenciaDot(estado: string): string {
+  return {
+    P: 'bg-emerald-500',
+    F: 'bg-red-500',
+    T: 'bg-amber-400',
+    J: 'bg-blue-500',
+  }[estado] ?? 'bg-gray-400';
+}
+
+export function estadoAsistenciaRowBg(estado: string): string {
+  return {
+    P: 'border-emerald-100 bg-emerald-50/20 hover:bg-emerald-50/40',
+    F: 'border-red-100 bg-red-50/30 hover:bg-red-50/50',
+    T: 'border-amber-100 bg-amber-50/20 hover:bg-amber-50/40',
+    J: 'border-blue-100 bg-blue-50/20 hover:bg-blue-50/40',
+  }[estado] ?? 'border-gray-100 bg-white hover:bg-gray-50/80';
+}
+
+export function asistenciaPctColor(pct: number): string {
+  if (pct >= 90) return 'text-emerald-600';
+  if (pct >= 75) return 'text-amber-600';
+  return 'text-red-600';
+}
+
+export function asistenciaPctConic(pct: number): string {
+  const color = pct >= 90 ? '#10b981' : pct >= 75 ? '#f59e0b' : '#ef4444';
+  const safe = Math.min(100, Math.max(0, pct));
+  return `conic-gradient(${color} ${safe}%, #e5e7eb ${safe}%)`;
+}
+
+export function asistenciaPctMensaje(pct: number): string {
+  if (pct >= 95) return 'Excelente asistencia';
+  if (pct >= 90) return 'Muy buena asistencia';
+  if (pct >= 75) return 'Asistencia regular';
+  return 'Requiere atención';
+}
+
+export interface AsistenciaSegmento {
+  key: string;
+  label: string;
+  count: number;
+  color: string;
+  textColor: string;
+  icon: string;
+  pct: number;
+}
+
+export function asistenciaSegmentos(a: AsistenciaSeguimiento): AsistenciaSegmento[] {
+  const total = Math.max(a.totalDias, 1);
+  return [
+    {
+      key: 'presentes',
+      label: 'Presentes',
+      count: a.presentes,
+      color: 'bg-emerald-500',
+      textColor: 'text-emerald-700',
+      icon: 'check_circle',
+      pct: (a.presentes / total) * 100,
+    },
+    {
+      key: 'tardanzas',
+      label: 'Tardanzas',
+      count: a.tardanzas,
+      color: 'bg-amber-400',
+      textColor: 'text-amber-700',
+      icon: 'schedule',
+      pct: (a.tardanzas / total) * 100,
+    },
+    {
+      key: 'faltas',
+      label: 'Faltas',
+      count: a.faltas,
+      color: 'bg-red-500',
+      textColor: 'text-red-700',
+      icon: 'cancel',
+      pct: (a.faltas / total) * 100,
+    },
+    {
+      key: 'justificadas',
+      label: 'Justificadas',
+      count: a.justificadas,
+      color: 'bg-blue-500',
+      textColor: 'text-blue-700',
+      icon: 'verified',
+      pct: (a.justificadas / total) * 100,
+    },
+  ];
+}
+
 export function tareaEstadoLabel(estado: TareaSeguimiento['estado']): string {
   return { PENDING: 'Pendiente', SUBMITTED: 'Entregada', OVERDUE: 'Vencida', GRADED: 'Calificada' }[estado];
 }

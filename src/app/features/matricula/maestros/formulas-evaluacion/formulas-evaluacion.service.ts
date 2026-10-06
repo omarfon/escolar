@@ -2,6 +2,8 @@ import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http';
 import { Observable, catchError, finalize, throwError } from 'rxjs';
 import { environment } from '@environments/environment';
+import { TenantContextService } from '../../../../core/tenant/tenant-context.service';
+import { withInstitutionParams } from '../../../../core/tenant/tenant-http.util';
 import {
   CreateMaestroFormulaPayload,
   MaestroFormulaEvaluacionItem,
@@ -11,6 +13,7 @@ import {
 @Injectable({ providedIn: 'root' })
 export class MaestrosFormulasEvaluacionService {
   private readonly http = inject(HttpClient);
+  private readonly tenant = inject(TenantContextService);
   private readonly base = `${environment.apiUrl}/maestros/formulas-evaluacion`;
 
   readonly loading = signal(false);
@@ -18,7 +21,9 @@ export class MaestrosFormulasEvaluacionService {
 
   list(): Observable<MaestroFormulaEvaluacionItem[]> {
     this.loading.set(true);
-    return this.http.get<MaestroFormulaEvaluacionItem[]>(this.base).pipe(
+    return this.http.get<MaestroFormulaEvaluacionItem[]>(this.base, {
+      params: withInstitutionParams(this.tenant),
+    }).pipe(
       catchError(err => throwError(() => new Error(this.extractError(err)))),
       finalize(() => this.loading.set(false)),
     );
@@ -35,6 +40,7 @@ export class MaestrosFormulasEvaluacionService {
     if (query.grado) params = params.set('grado', query.grado);
     if (query.curso) params = params.set('curso', query.curso);
     if (query.bimestre) params = params.set('bimestre', String(query.bimestre));
+    params = withInstitutionParams(this.tenant, params);
     return this.http.get<MaestroFormulaEvaluacionItem>(`${this.base}/resolve`, { params }).pipe(
       catchError(err => throwError(() => new Error(this.extractError(err)))),
     );

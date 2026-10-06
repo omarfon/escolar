@@ -8,12 +8,14 @@ import { DIAS, DIAS_SEMANA_CAB, CALENDARIO_MES_GRID, esFinDeSemanaCalendario } f
 import { CeldaCalendario } from '../../academico/horarios/models/horario.model';
 import { HorariosPadreService } from './horarios-padre.service';
 import { HijoResumen, parentescoLabel } from '../seguimiento/seguimiento.model';
+import { SeguimientoService } from '../seguimiento/seguimiento.service';
+import { HijoSelectorComponent } from '../shared/hijo-selector.component';
 
 type VistaHorario = 'mes' | 'semana';
 
 @Component({
   standalone: true,
-  imports: [NgClass],
+  imports: [NgClass, HijoSelectorComponent],
   template: `
 <div class="space-y-5 animate-fade-in">
 
@@ -44,35 +46,9 @@ type VistaHorario = 'mes' | 'semana';
     </div>
   </div>
 
-  @if (padre.loadingHijos()) {
-    <div class="card p-12 flex flex-col items-center text-gray-400">
-      <span class="icon icon-xl animate-spin mb-3">progress_activity</span>
-      <p class="text-sm">Cargando hijos…</p>
-    </div>
-  } @else if (!padre.hijos().length) {
-    <div class="card p-10 text-center text-gray-400">
-      <span class="icon icon-xl mb-3">family_restroom</span>
-      <p class="text-sm">No hay alumnos vinculados a tu cuenta.</p>
-    </div>
-  } @else {
-    <!-- Selector de hijos -->
-    <div class="flex flex-wrap gap-2">
-      @for (h of padre.hijos(); track h.studentId) {
-        <button
-          type="button"
-          class="px-3 py-2 rounded-xl border text-left transition-all min-w-[160px]"
-          [ngClass]="hijoId() === h.studentId
-            ? 'border-indigo-500 bg-indigo-50 ring-1 ring-indigo-200'
-            : 'border-gray-200 bg-white hover:border-gray-300'"
-          (click)="seleccionarHijo(h)">
-          <div class="text-sm font-semibold text-gray-800">{{ h.nombreCompleto }}</div>
-          <div class="text-xs text-gray-500 mt-0.5">
-            {{ h.aulaLabel }} · {{ parentescoLabel(h.parentesco) }}
-          </div>
-        </button>
-      }
-    </div>
+  <app-hijo-selector (hijoChange)="onHijoChange($event)" />
 
+  @if (segSvc.hijos().length) {
     @if (padre.loadingHorario()) {
       <div class="card p-10 flex flex-col items-center text-gray-400">
         <span class="icon icon-xl animate-spin mb-3">progress_activity</span>
@@ -316,6 +292,7 @@ export class HorariosPadreComponent implements OnInit {
   readonly auth = inject(AuthService);
   readonly svc = inject(HorariosService);
   readonly padre = inject(HorariosPadreService);
+  readonly segSvc = inject(SeguimientoService);
 
   readonly DIAS = DIAS;
   readonly DIAS_SEMANA_CAB = DIAS_SEMANA_CAB;
@@ -369,18 +346,12 @@ export class HorariosPadreComponent implements OnInit {
 
   ngOnInit(): void {
     this.layout.setTitle('Horarios');
-    this.padre.loadHijos().subscribe({
-      next: hijos => {
-        if (hijos[0]) {
-          this.padre.loadHorario(hijos[0].studentId).subscribe();
-        }
-      },
-    });
   }
 
-  seleccionarHijo(hijo: HijoResumen): void {
-    if (this.hijoId() === hijo.studentId) return;
-    this.padre.seleccionarHijo(hijo).subscribe();
+  onHijoChange(hijo: HijoResumen): void {
+    if (this.hijoId() === hijo.studentId && this.entradas().length) return;
+    this.segSvc.seleccionarHijo(hijo);
+    this.padre.loadHorario(hijo.studentId).subscribe();
   }
 
   mesAnterior(): void {

@@ -2,11 +2,14 @@ import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http';
 import { Observable, catchError, finalize, throwError } from 'rxjs';
 import { environment } from '@environments/environment';
-import { SalonItem, SyncSalonesResult, VacanteItem } from './salones.model';
+import { TenantContextService } from '../../../../core/tenant/tenant-context.service';
+import { withInstitutionParams } from '../../../../core/tenant/tenant-http.util';
+import { CreateSalonPayload, SalonItem, SyncSalonesResult, VacanteItem } from './salones.model';
 
 @Injectable({ providedIn: 'root' })
 export class SalonesService {
   private readonly http = inject(HttpClient);
+  private readonly tenant = inject(TenantContextService);
   private readonly base = `${environment.apiUrl}/maestros/salones`;
 
   readonly loading = signal(false);
@@ -24,6 +27,7 @@ export class SalonesService {
     if (query?.nivel) params = params.set('nivel', query.nivel);
     if (query?.grado) params = params.set('grado', query.grado);
     if (query?.activo !== undefined) params = params.set('activo', query.activo);
+    params = withInstitutionParams(this.tenant, params);
 
     return this.http.get<SalonItem[]>(this.base, { params }).pipe(
       catchError((err) => throwError(() => new Error(this.extractError(err)))),
@@ -41,10 +45,19 @@ export class SalonesService {
     if (query?.anioEscolar) params = params.set('anioEscolar', query.anioEscolar);
     if (query?.nivel) params = params.set('nivel', query.nivel);
     if (query?.grado) params = params.set('grado', query.grado);
+    params = withInstitutionParams(this.tenant, params);
 
     return this.http.get<VacanteItem[]>(`${this.base}/vacancies`, { params }).pipe(
       catchError((err) => throwError(() => new Error(this.extractError(err)))),
       finalize(() => this.loading.set(false)),
+    );
+  }
+
+  create(payload: CreateSalonPayload): Observable<SalonItem> {
+    this.saving.set(true);
+    return this.http.post<SalonItem>(this.base, payload).pipe(
+      catchError((err) => throwError(() => new Error(this.extractError(err)))),
+      finalize(() => this.saving.set(false)),
     );
   }
 

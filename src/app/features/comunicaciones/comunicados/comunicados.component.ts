@@ -1,8 +1,15 @@
-﻿import { Component, signal, computed, inject, OnInit } from '@angular/core';
+import { Component, signal, computed, inject, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { NgClass } from '@angular/common';
 import { LayoutService } from '../../../core/layout/services/layout.service';
 import { ComunicadosService, Comunicado, TipoCom, DestCom, PrioCom } from './comunicados.service';
+import {
+  ErroresCampoComunicado,
+  comunicadoFormularioMinimoListo,
+  primerErrorComunicado,
+  validarCampoComunicado,
+  validarComunicadoForm,
+} from './comunicado-form.validation';
 
 // ── Display config ──────────────────────────────────────────────────────────
 const TIPO_CFG: Record<TipoCom, { badge: string; label: string; icon: string }> = {
@@ -274,31 +281,52 @@ const DEST_CFG: Record<DestCom, { badge: string; label: string; icon: string }> 
         <button class="btn btn-icon" (click)="cerrarModal()"><span class="icon">close</span></button>
       </div>
       <div class="p-6 space-y-4">
+        @if (errorForm()) {
+          <div class="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+            <span class="icon icon-sm text-red-500">error_outline</span> {{ errorForm() }}
+          </div>
+        }
         <!-- T\u00edtulo -->
         <div>
           <label class="form-label">T\u00edtulo <span class="text-red-400">*</span></label>
           <input class="form-input" type="text" placeholder="T\u00edtulo del comunicado"
-                 [ngModel]="fTitulo()" (ngModelChange)="fTitulo.set($event)">
+                 [ngClass]="claseCampo('titulo')"
+                 [ngModel]="fTitulo()"
+                 (ngModelChange)="onCampoFormChange('titulo', $event)"
+                 (blur)="onCampoBlur('titulo')">
+          @if (campoError('titulo'); as err) { <p class="form-error mt-1">{{ err }}</p> }
         </div>
         <!-- Cuerpo -->
         <div>
           <label class="form-label">Contenido <span class="text-red-400">*</span></label>
           <textarea class="form-input h-32 resize-none" placeholder="Escriba aqu\u00ed el contenido del comunicado..."
-                    [ngModel]="fCuerpo()" (ngModelChange)="fCuerpo.set($event)"></textarea>
+                    [ngClass]="claseCampo('cuerpo')"
+                    [ngModel]="fCuerpo()"
+                    (ngModelChange)="onCampoFormChange('cuerpo', $event)"
+                    (blur)="onCampoBlur('cuerpo')"></textarea>
+          @if (campoError('cuerpo'); as err) { <p class="form-error mt-1">{{ err }}</p> }
         </div>
         <!-- Fila 2 -->
         <div class="grid grid-cols-3 gap-4">
           <div>
             <label class="form-label">Tipo <span class="text-red-400">*</span></label>
-            <select class="form-input" [ngModel]="fTipo()" (ngModelChange)="fTipo.set($event)">
+            <select class="form-input" [ngClass]="claseCampo('tipo')"
+                    [ngModel]="fTipo()"
+                    (ngModelChange)="onCampoFormChange('tipo', $event)"
+                    (blur)="onCampoBlur('tipo')">
               @for (t of tipos; track t.val) { <option [value]="t.val">{{ t.label }}</option> }
             </select>
+            @if (campoError('tipo'); as err) { <p class="form-error mt-1">{{ err }}</p> }
           </div>
           <div>
             <label class="form-label">Destinatarios <span class="text-red-400">*</span></label>
-            <select class="form-input" [ngModel]="fDest()" (ngModelChange)="fDest.set($event)">
+            <select class="form-input" [ngClass]="claseCampo('destinatarios')"
+                    [ngModel]="fDest()"
+                    (ngModelChange)="onCampoFormChange('destinatarios', $event)"
+                    (blur)="onCampoBlur('destinatarios')">
               @for (d of dests; track d.val) { <option [value]="d.val">{{ d.label }}</option> }
             </select>
+            @if (campoError('destinatarios'); as err) { <p class="form-error mt-1">{{ err }}</p> }
           </div>
           <div>
             <label class="form-label">Prioridad</label>
@@ -312,14 +340,22 @@ const DEST_CFG: Record<DestCom, { badge: string; label: string; icon: string }> 
         <!-- Fila 3 -->
         <div class="grid grid-cols-2 gap-4">
           <div>
-            <label class="form-label">Fecha de publicaci\u00f3n</label>
+            <label class="form-label">Fecha de publicaci\u00f3n <span class="text-red-400">*</span></label>
             <input class="form-input" type="text" placeholder="DD/MM/AAAA"
-                   [ngModel]="fFechaPub()" (ngModelChange)="fFechaPub.set($event)">
+                   [ngClass]="claseCampo('fechaPublicacion')"
+                   [ngModel]="fFechaPub()"
+                   (ngModelChange)="onCampoFormChange('fechaPublicacion', $event)"
+                   (blur)="onCampoBlur('fechaPublicacion')">
+            @if (campoError('fechaPublicacion'); as err) { <p class="form-error mt-1">{{ err }}</p> }
           </div>
           <div>
             <label class="form-label">Fecha de vencimiento <span class="text-gray-400 font-normal">(opcional)</span></label>
             <input class="form-input" type="text" placeholder="DD/MM/AAAA"
-                   [ngModel]="fFechaVenc()" (ngModelChange)="fFechaVenc.set($event)">
+                   [ngClass]="claseCampo('fechaVencimiento')"
+                   [ngModel]="fFechaVenc()"
+                   (ngModelChange)="onCampoFormChange('fechaVencimiento', $event)"
+                   (blur)="onCampoBlur('fechaVencimiento')">
+            @if (campoError('fechaVencimiento'); as err) { <p class="form-error mt-1">{{ err }}</p> }
           </div>
         </div>
         <!-- Autor -->
@@ -327,7 +363,11 @@ const DEST_CFG: Record<DestCom, { badge: string; label: string; icon: string }> 
           <div>
             <label class="form-label">Autor</label>
             <input class="form-input" type="text" placeholder="Direcci\u00f3n, Secretar\u00eda..."
-                   [ngModel]="fAutor()" (ngModelChange)="fAutor.set($event)">
+                   [ngClass]="claseCampo('autor')"
+                   [ngModel]="fAutor()"
+                   (ngModelChange)="onCampoFormChange('autor', $event)"
+                   (blur)="onCampoBlur('autor')">
+            @if (campoError('autor'); as err) { <p class="form-error mt-1">{{ err }}</p> }
           </div>
           <div class="flex items-end pb-1">
             <label class="flex items-center gap-2 cursor-pointer select-none">
@@ -346,7 +386,10 @@ const DEST_CFG: Record<DestCom, { badge: string; label: string; icon: string }> 
       </div>
       <div class="flex justify-end gap-3 px-6 py-4 border-t border-gray-100">
         <button class="btn btn-ghost" (click)="cerrarModal()">Cancelar</button>
-        <button class="btn btn-primary" (click)="guardarModal()" [disabled]="!fTitulo().trim() || !fCuerpo().trim()">
+        <button class="btn btn-primary"
+                (click)="guardarModal()"
+                [disabled]="!puedeGuardarForm()"
+                [title]="puedeGuardarForm() ? '' : 'Completa título, contenido, tipo, destinatarios y fecha de publicación'">
           <span class="icon text-base">{{ editandoId() ? 'save' : 'add' }}</span>
           {{ editandoId() ? 'Guardar cambios' : 'Crear comunicado' }}
         </button>
@@ -383,6 +426,23 @@ export class ComunicadosComponent implements OnInit {
   fFechaVenc   = signal('');
   fAutor       = signal('Direcci\u00f3n');
   fHabilitado  = signal(true);
+  errorForm = signal('');
+  fieldErrors = signal<ErroresCampoComunicado>({});
+  camposTocados = signal<Record<string, true>>({});
+  intentoGuardar = signal(false);
+
+  readonly puedeGuardarForm = computed(() =>
+    comunicadoFormularioMinimoListo({
+      titulo: this.fTitulo(),
+      cuerpo: this.fCuerpo(),
+      tipo: this.fTipo(),
+      destinatarios: this.fDest(),
+      prioridad: this.fPrioridad(),
+      fechaPublicacion: this.fFechaPub(),
+      fechaVencimiento: this.fFechaVenc(),
+      autor: this.fAutor(),
+    }),
+  );
 
   // ── Options ──
   readonly tipos = Object.entries(TIPO_CFG).map(([val, cfg]) => ({ val: val as TipoCom, label: cfg.label }));
@@ -458,6 +518,7 @@ export class ComunicadosComponent implements OnInit {
     this.fDest.set('todos'); this.fPrioridad.set('media');
     this.fFechaPub.set(hoy); this.fFechaVenc.set('');
     this.fAutor.set('Direcci\u00f3n'); this.fHabilitado.set(true);
+    this.resetValidacionForm();
     this.modalVisible.set(true);
   }
 
@@ -468,13 +529,127 @@ export class ComunicadosComponent implements OnInit {
     this.fPrioridad.set(c.prioridad); this.fFechaPub.set(c.fechaPublicacion);
     this.fFechaVenc.set(c.fechaVencimiento ?? '');
     this.fAutor.set(c.autor); this.fHabilitado.set(c.habilitado);
+    this.resetValidacionForm();
     this.modalVisible.set(true);
   }
 
-  cerrarModal() { this.modalVisible.set(false); }
+  cerrarModal() {
+    this.modalVisible.set(false);
+    this.resetValidacionForm();
+  }
+
+  private resetValidacionForm(): void {
+    this.fieldErrors.set({});
+    this.camposTocados.set({});
+    this.intentoGuardar.set(false);
+    this.errorForm.set('');
+  }
+
+  private valoresFormulario() {
+    return {
+      titulo: this.fTitulo(),
+      cuerpo: this.fCuerpo(),
+      tipo: this.fTipo(),
+      destinatarios: this.fDest(),
+      prioridad: this.fPrioridad(),
+      fechaPublicacion: this.fFechaPub(),
+      fechaVencimiento: this.fFechaVenc(),
+      autor: this.fAutor(),
+    };
+  }
+
+  onCampoBlur(key: string): void {
+    this.camposTocados.update((t) => ({ ...t, [key]: true }));
+    this.validarCampoEnVivo(key);
+  }
+
+  onCampoFormChange(key: string, value: string | TipoCom | DestCom): void {
+    switch (key) {
+      case 'titulo':
+        this.fTitulo.set(String(value));
+        break;
+      case 'cuerpo':
+        this.fCuerpo.set(String(value));
+        break;
+      case 'tipo':
+        this.fTipo.set(value as TipoCom);
+        break;
+      case 'destinatarios':
+        this.fDest.set(value as DestCom);
+        break;
+      case 'fechaPublicacion':
+        this.fFechaPub.set(String(value));
+        break;
+      case 'fechaVencimiento':
+        this.fFechaVenc.set(String(value));
+        break;
+      case 'autor':
+        this.fAutor.set(String(value));
+        break;
+    }
+
+    if (this.camposTocados()[key] || this.intentoGuardar() || this.fieldErrors()[key]) {
+      this.validarCampoEnVivo(key);
+    } else {
+      this.quitarErrorCampo(key);
+    }
+
+    if (key === 'fechaPublicacion' && this.camposTocados()['fechaVencimiento']) {
+      this.validarCampoEnVivo('fechaVencimiento');
+    }
+  }
+
+  private validarCamposMinimosEnVivo(): void {
+    for (const key of ['titulo', 'cuerpo', 'tipo', 'destinatarios', 'fechaPublicacion']) {
+      this.camposTocados.update((t) => ({ ...t, [key]: true }));
+      this.validarCampoEnVivo(key);
+    }
+  }
+
+  private validarCampoEnVivo(key: string): void {
+    const err = validarCampoComunicado(this.valoresFormulario(), key);
+    if (err) {
+      this.fieldErrors.update((errors) => ({ ...errors, [key]: err }));
+    } else {
+      this.quitarErrorCampo(key);
+    }
+  }
+
+  private quitarErrorCampo(key: string): void {
+    if (!this.fieldErrors()[key]) return;
+    this.fieldErrors.update((errors) => {
+      const next = { ...errors };
+      delete next[key];
+      return next;
+    });
+    if (!Object.keys(this.fieldErrors()).length) this.errorForm.set('');
+  }
+
+  campoError(key: string): string | null {
+    if (!this.camposTocados()[key] && !this.intentoGuardar()) return null;
+    return this.fieldErrors()[key] ?? null;
+  }
+
+  claseCampo(key: string): string {
+    return this.campoError(key) ? 'border-red-400 focus:border-red-500 focus:ring-red-200' : '';
+  }
 
   guardarModal() {
-    if (!this.fTitulo().trim() || !this.fCuerpo().trim()) return;
+    this.intentoGuardar.set(true);
+    if (!this.puedeGuardarForm()) {
+      this.validarCamposMinimosEnVivo();
+      this.errorForm.set('Completa los campos obligatorios del comunicado.');
+      return;
+    }
+
+    const errors = validarComunicadoForm(this.valoresFormulario());
+    this.fieldErrors.set(errors);
+    if (Object.keys(errors).length) {
+      this.errorForm.set(primerErrorComunicado(errors) ?? 'Revisa los datos del formulario.');
+      return;
+    }
+
+    this.errorForm.set('');
     const data = {
       titulo: this.fTitulo().trim(), cuerpo: this.fCuerpo().trim(),
       tipo: this.fTipo(), destinatarios: this.fDest(), prioridad: this.fPrioridad(),

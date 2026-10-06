@@ -173,6 +173,7 @@ export class SidebarComponent {
     const effectiveZone = zone ?? item.zone;
 
     if (!this.auth.canSeeNavZone(effectiveZone)) return false;
+    if (item.soloSiagie) return this.auth.hasRole('SIAGIE');
 
     if (item.roles?.length && !this.auth.hasRole(...item.roles) && !this.auth.isAdmin()) {
       return false;

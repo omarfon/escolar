@@ -2,11 +2,14 @@ import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http';
 import { Observable, catchError, finalize, throwError } from 'rxjs';
 import { environment } from '@environments/environment';
+import { TenantContextService } from '../../../../core/tenant/tenant-context.service';
+import { withInstitutionParams } from '../../../../core/tenant/tenant-http.util';
 import { DocenteDetail, DocentePayload, DocentesPage } from './docentes.model';
 
 @Injectable({ providedIn: 'root' })
 export class MaestrosDocentesService {
   private readonly http = inject(HttpClient);
+  private readonly tenant = inject(TenantContextService);
   private readonly base = `${environment.apiUrl}/maestros/docentes`;
 
   readonly loading = signal(false);
@@ -29,6 +32,7 @@ export class MaestrosDocentesService {
     const busqueda = filters?.busqueda?.trim();
     if (busqueda) params = params.set('busqueda', busqueda);
     if (filters?.anioEscolar) params = params.set('anioEscolar', filters.anioEscolar);
+    params = withInstitutionParams(this.tenant, params);
 
     return this.http.get<DocentesPage>(this.base, { params }).pipe(
       catchError((err) => throwError(() => new Error(this.extractError(err)))),
@@ -39,6 +43,7 @@ export class MaestrosDocentesService {
   getById(id: number, anioEscolar?: number): Observable<DocenteDetail> {
     let params = new HttpParams();
     if (anioEscolar) params = params.set('anioEscolar', anioEscolar);
+    params = withInstitutionParams(this.tenant, params);
     return this.http.get<DocenteDetail>(`${this.base}/${id}`, { params }).pipe(
       catchError((err) => throwError(() => new Error(this.extractError(err)))),
     );

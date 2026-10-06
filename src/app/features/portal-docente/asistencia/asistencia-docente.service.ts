@@ -1,7 +1,8 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { Observable, catchError, finalize, map, throwError } from 'rxjs';
+import { Observable, catchError, finalize, map, of, switchMap, throwError } from 'rxjs';
 import { environment } from '@environments/environment';
+import { MaestrosPeriodosAcademicosService } from '../../matricula/maestros/periodos-academicos/periodos-academicos.service';
 import {
   DocenteMisSalonesResponse,
   DocenteSalonAsignado,
@@ -42,19 +43,26 @@ function dedupeSalones(salones: DocenteSalonAsignado[]): DocenteSalonAsignado[] 
 @Injectable({ providedIn: 'root' })
 export class AsistenciaDocenteService {
   private readonly http = inject(HttpClient);
+  private readonly periodos = inject(MaestrosPeriodosAcademicosService);
   private readonly base = `${environment.apiUrl}/maestros/docentes/me/salones`;
 
   readonly loading = signal(false);
 
   loadMisSalones(anioEscolar?: number): Observable<DocenteMisSalonesResponse> {
-    this.loading.set(true);
-    let params = new HttpParams();
-    if (anioEscolar) params = params.set('anioEscolar', anioEscolar);
+    const anio$ = anioEscolar != null
+      ? of(anioEscolar)
+      : this.periodos.resolveAnioEscolarActual();
 
-    return this.http.get<DocenteMisSalonesResponse>(this.base, { params }).pipe(
-      map((res) => ({ ...res, salones: dedupeSalones(res.salones ?? []) })),
-      catchError((err) => throwError(() => err)),
-      finalize(() => this.loading.set(false)),
+    return anio$.pipe(
+      switchMap((anio) => {
+        this.loading.set(true);
+        const params = new HttpParams().set('anioEscolar', String(anio));
+        return this.http.get<DocenteMisSalonesResponse>(this.base, { params }).pipe(
+          map((res) => ({ ...res, salones: dedupeSalones(res.salones ?? []) })),
+          catchError((err) => throwError(() => err)),
+          finalize(() => this.loading.set(false)),
+        );
+      }),
     );
   }
 }

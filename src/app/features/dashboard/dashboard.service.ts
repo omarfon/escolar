@@ -2,6 +2,8 @@ import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable, catchError, finalize, forkJoin, map, of, tap, throwError } from 'rxjs';
 import { environment } from '@environments/environment';
+import { TenantContextService } from '../../core/tenant/tenant-context.service';
+import { withInstitutionParams } from '../../core/tenant/tenant-http.util';
 import { StudentsApiService } from '../../core/api/students-api.service';
 import { PagosService } from '../tesoreria/pagos/pagos.service';
 import { DocentesPage } from '../matricula/maestros/docentes/docentes.model';
@@ -30,14 +32,10 @@ export interface DashboardStats {
   vacantesDisponibles: DashboardVacante[];
 }
 
-interface AttendanceRow {
-  estado: 'P' | 'F' | 'T' | 'J';
-  fecha: string;
-}
-
 @Injectable({ providedIn: 'root' })
 export class DashboardService {
   private readonly http = inject(HttpClient);
+  private readonly tenant = inject(TenantContextService);
   private readonly studentsApi = inject(StudentsApiService);
   private readonly pagosSvc = inject(PagosService);
   private readonly base = `${environment.apiUrl}/dashboard`;
@@ -48,11 +46,10 @@ export class DashboardService {
 
   loadStats(anioEscolar?: number): Observable<DashboardStats> {
     this.loading.set(true);
-    const url = anioEscolar
-      ? `${this.base}/stats?anioEscolar=${anioEscolar}`
-      : `${this.base}/stats`;
+    let params = withInstitutionParams(this.tenant);
+    if (anioEscolar) params = params.set('anioEscolar', String(anioEscolar));
 
-    return this.http.get<DashboardStats>(url).pipe(
+    return this.http.get<DashboardStats>(`${this.base}/stats`, { params }).pipe(
       catchError(err =>
         this.shouldFallback(err)
           ? this.loadStatsFallback(anioEscolar)
@@ -79,7 +76,11 @@ export class DashboardService {
     const anio = anioEscolar ?? new Date().getFullYear();
 
     return forkJoin({
-      students: this.studentsApi.list().pipe(catchError(() => of([]))),
+      stats: this.http
+        .get<{ total: number; activos: number; matriculadosActivos: number }>(
+          `${this.api}/students/stats`,
+        )
+        .pipe(catchError(() => of(null))),
       docentes: this.http
         .get<DocentesPage>(`${this.api}/maestros/docentes`, {
           params: new HttpParams()
@@ -89,45 +90,25 @@ export class DashboardService {
         })
         .pipe(catchError(() => of(null))),
       treasury: this.pagosSvc.getSummary(anio).pipe(catchError(() => of(null))),
-      attendances: this.http
-        .get<AttendanceRow[]>(`${this.api}/attendances`, {
-          params: new HttpParams().set('anioEscolar', String(anio)),
-        })
-        .pipe(catchError(() => of([]))),
-      charges: this.http
-        .get<{ studentId: number; saldo: number }[]>(`${this.api}/treasury/charges`, {
-          params: new HttpParams().set('anioEscolar', String(anio)),
-        })
-        .pipe(catchError(() => of([]))),
       vacantes: this.http
         .get<VacanteItem[]>(`${this.api}/maestros/salones/vacancies`, {
           params: new HttpParams().set('anioEscolar', String(anio)),
         })
         .pipe(catchError(() => of([]))),
     }).pipe(
-      map(({ students, docentes, treasury, attendances, charges, vacantes }) => {
-        const presentes = attendances.filter(a => a.estado === 'P').length;
-        const totalRegistrosAsistencia = attendances.length;
-        const asistenciaPromedio = totalRegistrosAsistencia
-          ? Math.round((presentes / totalRegistrosAsistencia) * 1000) / 10
-          : 0;
-
-        const familias = new Set<number>();
-        for (const c of charges) {
-          if ((c.saldo ?? 0) > 0) familias.add(c.studentId);
-        }
-
+      map(({ stats, docentes, treasury, vacantes }) => {
         const pendiente = treasury?.pendiente ?? 0;
         const vencido = treasury?.vencido ?? 0;
 
         return {
           anioEscolar: treasury?.anioEscolar ?? anio,
-          estudiantesMatriculados: students.filter(s => s.activo).length,
+          estudiantesMatriculados:
+            stats?.matriculadosActivos ?? stats?.activos ?? stats?.total ?? 0,
           docentesActivos: docentes?.meta?.activos ?? docentes?.total ?? 0,
-          asistenciaPromedio,
+          asistenciaPromedio: 0,
           pagosPendientes: Math.round((pendiente + vencido) * 100) / 100,
-          familiasConDeuda: familias.size || treasury?.cargosPendientes || 0,
-          totalRegistrosAsistencia,
+          familiasConDeuda: treasury?.cargosPendientes ?? 0,
+          totalRegistrosAsistencia: 0,
           vacantesDisponibles: this.mapVacantes(vacantes),
         } satisfies DashboardStats;
       }),

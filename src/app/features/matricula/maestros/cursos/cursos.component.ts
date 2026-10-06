@@ -1,16 +1,23 @@
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { NgClass } from '@angular/common';
+import { markTenantReloadReady, setupTenantReload } from '../../../../core/tenant/tenant-reload.util';
 import { MaestrosCursosService } from './cursos.service';
 import {
   CreateMaestroCursoPayload,
   MaestroCursoItem,
   NivelMaestroCurso,
 } from './cursos.model';
+import {
+  ErroresCampoCurso,
+  cursoFormularioMinimoListo,
+  gradosPermitidosPorNivel,
+  primerErrorCurso,
+  validarCampoCurso,
+  validarCursoForm,
+} from './curso-form.validation';
 
-const G_INI = ['3 años', '4 años', '5 años'];
 const G_PRI = ['1°', '2°', '3°', '4°', '5°', '6°'];
-const G_SEC = ['1°', '2°', '3°', '4°', '5°'];
 
 @Component({
   selector: 'app-maestros-cursos',
@@ -31,21 +38,21 @@ const G_SEC = ['1°', '2°', '3°', '4°', '5°'];
     </button>
   </div>
 
-  <div class="card p-4 flex flex-wrap items-end gap-3">
-    <div>
-      <label class="text-xs text-gray-500 font-medium">Nivel</label>
-      <select class="input mt-1 w-40" [(ngModel)]="filtroNivel" (ngModelChange)="onFiltroChange()">
+  <div class="card p-4 flex flex-wrap items-end gap-4">
+    <div class="form-group w-40">
+      <label class="form-label">Nivel</label>
+      <select class="form-select" [(ngModel)]="filtroNivel" (ngModelChange)="onFiltroChange()">
         <option value="">Todos</option>
         <option value="Inicial">Inicial</option>
         <option value="Primaria">Primaria</option>
         <option value="Secundaria">Secundaria</option>
       </select>
     </div>
-    <div>
-      <label class="text-xs text-gray-500 font-medium">Área</label>
-      <input class="input mt-1 w-48" [(ngModel)]="filtroArea" (ngModelChange)="onFiltroChange()" placeholder="Filtrar área..." />
+    <div class="form-group w-48">
+      <label class="form-label">Área</label>
+      <input class="form-input" [(ngModel)]="filtroArea" (ngModelChange)="onFiltroChange()" placeholder="Filtrar área..." />
     </div>
-    <p class="text-xs text-gray-400 ml-auto">{{ total() }} curso(s)</p>
+    <p class="text-xs text-gray-400 ml-auto pb-2">{{ total() }} curso(s)</p>
   </div>
 
   @if (error()) {
@@ -120,28 +127,53 @@ const G_SEC = ['1°', '2°', '3°', '4°', '5°'];
       <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 space-y-4 max-h-[90vh] overflow-y-auto animate-scale-in" (click)="$event.stopPropagation()">
         <h2 class="text-lg font-bold text-gray-900">{{ editId() ? 'Editar curso' : 'Nuevo curso' }}</h2>
 
+        @if (errorForm()) {
+          <div class="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+            <span class="icon icon-sm text-red-500">error_outline</span> {{ errorForm() }}
+          </div>
+        }
+
         <div>
-          <label class="form-label">Nombre</label>
-          <input class="form-input w-full" [(ngModel)]="formNombre" />
+          <label class="form-label">Nombre <span class="text-red-400">*</span></label>
+          <input class="form-input w-full" placeholder="Ej. Matemática"
+                 [ngClass]="claseCampo('nombre')"
+                 [(ngModel)]="formNombre"
+                 (ngModelChange)="onCampoFormChange('nombre')"
+                 (blur)="onCampoBlur('nombre')" />
+          @if (campoError('nombre'); as err) { <p class="form-error mt-1">{{ err }}</p> }
         </div>
         <div>
-          <label class="form-label">Área curricular</label>
-          <input class="form-input w-full" [(ngModel)]="formArea" placeholder="Ej. Comunicación" />
+          <label class="form-label">Área curricular <span class="text-red-400">*</span></label>
+          <input class="form-input w-full" placeholder="Ej. Comunicación"
+                 [ngClass]="claseCampo('area')"
+                 [(ngModel)]="formArea"
+                 (ngModelChange)="onCampoFormChange('area')"
+                 (blur)="onCampoBlur('area')" />
+          @if (campoError('area'); as err) { <p class="form-error mt-1">{{ err }}</p> }
         </div>
         <div>
-          <label class="form-label">Nivel</label>
-          <select class="form-input w-full" [(ngModel)]="formNivel" (ngModelChange)="onNivelChange()">
+          <label class="form-label">Nivel <span class="text-red-400">*</span></label>
+          <select class="form-input w-full" [ngClass]="claseCampo('nivel')"
+                  [(ngModel)]="formNivel"
+                  (ngModelChange)="onNivelChange()"
+                  (blur)="onCampoBlur('nivel')">
             <option value="Inicial">Inicial</option>
             <option value="Primaria">Primaria</option>
             <option value="Secundaria">Secundaria</option>
           </select>
+          @if (campoError('nivel'); as err) { <p class="form-error mt-1">{{ err }}</p> }
         </div>
         <div>
-          <label class="form-label">Horas semanales</label>
-          <input type="number" min="0" max="40" class="form-input w-full" [(ngModel)]="formHoras" />
+          <label class="form-label">Horas semanales <span class="text-red-400">*</span></label>
+          <input type="number" min="0" max="40" step="1" class="form-input w-full"
+                 [ngClass]="claseCampo('horasSemanales')"
+                 [(ngModel)]="formHoras"
+                 (ngModelChange)="onCampoFormChange('horasSemanales')"
+                 (blur)="onCampoBlur('horasSemanales')" />
+          @if (campoError('horasSemanales'); as err) { <p class="form-error mt-1">{{ err }}</p> }
         </div>
         <div>
-          <label class="form-label">Grados</label>
+          <label class="form-label">Grados <span class="text-red-400">*</span></label>
           <div class="flex flex-wrap gap-2 mt-1">
             @for (g of gradosDisponibles(); track g) {
               <button type="button" class="px-2.5 py-1 rounded-lg text-xs font-medium border transition-all"
@@ -151,11 +183,14 @@ const G_SEC = ['1°', '2°', '3°', '4°', '5°'];
               </button>
             }
           </div>
+          @if (campoError('grados'); as err) { <p class="form-error mt-1">{{ err }}</p> }
         </div>
 
         <div class="flex gap-2 pt-2">
           <button class="btn btn-secondary flex-1" (click)="cerrarModal()">Cancelar</button>
-          <button class="btn btn-primary flex-1" (click)="guardar()" [disabled]="!puedeGuardar() || svc.saving()">
+          <button class="btn btn-primary flex-1" (click)="guardar()"
+                  [disabled]="!puedeGuardarForm() || svc.saving()"
+                  [title]="puedeGuardarForm() ? '' : 'Completa nombre, área, nivel, horas y al menos un grado'">
             {{ editId() ? 'Guardar' : 'Crear' }}
           </button>
         </div>
@@ -173,6 +208,7 @@ const G_SEC = ['1°', '2°', '3°', '4°', '5°'];
   `,
 })
 export class MaestrosCursosComponent implements OnInit {
+  private readonly _tenantReloadReady = setupTenantReload(() => this.cargar());
   readonly svc = inject(MaestrosCursosService);
   readonly POR_PAGINA = 10;
 
@@ -183,7 +219,17 @@ export class MaestrosCursosComponent implements OnInit {
   readonly modalOpen = signal(false);
   readonly editId = signal<number | null>(null);
   readonly error = signal('');
+  readonly errorForm = signal('');
   readonly toast = signal<{ msg: string; type: 'success' | 'error' } | null>(null);
+  fieldErrors = signal<ErroresCampoCurso>({});
+  camposTocados = signal<Record<string, true>>({});
+  intentoGuardar = signal(false);
+  private readonly formRevision = signal(0);
+
+  readonly puedeGuardarForm = computed(() => {
+    this.formRevision();
+    return cursoFormularioMinimoListo(this.valoresFormulario());
+  });
 
   filtroNivel = '';
   filtroArea = '';
@@ -193,7 +239,10 @@ export class MaestrosCursosComponent implements OnInit {
   formHoras = 1;
   formGrados: string[] = [];
 
-  readonly gradosDisponibles = computed(() => this.gradosParaNivel(this.formNivel));
+  readonly gradosDisponibles = computed(() => {
+    this.formRevision();
+    return gradosPermitidosPorNivel(this.formNivel);
+  });
 
   readonly inicio = computed(() => (this.paginaActual() - 1) * this.POR_PAGINA);
   readonly fin = computed(() => Math.min(this.inicio() + this.cursos().length, this.total()));
@@ -209,6 +258,7 @@ export class MaestrosCursosComponent implements OnInit {
 
   ngOnInit(): void {
     this.cargar();
+    markTenantReloadReady(this._tenantReloadReady);
   }
 
   cargar(page = this.paginaActual()): void {
@@ -256,30 +306,128 @@ export class MaestrosCursosComponent implements OnInit {
       this.formHoras = 1;
       this.formGrados = [...G_PRI];
     }
+    this.resetValidacionForm();
     this.modalOpen.set(true);
   }
 
   cerrarModal(): void {
     this.modalOpen.set(false);
     this.editId.set(null);
+    this.resetValidacionForm();
+  }
+
+  private resetValidacionForm(): void {
+    this.fieldErrors.set({});
+    this.camposTocados.set({});
+    this.intentoGuardar.set(false);
+    this.errorForm.set('');
+  }
+
+  private valoresFormulario() {
+    return {
+      nombre: this.formNombre,
+      area: this.formArea,
+      nivel: this.formNivel,
+      horasSemanales: Number(this.formHoras),
+      grados: [...this.formGrados],
+    };
+  }
+
+  onCampoBlur(key: string): void {
+    this.camposTocados.update((t) => ({ ...t, [key]: true }));
+    this.validarCampoEnVivo(key);
+  }
+
+  onCampoFormChange(key: string): void {
+    this.formRevision.update((n) => n + 1);
+
+    if (key === 'horasSemanales') {
+      const n = Number(this.formHoras);
+      this.formHoras = Number.isFinite(n) ? n : 0;
+    }
+
+    if (this.camposTocados()[key] || this.intentoGuardar() || this.fieldErrors()[key]) {
+      this.validarCampoEnVivo(key);
+    } else {
+      this.quitarErrorCampo(key);
+    }
+  }
+
+  private validarCamposMinimosEnVivo(): void {
+    for (const key of ['nombre', 'area', 'nivel', 'horasSemanales', 'grados']) {
+      this.camposTocados.update((t) => ({ ...t, [key]: true }));
+      this.validarCampoEnVivo(key);
+    }
+  }
+
+  private validarCampoEnVivo(key: string): void {
+    const err = validarCampoCurso(this.valoresFormulario(), key);
+    if (err) {
+      this.fieldErrors.update((errors) => ({ ...errors, [key]: err }));
+    } else {
+      this.quitarErrorCampo(key);
+    }
+  }
+
+  private quitarErrorCampo(key: string): void {
+    if (!this.fieldErrors()[key]) return;
+    this.fieldErrors.update((errors) => {
+      const next = { ...errors };
+      delete next[key];
+      return next;
+    });
+    if (!Object.keys(this.fieldErrors()).length) this.errorForm.set('');
+  }
+
+  campoError(key: string): string | null {
+    if (!this.camposTocados()[key] && !this.intentoGuardar()) return null;
+    return this.fieldErrors()[key] ?? null;
+  }
+
+  claseCampo(key: string): string {
+    return this.campoError(key) ? 'border-red-400 focus:border-red-500 focus:ring-red-200' : '';
   }
 
   onNivelChange(): void {
-    this.formGrados = [...this.gradosParaNivel(this.formNivel)];
+    this.formGrados = [...gradosPermitidosPorNivel(this.formNivel)];
+    this.formRevision.update((n) => n + 1);
+    if (this.camposTocados()['nivel'] || this.intentoGuardar() || this.fieldErrors()['nivel']) {
+      this.validarCampoEnVivo('nivel');
+    }
+    if (this.camposTocados()['grados'] || this.intentoGuardar() || this.fieldErrors()['grados']) {
+      this.validarCampoEnVivo('grados');
+    }
   }
 
   toggleGrado(g: string): void {
     this.formGrados = this.formGrados.includes(g)
       ? this.formGrados.filter(x => x !== g)
       : [...this.formGrados, g];
-  }
-
-  puedeGuardar(): boolean {
-    return !!this.formNombre.trim() && !!this.formArea.trim() && this.formGrados.length > 0;
+    this.formRevision.update((n) => n + 1);
+    if (this.camposTocados()['grados'] || this.intentoGuardar() || this.fieldErrors()['grados']) {
+      this.validarCampoEnVivo('grados');
+    } else {
+      this.quitarErrorCampo('grados');
+    }
   }
 
   guardar(): void {
-    if (!this.puedeGuardar()) return;
+    this.intentoGuardar.set(true);
+    if (!this.puedeGuardarForm()) {
+      this.validarCamposMinimosEnVivo();
+      this.errorForm.set('Completa los campos obligatorios del curso.');
+      return;
+    }
+
+    const errors = validarCursoForm(this.valoresFormulario());
+    this.fieldErrors.set(errors);
+    if (Object.keys(errors).length) {
+      this.errorForm.set(primerErrorCurso(errors) ?? 'Revisa los datos del formulario.');
+      return;
+    }
+
+    this.errorForm.set('');
+
     const payload: CreateMaestroCursoPayload = {
       nombre: this.formNombre.trim(),
       area: this.formArea.trim(),
@@ -314,12 +462,6 @@ export class MaestrosCursosComponent implements OnInit {
       },
       error: (err) => this.mostrarToast(err.message, 'error'),
     });
-  }
-
-  private gradosParaNivel(nivel: NivelMaestroCurso): string[] {
-    if (nivel === 'Inicial') return G_INI;
-    if (nivel === 'Secundaria') return G_SEC;
-    return G_PRI;
   }
 
   private mostrarToast(msg: string, type: 'success' | 'error'): void {

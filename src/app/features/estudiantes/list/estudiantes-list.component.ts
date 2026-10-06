@@ -1,6 +1,8 @@
-﻿import { Component, inject, OnInit, signal, computed } from '@angular/core';
+import { Component, inject, OnInit, signal, computed } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { NgClass } from '@angular/common';
+import { RouterLink } from '@angular/router';
+import { AuthService } from '../../../core/auth/services/auth.service';
 import { LayoutService } from '../../../core/layout/services/layout.service';
 import {
   Documento,
@@ -8,122 +10,27 @@ import {
   ExpedientesService,
   estudianteVacio,
 } from '../services/expedientes.service';
-
-interface DocRequerido { tipo: string; obligatorio: boolean; }
-
-// ─── Catálogo de documentos requeridos por grado ──────────────────────────
-const CATALOGO_DEFAULT: Record<string, DocRequerido[]> = {
-  '1° Primaria': [
-    { tipo:'DNI del alumno',             obligatorio:true  },
-    { tipo:'Partida de Nacimiento',      obligatorio:true  },
-    { tipo:'Ficha de Matrícula (FUT)',   obligatorio:true  },
-    { tipo:'DNI del padre o madre',      obligatorio:true  },
-    { tipo:'Foto del alumno (2 und.)',   obligatorio:true  },
-    { tipo:'Ficha de Salud',             obligatorio:false },
-    { tipo:'Carnet de Vacunas',          obligatorio:false },
-  ],
-  '2° Primaria': [
-    { tipo:'DNI del alumno',             obligatorio:true  },
-    { tipo:'Ficha de Matrícula (FUT)',   obligatorio:true  },
-    { tipo:'Certificado de Estudios',    obligatorio:true  },
-    { tipo:'Libreta de Notas',           obligatorio:true  },
-    { tipo:'DNI del padre o madre',      obligatorio:true  },
-    { tipo:'Foto del alumno (2 und.)',   obligatorio:true  },
-    { tipo:'Ficha de Salud',             obligatorio:false },
-  ],
-  '3° Primaria': [
-    { tipo:'DNI del alumno',             obligatorio:true  },
-    { tipo:'Ficha de Matrícula (FUT)',   obligatorio:true  },
-    { tipo:'Certificado de Estudios',    obligatorio:true  },
-    { tipo:'Libreta de Notas',           obligatorio:true  },
-    { tipo:'DNI del padre o madre',      obligatorio:true  },
-    { tipo:'Foto del alumno (2 und.)',   obligatorio:true  },
-    { tipo:'Ficha de Salud',             obligatorio:false },
-  ],
-  '4° Primaria': [
-    { tipo:'DNI del alumno',             obligatorio:true  },
-    { tipo:'Ficha de Matrícula (FUT)',   obligatorio:true  },
-    { tipo:'Certificado de Estudios',    obligatorio:true  },
-    { tipo:'Libreta de Notas',           obligatorio:true  },
-    { tipo:'DNI del padre o madre',      obligatorio:true  },
-    { tipo:'Foto del alumno (2 und.)',   obligatorio:true  },
-    { tipo:'Ficha de Salud',             obligatorio:false },
-  ],
-  '5° Primaria': [
-    { tipo:'DNI del alumno',             obligatorio:true  },
-    { tipo:'Ficha de Matrícula (FUT)',   obligatorio:true  },
-    { tipo:'Certificado de Estudios',    obligatorio:true  },
-    { tipo:'Libreta de Notas',           obligatorio:true  },
-    { tipo:'DNI del padre o madre',      obligatorio:true  },
-    { tipo:'Foto del alumno (2 und.)',   obligatorio:true  },
-    { tipo:'Ficha de Salud',             obligatorio:false },
-  ],
-  '6° Primaria': [
-    { tipo:'DNI del alumno',             obligatorio:true  },
-    { tipo:'Ficha de Matrícula (FUT)',   obligatorio:true  },
-    { tipo:'Certificado de Estudios',    obligatorio:true  },
-    { tipo:'Libreta de Notas',           obligatorio:true  },
-    { tipo:'DNI del padre o madre',      obligatorio:true  },
-    { tipo:'Foto del alumno (2 und.)',   obligatorio:true  },
-    { tipo:'Ficha de Salud',             obligatorio:false },
-  ],
-  '1° Secundaria': [
-    { tipo:'DNI del alumno',             obligatorio:true  },
-    { tipo:'Ficha de Matrícula (FUT)',   obligatorio:true  },
-    { tipo:'Certificado de Estudios',    obligatorio:true  },
-    { tipo:'Libreta de Notas',           obligatorio:true  },
-    { tipo:'Partida de Nacimiento',      obligatorio:true  },
-    { tipo:'DNI del padre o madre',      obligatorio:true  },
-    { tipo:'Foto del alumno (2 und.)',   obligatorio:true  },
-    { tipo:'Ficha de Datos Familiares',  obligatorio:true  },
-    { tipo:'Ficha de Salud',             obligatorio:false },
-  ],
-  '2° Secundaria': [
-    { tipo:'DNI del alumno',             obligatorio:true  },
-    { tipo:'Ficha de Matrícula (FUT)',   obligatorio:true  },
-    { tipo:'Certificado de Estudios',    obligatorio:true  },
-    { tipo:'Libreta de Notas',           obligatorio:true  },
-    { tipo:'DNI del padre o madre',      obligatorio:true  },
-    { tipo:'Foto del alumno (2 und.)',   obligatorio:true  },
-    { tipo:'Ficha de Datos Familiares',  obligatorio:true  },
-    { tipo:'Ficha de Salud',             obligatorio:false },
-  ],
-  '3° Secundaria': [
-    { tipo:'DNI del alumno',             obligatorio:true  },
-    { tipo:'Ficha de Matrícula (FUT)',   obligatorio:true  },
-    { tipo:'Certificado de Estudios',    obligatorio:true  },
-    { tipo:'Libreta de Notas',           obligatorio:true  },
-    { tipo:'DNI del padre o madre',      obligatorio:true  },
-    { tipo:'Foto del alumno (2 und.)',   obligatorio:true  },
-    { tipo:'Ficha de Datos Familiares',  obligatorio:true  },
-    { tipo:'Ficha de Salud',             obligatorio:false },
-  ],
-  '4° Secundaria': [
-    { tipo:'DNI del alumno',             obligatorio:true  },
-    { tipo:'Ficha de Matrícula (FUT)',   obligatorio:true  },
-    { tipo:'Certificado de Estudios',    obligatorio:true  },
-    { tipo:'Libreta de Notas',           obligatorio:true  },
-    { tipo:'DNI del padre o madre',      obligatorio:true  },
-    { tipo:'Foto del alumno (2 und.)',   obligatorio:true  },
-    { tipo:'Ficha de Datos Familiares',  obligatorio:true  },
-    { tipo:'Ficha de Salud',             obligatorio:false },
-  ],
-  '5° Secundaria': [
-    { tipo:'DNI del alumno',             obligatorio:true  },
-    { tipo:'Ficha de Matrícula (FUT)',   obligatorio:true  },
-    { tipo:'Certificado de Estudios',    obligatorio:true  },
-    { tipo:'Libreta de Notas',           obligatorio:true  },
-    { tipo:'DNI del padre o madre',      obligatorio:true  },
-    { tipo:'Foto del alumno (2 und.)',   obligatorio:true  },
-    { tipo:'Ficha de Datos Familiares',  obligatorio:true  },
-    { tipo:'Ficha de Salud',             obligatorio:false },
-  ],
-};
+import {
+  ErroresCampoEstudiante,
+  estudianteFormularioMinimoListo,
+  primerErrorEstudiante,
+  validarCampoEstudiante,
+  validarEstudianteForm,
+} from '../shared/estudiante-form.validation';
+import {
+  DOCUMENTOS_REQUISITOS,
+  DocumentoRequerido,
+} from '../shared/documentos-requisitos';
+import { EstudianteAuditoriaService } from '../auditoria-cambios/estudiante-auditoria.service';
+import { EstudianteChangeLog } from '../auditoria-cambios/estudiante-auditoria.model';
+import { TenantContextService } from '../../../core/tenant/tenant-context.service';
+import { markTenantReloadReady, setupTenantReload } from '../../../core/tenant/tenant-reload.util';
+import { EstudiantesListTableComponent } from './estudiantes-list-table.component';
 
 @Component({
   selector: 'app-estudiantes-list',
   standalone: true,
-  imports: [FormsModule, NgClass],
+  imports: [FormsModule, NgClass, RouterLink, EstudiantesListTableComponent],
   template: `
     <div class="space-y-5">
       <!-- Header -->
@@ -137,8 +44,21 @@ const CATALOGO_DEFAULT: Record<string, DocRequerido[]> = {
           @if (loadError()) {
             <p class="text-xs text-red-500 mt-1">{{ loadError() }}</p>
           }
+          @if (tenant.requiresSelection()) {
+            <p class="text-xs text-amber-600 mt-1">Seleccione una institución educativa en el encabezado para ver el padrón.</p>
+          }
+          @if (!loading() && !loadError() && !tenant.requiresSelection() && totalFiltrados() === 0) {
+            <p class="text-xs text-gray-500 mt-1">
+              No hay estudiantes en la IE #{{ tenant.effectiveInstitutionId() }}. Pruebe otra institución en el selector (revise el conteo de alumnos).
+            </p>
+          }
         </div>
-        <div class="flex gap-2">
+        <div class="flex gap-2 flex-wrap">
+          @if (puedeGestionarVinculos()) {
+            <a class="btn btn-secondary" routerLink="/estudiantes/representante-vinculos">
+              <span class="icon icon-sm">family_restroom</span> Vínculos representante
+            </a>
+          }
           <button class="btn btn-secondary" (click)="exportarCsv()" [disabled]="loading() || exportando()">
             <span class="icon icon-sm">download</span> {{ exportando() ? 'Exportando…' : 'Exportar' }}
           </button>
@@ -149,7 +69,7 @@ const CATALOGO_DEFAULT: Record<string, DocRequerido[]> = {
       </div>
 
       <!-- Stats rápidas -->
-      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         <div class="card p-4">
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center">
@@ -194,124 +114,87 @@ const CATALOGO_DEFAULT: Record<string, DocRequerido[]> = {
             </div>
           </div>
         </div>
+        <button
+          type="button"
+          class="card p-4 text-left transition-colors"
+          [class.ring-2]="filtroDocumento() === 'pendiente_regularizacion'"
+          [class.ring-amber-400]="filtroDocumento() === 'pendiente_regularizacion'"
+          [class.bg-amber-50]="filtroDocumento() === 'pendiente_regularizacion'"
+          (click)="toggleFiltroPendientesRegularizacion()"
+        >
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center">
+              <span class="icon text-amber-600">badge</span>
+            </div>
+            <div>
+              <div class="text-xl font-bold text-gray-900">{{ pendientesRegularizacion() }}</div>
+              <div class="text-xs text-gray-400">Pend. regularización</div>
+            </div>
+          </div>
+        </button>
       </div>
+
+      @if (pendientesRegularizacion() > 0 && filtroDocumento() !== 'pendiente_regularizacion') {
+        <div class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 flex flex-wrap items-center justify-between gap-2">
+          <p class="text-sm text-amber-900">
+            Hay {{ pendientesRegularizacion() }} estudiante(s) registrados sin documento pendientes de regularización.
+          </p>
+          <button type="button" class="btn btn-sm bg-amber-600 text-white hover:bg-amber-700" (click)="verPendientesRegularizacion()">
+            Ver pendientes
+          </button>
+        </div>
+      }
 
       <!-- Filtros -->
       <div class="card p-4">
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
           <div class="relative lg:col-span-2">
             <span class="icon absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">search</span>
             <input class="form-input pl-10 bg-gray-50" type="text" placeholder="Buscar por nombre, DNI o codigo..."
-              [ngModel]="filtroQ()" (ngModelChange)="filtroQ.set($event); paginaActual.set(1)">
+              [ngModel]="filtroQ()" (ngModelChange)="filtroQ.set($event); onFiltroChange()">
           </div>
           <div class="relative">
             <span class="icon absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">school</span>
-            <select class="form-select pl-10 bg-gray-50" [ngModel]="filtroGrado()" (ngModelChange)="filtroGrado.set($event); paginaActual.set(1)">
+            <select class="form-select pl-10 bg-gray-50" [ngModel]="filtroGrado()" (ngModelChange)="filtroGrado.set($event); onFiltroChange()">
               <option value="">Todos los grados</option>
               @for (g of grados; track g) { <option [value]="g">{{ g }}</option> }
             </select>
           </div>
           <div class="relative">
             <span class="icon absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">toggle_on</span>
-            <select class="form-select pl-10 bg-gray-50" [ngModel]="filtroEstado()" (ngModelChange)="filtroEstado.set($event); paginaActual.set(1)">
+            <select class="form-select pl-10 bg-gray-50" [ngModel]="filtroEstado()" (ngModelChange)="filtroEstado.set($event); onFiltroChange()">
               <option value="">Todos los estados</option>
               <option value="activo">Activo</option>
               <option value="inactivo">Inactivo</option>
               <option value="retirado">Retirado</option>
             </select>
           </div>
+          <div class="relative">
+            <span class="icon absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">badge</span>
+            <select class="form-select pl-10 bg-gray-50" [ngModel]="filtroDocumento()" (ngModelChange)="filtroDocumento.set($event); onFiltroChange()">
+              <option value="">Todo el padrón</option>
+              <option value="pendiente_regularizacion">Pendientes de regularización</option>
+              <option value="regular">Documento regularizado</option>
+            </select>
+          </div>
         </div>
       </div>
 
       <!-- Tabla -->
-      <div class="card overflow-hidden">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th class="text-left">Estudiante</th>
-              <th class="text-left hidden md:table-cell">DNI</th>
-              <th class="text-left hidden sm:table-cell">Grado</th>
-              <th class="text-center">Estado</th>
-              <th class="text-left hidden lg:table-cell">Asistencia</th>
-              <th class="text-center">Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            @for (e of paginados(); track e.id) {
-              <tr class="hover:bg-gray-50">
-                <td>
-                  <div class="flex items-center gap-3">
-                    <div class="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
-                      [ngClass]="e.sexo === 'F' ? 'bg-pink-500' : 'bg-indigo-500'">
-                      {{ iniciales(e.nombres, e.apellidos) }}
-                    </div>
-                    <div>
-                      <div class="font-medium text-gray-900 text-sm">{{ e.apellidos }}, {{ e.nombres }}</div>
-                      <div class="text-xs text-gray-400">{{ e.codigo }}</div>
-                    </div>
-                  </div>
-                </td>
-                <td class="hidden md:table-cell text-sm text-gray-600">{{ e.dni }}</td>
-                <td class="hidden sm:table-cell text-sm text-gray-600">{{ e.grado }} – {{ e.seccion }}</td>
-                <td class="text-center">
-                  <span class="badge text-xs"
-                    [ngClass]="e.estado === 'activo' ? 'badge-green' : e.estado === 'retirado' ? 'badge-red' : 'badge-gray'">
-                    {{ e.estado }}
-                  </span>
-                </td>
-                <td class="hidden lg:table-cell">
-                  <div class="flex items-center gap-2">
-                    <div class="flex-1 progress h-1.5">
-                      <div class="progress-bar h-1.5"
-                        [ngClass]="e.asistenciaPct >= 90 ? 'bg-green-500' : e.asistenciaPct >= 75 ? 'bg-yellow-400' : 'bg-red-400'"
-                        [style.width]="e.asistenciaPct + '%'"></div>
-                    </div>
-                    <span class="text-xs text-gray-500 w-8 text-right">{{ e.asistenciaPct }}%</span>
-                  </div>
-                </td>
-                <td class="text-center">
-                  <div class="flex items-center justify-center gap-1">
-                    <button class="btn-icon text-blue-500" title="Ver expediente" (click)="abrirExpediente(e)">
-                      <span class="icon icon-sm">folder_open</span>
-                    </button>
-                    <button class="btn-icon text-indigo-500" title="Editar" (click)="abrirDrawerEditar(e)">
-                      <span class="icon icon-sm">edit</span>
-                    </button>
-                    <button class="btn-icon text-red-400" title="Eliminar" (click)="eliminar(e.id)">
-                      <span class="icon icon-sm">delete_outline</span>
-                    </button>
-                  </div>
-                </td>
-              </tr>
-                  } @empty {
-              <tr><td colspan="6" class="py-16 text-center">
-                <div class="flex flex-col items-center gap-2 text-gray-300">
-                  <span class="icon icon-2xl">search_off</span>
-                  <p class="text-sm text-gray-400">Sin resultados para los filtros aplicados</p>
-                  <button class="btn btn-ghost text-xs" (click)="limpiarFiltros()">Limpiar filtros</button>
-                </div>
-              </td></tr>
-            }
-          </tbody>
-        </table>
-        <!-- Paginado -->
-        <div class="flex items-center justify-between px-4 py-3 border-t border-gray-100 bg-gray-50/50">
-          <span class="text-xs text-gray-500">{{ inicio() + 1 }}–{{ fin() }} de {{ totalFiltrados() }}</span>
-          <div class="flex items-center gap-1">
-            <button class="btn-icon" [disabled]="paginaActual() === 1" (click)="paginaActual.update(p => p-1)">
-              <span class="icon icon-sm">chevron_left</span>
-            </button>
-            @for (p of paginas(); track p) {
-              <button class="w-8 h-8 rounded-lg text-sm font-medium transition-colors"
-                [ngClass]="p === paginaActual() ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-100'"
-                (click)="paginaActual.set(p)">{{ p }}</button>
-            }
-            <button class="btn-icon" [disabled]="paginaActual() === totalPaginas()" (click)="paginaActual.update(p => p+1)">
-              <span class="icon icon-sm">chevron_right</span>
-            </button>
-          </div>
-        </div>
-      </div>
+      <app-estudiantes-list-table
+        [estudiantes]="paginados()"
+        [paginaActual]="paginaActual()"
+        [totalPaginas]="totalPaginas()"
+        [totalFiltrados]="totalFiltrados()"
+        [inicio]="inicio()"
+        [fin]="fin()"
+        [paginas]="paginas()"
+        (verExpediente)="abrirExpediente($event)"
+        (editar)="abrirDrawerEditar($event)"
+        (eliminar)="eliminar($event)"
+        (irPagina)="irPagina($event)"
+        (limpiarFiltros)="limpiarFiltros()"
+      />
     </div>
 
     <!-- ══════════════════════ DRAWER: NUEVO / EDITAR ══════════════════════ -->
@@ -321,11 +204,76 @@ const CATALOGO_DEFAULT: Record<string, DocRequerido[]> = {
         <div class="flex items-center justify-between px-6 py-4 border-b shrink-0 bg-gradient-to-r from-indigo-600 to-indigo-500">
           <div>
             <h3 class="font-semibold text-white">{{ form.id ? 'Editar Estudiante' : 'Nuevo Estudiante' }}</h3>
-            <p class="text-xs text-indigo-200">{{ form.id ? form.codigo : 'Completa todos los datos' }}</p>
+            <p class="text-xs text-indigo-200">{{ form.id ? form.codigo : 'Campos obligatorios marcados con *' }}</p>
           </div>
           <button class="btn-icon text-white hover:bg-white/20" (click)="cerrarDrawerForm()"><span class="icon">close</span></button>
         </div>
         <div class="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+
+          @if (!form.id) {
+            <label class="flex items-start gap-3 p-3 rounded-xl border border-amber-200 bg-amber-50/60 cursor-pointer">
+              <input type="checkbox" class="mt-1" [(ngModel)]="registroSinDocumento"
+                (ngModelChange)="onToggleSinDocumento()">
+              <span>
+                <span class="text-sm font-medium text-amber-900">Registro excepcional sin documento</span>
+                <span class="block text-xs text-amber-700 mt-0.5">
+                  Se asignará identificador interno ({{ form.codigo || 'EST-…' }}) y el expediente quedará pendiente de regularización.
+                </span>
+              </span>
+            </label>
+          }
+
+          @if (registroSinDocumento && !form.id) {
+            <div class="grid grid-cols-1 gap-3 p-4 rounded-xl border border-amber-100 bg-amber-50/40">
+              <div class="form-group">
+                <label class="form-label">Motivo del registro sin documento *</label>
+                <textarea class="form-input min-h-[3rem]" rows="2" [(ngModel)]="sinDocumentoMotivo"
+                  placeholder="Ej: Estudiante extranjero recién llegado"></textarea>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Sustento / referencia *</label>
+                <textarea class="form-input min-h-[3rem]" rows="2" [(ngModel)]="sinDocumentoSustento"
+                  placeholder="Ej: Informe de admisión, constancia migratoria"></textarea>
+              </div>
+              @if (coincidenciasDuplicado().length) {
+                <div class="rounded-lg border border-orange-200 bg-orange-50 p-3 text-xs text-orange-800" role="alert">
+                  <p class="font-semibold mb-1">Posibles coincidencias detectadas:</p>
+                  <ul class="list-disc pl-4 space-y-1">
+                    @for (c of coincidenciasDuplicado(); track c.id) {
+                      <li>{{ c.codigo }} — {{ c.coincidencias.join(', ') }}</li>
+                    }
+                  </ul>
+                  <label class="flex items-center gap-2 mt-2">
+                    <input type="checkbox" [(ngModel)]="confirmarDuplicado">
+                    Confirmo que no es el mismo estudiante
+                  </label>
+                </div>
+              }
+            </div>
+          }
+
+          @if (form.id && form.estadoDocumento === 'pendiente_regularizacion') {
+            <div class="rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-3">
+              <p class="text-sm font-semibold text-amber-900">Regularización documentaria pendiente</p>
+              <p class="text-xs text-amber-800">Motivo: {{ form.sinDocumentoMotivo || '—' }}</p>
+              <div class="grid grid-cols-2 gap-3">
+                <div class="form-group">
+                  <label class="form-label">Número de documento *</label>
+                  <input class="form-input" [(ngModel)]="regularizarDni" maxlength="20"
+                    placeholder="Ingrese DNI/CE">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Motivo de regularización *</label>
+                  <input class="form-input" [(ngModel)]="regularizarMotivo"
+                    placeholder="Ej: Presentó DNI en secretaría">
+                </div>
+              </div>
+              <button type="button" class="btn btn-secondary btn-sm" [disabled]="guardandoForm()"
+                (click)="regularizarDocumento()">
+                Asociar documento oficial
+              </button>
+            </div>
+          }
 
           <!-- Datos personales -->
           <div>
@@ -333,19 +281,45 @@ const CATALOGO_DEFAULT: Record<string, DocRequerido[]> = {
             <div class="grid grid-cols-2 gap-3">
               <div class="form-group">
                 <label class="form-label">Nombres *</label>
-                <input class="form-input" [(ngModel)]="form.nombres" placeholder="Nombres completos">
+                <input class="form-input" [ngClass]="claseCampo('nombres')"
+                       [(ngModel)]="form.nombres"
+                       (ngModelChange)="onCampoFormChange('nombres')"
+                       (blur)="onCampoBlur('nombres')"
+                       placeholder="Nombres completos">
+                @if (campoError('nombres'); as err) { <p class="form-error mt-1">{{ err }}</p> }
               </div>
               <div class="form-group">
                 <label class="form-label">Apellidos *</label>
-                <input class="form-input" [(ngModel)]="form.apellidos" placeholder="Apellidos">
+                <input class="form-input" [ngClass]="claseCampo('apellidos')"
+                       [(ngModel)]="form.apellidos"
+                       (ngModelChange)="onCampoFormChange('apellidos')"
+                       (blur)="onCampoBlur('apellidos')"
+                       placeholder="Apellidos">
+                @if (campoError('apellidos'); as err) { <p class="form-error mt-1">{{ err }}</p> }
               </div>
-              <div class="form-group">
-                <label class="form-label">DNI *</label>
-                <input class="form-input" [(ngModel)]="form.dni" placeholder="12345678" maxlength="8">
-              </div>
+              @if (!registroSinDocumento) {
+                <div class="form-group">
+                  <label class="form-label">DNI *</label>
+                  <input class="form-input" [ngClass]="claseCampo('dni')"
+                         [(ngModel)]="form.dni"
+                         (ngModelChange)="onCampoFormChange('dni')"
+                         (blur)="onCampoBlur('dni')"
+                         placeholder="12345678" maxlength="8" inputmode="numeric">
+                  @if (campoError('dni'); as err) { <p class="form-error mt-1">{{ err }}</p> }
+                </div>
+              } @else {
+                <div class="form-group">
+                  <label class="form-label">Identificador interno</label>
+                  <input class="form-input bg-gray-50" readonly value="Se generará al guardar (EST-…)" aria-readonly="true">
+                </div>
+              }
               <div class="form-group">
                 <label class="form-label">Fecha de Nacimiento *</label>
-                <input class="form-input" type="date" [(ngModel)]="form.fechaNac">
+                <input class="form-input" type="date" [ngClass]="claseCampo('fechaNac')"
+                       [(ngModel)]="form.fechaNac"
+                       (ngModelChange)="onCampoFormChange('fechaNac')"
+                       (blur)="onCampoBlur('fechaNac')">
+                @if (campoError('fechaNac'); as err) { <p class="form-error mt-1">{{ err }}</p> }
               </div>
               <div class="form-group">
                 <label class="form-label">Sexo</label>
@@ -373,9 +347,13 @@ const CATALOGO_DEFAULT: Record<string, DocRequerido[]> = {
             <div class="grid grid-cols-2 gap-3">
               <div class="form-group">
                 <label class="form-label">Grado *</label>
-                <select class="form-select" [(ngModel)]="form.grado">
+                <select class="form-select" [ngClass]="claseCampo('grado')"
+                        [(ngModel)]="form.grado"
+                        (ngModelChange)="onCampoFormChange('grado')"
+                        (blur)="onCampoBlur('grado')">
                   @for (g of grados; track g) { <option [value]="g">{{ g }}</option> }
                 </select>
+                @if (campoError('grado'); as err) { <p class="form-error mt-1">{{ err }}</p> }
               </div>
               <div class="form-group">
                 <label class="form-label">Seccion</label>
@@ -424,11 +402,46 @@ const CATALOGO_DEFAULT: Record<string, DocRequerido[]> = {
           <div>
             <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Datos del Padre</p>
             <div class="grid grid-cols-2 gap-3">
-              <div class="form-group"><label class="form-label">Nombres</label><input class="form-input" [(ngModel)]="form.padre.nombres"></div>
-              <div class="form-group"><label class="form-label">Apellidos</label><input class="form-input" [(ngModel)]="form.padre.apellidos"></div>
-              <div class="form-group"><label class="form-label">DNI</label><input class="form-input" [(ngModel)]="form.padre.dni" maxlength="8"></div>
-              <div class="form-group"><label class="form-label">Telefono</label><input class="form-input" [(ngModel)]="form.padre.telefono"></div>
-              <div class="form-group"><label class="form-label">Email</label><input class="form-input" type="email" [(ngModel)]="form.padre.email"></div>
+              <div class="form-group">
+                <label class="form-label">Nombres</label>
+                <input class="form-input" [ngClass]="claseCampo('padre-nombres')"
+                       [(ngModel)]="form.padre.nombres"
+                       (ngModelChange)="onCampoFormChange('padre-nombres')"
+                       (blur)="onCampoBlur('padre-nombres')">
+                @if (campoError('padre-nombres'); as err) { <p class="form-error mt-1">{{ err }}</p> }
+              </div>
+              <div class="form-group">
+                <label class="form-label">Apellidos</label>
+                <input class="form-input" [ngClass]="claseCampo('padre-apellidos')"
+                       [(ngModel)]="form.padre.apellidos"
+                       (ngModelChange)="onCampoFormChange('padre-apellidos')"
+                       (blur)="onCampoBlur('padre-apellidos')">
+                @if (campoError('padre-apellidos'); as err) { <p class="form-error mt-1">{{ err }}</p> }
+              </div>
+              <div class="form-group">
+                <label class="form-label">DNI</label>
+                <input class="form-input" [ngClass]="claseCampo('padre-dni')"
+                       [(ngModel)]="form.padre.dni"
+                       (ngModelChange)="onCampoFormChange('padre-dni')"
+                       (blur)="onCampoBlur('padre-dni')" maxlength="8" inputmode="numeric">
+                @if (campoError('padre-dni'); as err) { <p class="form-error mt-1">{{ err }}</p> }
+              </div>
+              <div class="form-group">
+                <label class="form-label">Telefono</label>
+                <input class="form-input" [ngClass]="claseCampo('padre-telefono')"
+                       [(ngModel)]="form.padre.telefono"
+                       (ngModelChange)="onCampoFormChange('padre-telefono')"
+                       (blur)="onCampoBlur('padre-telefono')">
+                @if (campoError('padre-telefono'); as err) { <p class="form-error mt-1">{{ err }}</p> }
+              </div>
+              <div class="form-group">
+                <label class="form-label">Email</label>
+                <input class="form-input" type="email" [ngClass]="claseCampo('padre-email')"
+                       [(ngModel)]="form.padre.email"
+                       (ngModelChange)="onCampoFormChange('padre-email')"
+                       (blur)="onCampoBlur('padre-email')">
+                @if (campoError('padre-email'); as err) { <p class="form-error mt-1">{{ err }}</p> }
+              </div>
               <div class="form-group"><label class="form-label">Trabajo / Ocupacion</label><input class="form-input" [(ngModel)]="form.padre.trabajo"></div>
             </div>
           </div>
@@ -437,27 +450,133 @@ const CATALOGO_DEFAULT: Record<string, DocRequerido[]> = {
           <div>
             <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Datos de la Madre</p>
             <div class="grid grid-cols-2 gap-3">
-              <div class="form-group"><label class="form-label">Nombres</label><input class="form-input" [(ngModel)]="form.madre.nombres"></div>
-              <div class="form-group"><label class="form-label">Apellidos</label><input class="form-input" [(ngModel)]="form.madre.apellidos"></div>
-              <div class="form-group"><label class="form-label">DNI</label><input class="form-input" [(ngModel)]="form.madre.dni" maxlength="8"></div>
-              <div class="form-group"><label class="form-label">Telefono</label><input class="form-input" [(ngModel)]="form.madre.telefono"></div>
-              <div class="form-group"><label class="form-label">Email</label><input class="form-input" type="email" [(ngModel)]="form.madre.email"></div>
+              <div class="form-group">
+                <label class="form-label">Nombres</label>
+                <input class="form-input" [ngClass]="claseCampo('madre-nombres')"
+                       [(ngModel)]="form.madre.nombres"
+                       (ngModelChange)="onCampoFormChange('madre-nombres')"
+                       (blur)="onCampoBlur('madre-nombres')">
+                @if (campoError('madre-nombres'); as err) { <p class="form-error mt-1">{{ err }}</p> }
+              </div>
+              <div class="form-group">
+                <label class="form-label">Apellidos</label>
+                <input class="form-input" [ngClass]="claseCampo('madre-apellidos')"
+                       [(ngModel)]="form.madre.apellidos"
+                       (ngModelChange)="onCampoFormChange('madre-apellidos')"
+                       (blur)="onCampoBlur('madre-apellidos')">
+                @if (campoError('madre-apellidos'); as err) { <p class="form-error mt-1">{{ err }}</p> }
+              </div>
+              <div class="form-group">
+                <label class="form-label">DNI</label>
+                <input class="form-input" [ngClass]="claseCampo('madre-dni')"
+                       [(ngModel)]="form.madre.dni"
+                       (ngModelChange)="onCampoFormChange('madre-dni')"
+                       (blur)="onCampoBlur('madre-dni')" maxlength="8" inputmode="numeric">
+                @if (campoError('madre-dni'); as err) { <p class="form-error mt-1">{{ err }}</p> }
+              </div>
+              <div class="form-group">
+                <label class="form-label">Telefono</label>
+                <input class="form-input" [ngClass]="claseCampo('madre-telefono')"
+                       [(ngModel)]="form.madre.telefono"
+                       (ngModelChange)="onCampoFormChange('madre-telefono')"
+                       (blur)="onCampoBlur('madre-telefono')">
+                @if (campoError('madre-telefono'); as err) { <p class="form-error mt-1">{{ err }}</p> }
+              </div>
+              <div class="form-group">
+                <label class="form-label">Email</label>
+                <input class="form-input" type="email" [ngClass]="claseCampo('madre-email')"
+                       [(ngModel)]="form.madre.email"
+                       (ngModelChange)="onCampoFormChange('madre-email')"
+                       (blur)="onCampoBlur('madre-email')">
+                @if (campoError('madre-email'); as err) { <p class="form-error mt-1">{{ err }}</p> }
+              </div>
               <div class="form-group"><label class="form-label">Trabajo / Ocupacion</label><input class="form-input" [(ngModel)]="form.madre.trabajo"></div>
             </div>
           </div>
 
-          <!-- Apoderado -->
-          <div>
-            <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Apoderado (si aplica)</p>
+          <!-- Apoderado principal -->
+          <div class="rounded-2xl border-2 border-indigo-200 bg-gradient-to-br from-indigo-50/60 to-white p-4">
+            <p class="text-xs font-semibold text-indigo-700 uppercase tracking-wide mb-3 flex items-center gap-2">
+              <span class="icon icon-sm">verified_user</span>
+              Apoderado principal
+              <span class="inline-flex items-center gap-0.5 text-[10px] bg-indigo-600 text-white px-2 py-0.5 rounded-full font-semibold normal-case">
+                <span class="icon" style="font-size:11px">star</span> Contacto principal
+              </span>
+            </p>
             <div class="grid grid-cols-2 gap-3">
-              <div class="form-group"><label class="form-label">Nombres</label><input class="form-input" [(ngModel)]="form.apoderado.nombres"></div>
-              <div class="form-group"><label class="form-label">Apellidos</label><input class="form-input" [(ngModel)]="form.apoderado.apellidos"></div>
-              <div class="form-group"><label class="form-label">DNI</label><input class="form-input" [(ngModel)]="form.apoderado.dni" maxlength="8"></div>
-              <div class="form-group"><label class="form-label">Telefono</label><input class="form-input" [(ngModel)]="form.apoderado.telefono"></div>
-              <div class="form-group"><label class="form-label">Email</label><input class="form-input" type="email" [(ngModel)]="form.apoderado.email"></div>
+              <div class="form-group">
+                <label class="form-label">Nombres</label>
+                <input class="form-input" [ngClass]="claseCampo('apoderado-nombres')"
+                       [(ngModel)]="form.apoderado.nombres"
+                       (ngModelChange)="onCampoFormChange('apoderado-nombres')"
+                       (blur)="onCampoBlur('apoderado-nombres')">
+                @if (campoError('apoderado-nombres'); as err) { <p class="form-error mt-1">{{ err }}</p> }
+              </div>
+              <div class="form-group">
+                <label class="form-label">Apellidos</label>
+                <input class="form-input" [ngClass]="claseCampo('apoderado-apellidos')"
+                       [(ngModel)]="form.apoderado.apellidos"
+                       (ngModelChange)="onCampoFormChange('apoderado-apellidos')"
+                       (blur)="onCampoBlur('apoderado-apellidos')">
+                @if (campoError('apoderado-apellidos'); as err) { <p class="form-error mt-1">{{ err }}</p> }
+              </div>
+              <div class="form-group">
+                <label class="form-label">DNI</label>
+                <input class="form-input" [ngClass]="claseCampo('apoderado-dni')"
+                       [(ngModel)]="form.apoderado.dni"
+                       (ngModelChange)="onCampoFormChange('apoderado-dni')"
+                       (blur)="onCampoBlur('apoderado-dni')" maxlength="8" inputmode="numeric">
+                @if (campoError('apoderado-dni'); as err) { <p class="form-error mt-1">{{ err }}</p> }
+              </div>
+              <div class="form-group">
+                <label class="form-label">Telefono</label>
+                <input class="form-input" [ngClass]="claseCampo('apoderado-telefono')"
+                       [(ngModel)]="form.apoderado.telefono"
+                       (ngModelChange)="onCampoFormChange('apoderado-telefono')"
+                       (blur)="onCampoBlur('apoderado-telefono')">
+                @if (campoError('apoderado-telefono'); as err) { <p class="form-error mt-1">{{ err }}</p> }
+              </div>
+              <div class="form-group">
+                <label class="form-label">Email</label>
+                <input class="form-input" type="email" [ngClass]="claseCampo('apoderado-email')"
+                       [(ngModel)]="form.apoderado.email"
+                       (ngModelChange)="onCampoFormChange('apoderado-email')"
+                       (blur)="onCampoBlur('apoderado-email')">
+                @if (campoError('apoderado-email'); as err) { <p class="form-error mt-1">{{ err }}</p> }
+              </div>
               <div class="form-group"><label class="form-label">Relacion con el alumno</label><input class="form-input" [(ngModel)]="form.apoderado.trabajo" placeholder="Ej: Tio, Abuelo..."></div>
             </div>
           </div>
+
+          @if (form.id && puedeVerAuditoria() && historialReciente().length) {
+            <div class="rounded-xl border border-indigo-100 bg-indigo-50/50 p-4">
+              <p class="text-xs font-semibold text-indigo-700 uppercase tracking-wide mb-2">Últimos cambios registrados</p>
+              <ul class="space-y-2">
+                @for (h of historialReciente(); track h.id) {
+                  <li class="text-xs text-gray-600">
+                    <span class="font-medium text-gray-800">{{ h.fechaDisplay }} {{ h.horaDisplay }}</span>
+                    · {{ h.actorNombre }} · {{ h.motivo }}
+                  </li>
+                }
+              </ul>
+            </div>
+          }
+
+          @if (form.id) {
+            <div class="form-group">
+              <label class="form-label">Motivo de la actualización *</label>
+              <textarea class="form-input min-h-[4rem]" rows="2"
+                [(ngModel)]="auditMotivo"
+                placeholder="Ej: Corrección de domicilio solicitada por apoderado"
+                aria-describedby="audit-motivo-hint"></textarea>
+              <p id="audit-motivo-hint" class="text-xs text-gray-400 mt-1">
+                Obligatorio para trazabilidad. Quedará registrado en el historial de auditoría.
+              </p>
+              @if (intentoGuardar() && auditMotivo.trim().length < 3) {
+                <p class="form-error mt-1">Indique un motivo de al menos 3 caracteres.</p>
+              }
+            </div>
+          }
 
           @if (errorForm) {
             <div class="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
@@ -465,10 +584,20 @@ const CATALOGO_DEFAULT: Record<string, DocRequerido[]> = {
             </div>
           }
         </div>
-        <div class="flex gap-2 px-6 py-4 border-t bg-gray-50 shrink-0">
-          <button class="btn btn-primary flex-1" (click)="guardarForm()">
+        <div class="flex flex-wrap gap-2 px-6 py-4 border-t bg-gray-50 shrink-0">
+          @if (form.id && puedeVerAuditoria()) {
+            <a class="btn btn-secondary w-full sm:w-auto"
+               [routerLink]="['/estudiantes/auditoria-cambios']"
+               [queryParams]="{ studentId: form.id }">
+              <span class="icon icon-sm">history_edu</span> Ver historial de cambios
+            </a>
+          }
+          <button class="btn btn-primary flex-1 min-w-[10rem]"
+                  [disabled]="!puedeGuardarForm() || guardandoForm()"
+                  [title]="puedeGuardarForm() ? '' : 'Completa nombres, apellidos, DNI, fecha de nacimiento y grado'"
+                  (click)="guardarForm()">
             <span class="icon">{{ form.id ? 'save' : 'person_add' }}</span>
-            {{ form.id ? 'Guardar cambios' : 'Registrar estudiante' }}
+            {{ guardandoForm() ? 'Guardando…' : (form.id ? 'Guardar cambios' : 'Registrar estudiante') }}
           </button>
           <button class="btn btn-secondary" (click)="cerrarDrawerForm()">Cancelar</button>
         </div>
@@ -674,14 +803,30 @@ const CATALOGO_DEFAULT: Record<string, DocRequerido[]> = {
           @if (tabExp() === 'representantes') {
             <div class="space-y-4 animate-fade-in">
               @for (rep of representantes(expActivo()!); track rep.tipo) {
-                <div class="card p-4">
+                <div class="card p-4 overflow-hidden"
+                  [ngClass]="rep.esPrincipal
+                    ? 'border-2 border-indigo-200 bg-gradient-to-br from-indigo-50/90 via-white to-white shadow-sm'
+                    : ''">
                   <div class="flex items-center gap-2 mb-3">
-                    <span class="icon text-indigo-500">{{ rep.tipo === 'Padre' ? 'man' : rep.tipo === 'Madre' ? 'woman' : 'supervisor_account' }}</span>
-                    <span class="font-semibold text-gray-800">{{ rep.tipo }}</span>
-                    @if (!rep.datos.nombres) { <span class="badge badge-gray text-xs">No registrado</span> }
+                    <span class="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+                      [ngClass]="rep.esPrincipal ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-indigo-500'">
+                      <span class="icon icon-sm">{{ repIcon(rep) }}</span>
+                    </span>
+                    <div class="flex flex-wrap items-center gap-2 min-w-0">
+                      <span class="font-semibold" [ngClass]="rep.esPrincipal ? 'text-indigo-900' : 'text-gray-800'">
+                        {{ rep.esPrincipal ? 'Apoderado principal' : rep.tipo }}
+                      </span>
+                      @if (rep.esPrincipal) {
+                        <span class="inline-flex items-center gap-0.5 text-[10px] bg-indigo-600 text-white px-2 py-0.5 rounded-full font-semibold">
+                          <span class="icon" style="font-size:11px">star</span> Contacto principal
+                        </span>
+                      }
+                      @if (!rep.datos.nombres) { <span class="badge badge-gray text-xs">No registrado</span> }
+                    </div>
                   </div>
                   @if (rep.datos.nombres) {
-                    <div class="grid grid-cols-2 gap-2 text-sm">
+                    <div class="grid grid-cols-2 gap-2 text-sm"
+                      [ngClass]="rep.esPrincipal ? 'pl-11' : ''">
                       <div><span class="text-gray-400 text-xs">Nombre</span><div class="font-medium">{{ rep.datos.nombres }} {{ rep.datos.apellidos }}</div></div>
                       <div><span class="text-gray-400 text-xs">DNI</span><div class="font-medium">{{ rep.datos.dni }}</div></div>
                       <div><span class="text-gray-400 text-xs">Telefono</span><div class="font-medium">{{ rep.datos.telefono }}</div></div>
@@ -689,7 +834,7 @@ const CATALOGO_DEFAULT: Record<string, DocRequerido[]> = {
                       <div class="col-span-2"><span class="text-gray-400 text-xs">Trabajo / Ocupacion</span><div class="font-medium">{{ rep.datos.trabajo || '—' }}</div></div>
                     </div>
                   } @else {
-                    <p class="text-sm text-gray-400 italic">Sin datos registrados</p>
+                    <p class="text-sm text-gray-400 italic" [ngClass]="rep.esPrincipal ? 'pl-11' : ''">Sin datos registrados</p>
                   }
                 </div>
               }
@@ -928,7 +1073,19 @@ const CATALOGO_DEFAULT: Record<string, DocRequerido[]> = {
 })
 export class EstudiantesListComponent implements OnInit {
   private readonly layout = inject(LayoutService);
+  private readonly auth = inject(AuthService);
+  readonly tenant = inject(TenantContextService);
   private readonly expedientesSvc = inject(ExpedientesService);
+  private readonly auditoriaSvc = inject(EstudianteAuditoriaService);
+  private readonly _tenantReloadReady = setupTenantReload(
+    () => this.recargarPagina(),
+    {
+      onBeforeReload: () => {
+        this.limpiarUiInstitucion();
+        this.expedientesSvc.reset();
+      },
+    },
+  );
   readonly Math = Math;
   readonly POR_PAGINA = 10;
   readonly loading = this.expedientesSvc.loading;
@@ -940,6 +1097,10 @@ export class EstudiantesListComponent implements OnInit {
   tabExp         = signal('personal');
   paginaActual   = signal(1);
   errorForm      = '';
+  fieldErrors = signal<ErroresCampoEstudiante>({});
+  camposTocados = signal<Record<string, true>>({});
+  intentoGuardar = signal(false);
+  guardandoForm = signal(false);
   docVisor        = signal<Documento | null>(null);
   docNuevoAbierto = signal(false);
   docNuevo: Documento = { tipo:'', numero:'', estado:'pendiente', fechaEntrega:'', imagenUrl:'' };
@@ -950,8 +1111,8 @@ export class EstudiantesListComponent implements OnInit {
   panelReqAbierto  = signal(true);
   nuevoDocReqTipo  = '';
   nuevoDocReqObligatorio = true;
-  private readonly _catalogo = signal<Record<string, DocRequerido[]>>(
-    JSON.parse(JSON.stringify(CATALOGO_DEFAULT))
+  private readonly _catalogo = signal<Record<string, DocumentoRequerido[]>>(
+    JSON.parse(JSON.stringify(DOCUMENTOS_REQUISITOS))
   );
 
   tabsExp = [
@@ -964,6 +1125,7 @@ export class EstudiantesListComponent implements OnInit {
   readonly filtroQ = signal('');
   readonly filtroGrado = signal('');
   readonly filtroEstado = signal('');
+  readonly filtroDocumento = signal('');
 
   grados = ['1° Primaria','2° Primaria','3° Primaria','4° Primaria','5° Primaria','6° Primaria',
             '1° Secundaria','2° Secundaria','3° Secundaria','4° Secundaria','5° Secundaria'];
@@ -974,25 +1136,32 @@ export class EstudiantesListComponent implements OnInit {
   readonly expActivo = this._expActivo.asReadonly();
 
   form: Estudiante = estudianteVacio(0);
+  auditMotivo = '';
+  registroSinDocumento = false;
+  sinDocumentoMotivo = '';
+  sinDocumentoSustento = '';
+  confirmarDuplicado = false;
+  regularizarDni = '';
+  regularizarMotivo = '';
+  readonly coincidenciasDuplicado = signal<Array<{ id: number; codigo: string; coincidencias: string[] }>>([]);
+  readonly historialReciente = signal<EstudianteChangeLog[]>([]);
+  /** En zoneless, mutar `form` no dispara CD; este tick recalcula puedeGuardarForm. */
+  private readonly formRevision = signal(0);
+  readonly puedeGuardarForm = computed(() => {
+    this.formRevision();
+    return estudianteFormularioMinimoListo(this.form, this.registroSinDocumento);
+  });
 
   // ── Computed ──
-  readonly filtrados = computed(() => {
-    const q = this.filtroQ();
-    const grado = this.filtroGrado();
-    const estado = this.filtroEstado();
-    const query = q.toLowerCase();
-    return this.expedientesSvc.estudiantes().filter(e => {
-      const matchQ = !query || `${e.nombres} ${e.apellidos} ${e.dni} ${e.codigo}`.toLowerCase().includes(query);
-      const matchG = !grado  || e.grado === grado;
-      const matchE = !estado || e.estado === estado;
-      return matchQ && matchG && matchE;
-    });
-  });
-  readonly totalFiltrados = computed(() => this.filtrados().length);
-  readonly totalPaginas   = computed(() => Math.max(1, Math.ceil(this.totalFiltrados() / this.POR_PAGINA)));
-  readonly inicio         = computed(() => (this.paginaActual() - 1) * this.POR_PAGINA);
-  readonly fin            = computed(() => Math.min(this.inicio() + this.POR_PAGINA, this.totalFiltrados()));
-  readonly paginados      = computed(() => this.filtrados().slice(this.inicio(), this.fin()));
+  readonly totalFiltrados = computed(() => this.expedientesSvc.total());
+  readonly totalPaginas = computed(() =>
+    Math.max(1, Math.ceil(this.totalFiltrados() / this.POR_PAGINA)),
+  );
+  readonly inicio = computed(() => (this.paginaActual() - 1) * this.POR_PAGINA);
+  readonly fin = computed(() =>
+    Math.min(this.inicio() + this.POR_PAGINA, this.totalFiltrados()),
+  );
+  readonly paginados = computed(() => this.expedientesSvc.estudiantes());
   readonly paginas        = computed(() => {
     const total = this.totalPaginas(); const actual = this.paginaActual();
     const ini = Math.max(1, actual - 2); const fin = Math.min(total, actual + 2);
@@ -1010,10 +1179,68 @@ export class EstudiantesListComponent implements OnInit {
   readonly estudiantesVarones = computed(
     () => this.expedientesSvc.stats()?.varones ?? this.expedientesSvc.estudiantes().filter(e => e.sexo === 'M').length,
   );
+  readonly pendientesRegularizacion = computed(
+    () => this.expedientesSvc.estudiantes().filter(e => e.estadoDocumento === 'pendiente_regularizacion').length,
+  );
 
   ngOnInit(): void {
     this.layout.setTitle('Gestion de Estudiantes');
-    this.expedientesSvc.load();
+    if (this.tenant.requiresSelection()) {
+      this.limpiarUiInstitucion();
+      this.expedientesSvc.reset();
+    } else {
+      this.recargarPagina();
+    }
+    markTenantReloadReady(this._tenantReloadReady);
+  }
+
+  private limpiarUiInstitucion(): void {
+    this.drawerForm.set(false);
+    this.drawerExp.set(false);
+    this._expActivo.set(null);
+    this.paginaActual.set(1);
+    this.filtroQ.set('');
+    this.filtroGrado.set('');
+    this.filtroEstado.set('');
+    this.filtroDocumento.set('');
+  }
+
+  recargarPagina(): void {
+    if (this.tenant.requiresSelection()) {
+      this.expedientesSvc.reset();
+      return;
+    }
+    this.expedientesSvc.load({
+      page: this.paginaActual(),
+      pageSize: this.POR_PAGINA,
+      q: this.filtroQ(),
+      grado: this.filtroGrado(),
+      estado: this.filtroEstado(),
+      estadoDocumento: this.filtroDocumento(),
+      immediate: true,
+    });
+  }
+
+  onFiltroChange(): void {
+    this.paginaActual.set(1);
+    this.recargarPagina();
+  }
+
+  irPagina(p: number): void {
+    this.paginaActual.set(p);
+    this.recargarPagina();
+  }
+
+  puedeVerAuditoria(): boolean {
+    return this.auth.hasAnyPermiso('estudiantes.expediente', 'admin.reportes');
+  }
+
+  puedeGestionarVinculos(): boolean {
+    return this.auth.hasAnyPermiso(
+      'estudiantes.representantes',
+      'estudiantes.expediente',
+      'estudiantes.editar',
+    );
   }
 
   exportarCsv(): void {
@@ -1022,6 +1249,7 @@ export class EstudiantesListComponent implements OnInit {
       q: this.filtroQ(),
       grado: this.filtroGrado(),
       estado: this.filtroEstado(),
+      estadoDocumento: this.filtroDocumento(),
     }).subscribe({
       next: (blob) => {
         const stamp = new Date().toISOString().slice(0, 10);
@@ -1044,7 +1272,23 @@ export class EstudiantesListComponent implements OnInit {
     this.filtroQ.set('');
     this.filtroGrado.set('');
     this.filtroEstado.set('');
+    this.filtroDocumento.set('');
     this.paginaActual.set(1);
+    this.recargarPagina();
+  }
+
+  verPendientesRegularizacion(): void {
+    this.filtroDocumento.set('pendiente_regularizacion');
+    this.paginaActual.set(1);
+    this.recargarPagina();
+  }
+
+  toggleFiltroPendientesRegularizacion(): void {
+    this.filtroDocumento.set(
+      this.filtroDocumento() === 'pendiente_regularizacion' ? '' : 'pendiente_regularizacion',
+    );
+    this.paginaActual.set(1);
+    this.recargarPagina();
   }
 
   iniciales(n: string, a: string) { return ((n?.[0] ?? '') + (a?.[0] ?? '')).toUpperCase(); }
@@ -1054,52 +1298,260 @@ export class EstudiantesListComponent implements OnInit {
     return `${d}/${m}/${y}`;
   }
   representantes(e: Estudiante) {
-    return [{ tipo:'Padre', datos:e.padre }, { tipo:'Madre', datos:e.madre }, { tipo:'Apoderado', datos:e.apoderado }];
+    return [
+      { tipo: 'Apoderado', datos: e.apoderado, esPrincipal: true },
+      { tipo: 'Padre', datos: e.padre, esPrincipal: false },
+      { tipo: 'Madre', datos: e.madre, esPrincipal: false },
+    ];
+  }
+
+  repIcon(rep: { tipo: string; esPrincipal: boolean }): string {
+    if (rep.esPrincipal) return 'verified_user';
+    if (rep.tipo === 'Padre') return 'man';
+    if (rep.tipo === 'Madre') return 'woman';
+    return 'supervisor_account';
   }
 
   abrirDrawerNuevo(): void {
     this.form = estudianteVacio(0);
+    this.auditMotivo = '';
+    this.registroSinDocumento = false;
+    this.sinDocumentoMotivo = '';
+    this.sinDocumentoSustento = '';
+    this.confirmarDuplicado = false;
+    this.coincidenciasDuplicado.set([]);
+    this.regularizarDni = '';
+    this.regularizarMotivo = '';
+    this.historialReciente.set([]);
     this.errorForm = '';
+    this.resetValidacionForm();
+    this.formRevision.update((n) => n + 1);
     this.drawerForm.set(true);
   }
 
   abrirDrawerEditar(e: Estudiante): void {
     this.form = JSON.parse(JSON.stringify(e)); // deep copy
+    this.auditMotivo = '';
+    this.registroSinDocumento = false;
+    this.regularizarDni = '';
+    this.regularizarMotivo = '';
+    this.coincidenciasDuplicado.set([]);
+    this.historialReciente.set([]);
     this.errorForm = '';
+    this.resetValidacionForm();
+    this.formRevision.update((n) => n + 1);
     this.drawerForm.set(true);
     this.drawerExp.set(false);
+    if (this.puedeVerAuditoria()) {
+      this.auditoriaSvc.loadByStudent(e.id, 1, 5).subscribe({
+        next: (res) => this.historialReciente.set(res.items),
+        error: () => this.historialReciente.set([]),
+      });
+    }
   }
 
-  cerrarDrawerForm(): void { this.drawerForm.set(false); }
+  cerrarDrawerForm(): void {
+    this.drawerForm.set(false);
+    this.resetValidacionForm();
+    this.guardandoForm.set(false);
+  }
+
+  onToggleSinDocumento(): void {
+    this.coincidenciasDuplicado.set([]);
+    this.confirmarDuplicado = false;
+    if (this.registroSinDocumento && this.form.nombres.trim() && this.form.apellidos.trim()) {
+      this.buscarCoincidenciasSinDocumento();
+    }
+  }
+
+  buscarCoincidenciasSinDocumento(): void {
+    if (!this.registroSinDocumento || this.form.id) return;
+    this.expedientesSvc.checkSinDocumentoDuplicates(this.form).subscribe({
+      next: (items) => this.coincidenciasDuplicado.set(items),
+      error: () => this.coincidenciasDuplicado.set([]),
+    });
+  }
+
+  regularizarDocumento(): void {
+    if (!this.form.id) return;
+    if (this.regularizarDni.trim().length < 4) {
+      this.errorForm = 'Ingrese un número de documento válido.';
+      return;
+    }
+    if (this.regularizarMotivo.trim().length < 3) {
+      this.errorForm = 'Indique el motivo de la regularización.';
+      return;
+    }
+    this.guardandoForm.set(true);
+    this.errorForm = '';
+    this.expedientesSvc
+      .regularizarDocumento(this.form.id, this.regularizarDni.trim(), this.regularizarMotivo.trim())
+      .subscribe({
+        next: (updated) => {
+          this.form = { ...updated };
+          this.regularizarDni = '';
+          this.regularizarMotivo = '';
+          this.guardandoForm.set(false);
+        },
+        error: (err: { error?: { message?: string }; status?: number }) => {
+          this.errorForm =
+            err?.status === 403
+              ? 'No tiene permiso para regularizar el documento.'
+              : err?.error?.message ?? 'No se pudo regularizar el documento.';
+          this.guardandoForm.set(false);
+        },
+      });
+  }
+
+  private resetValidacionForm(): void {
+    this.fieldErrors.set({});
+    this.camposTocados.set({});
+    this.intentoGuardar.set(false);
+  }
 
   guardarForm(): void {
-    if (!this.form.nombres.trim() || !this.form.apellidos.trim()) {
-      this.errorForm = 'Nombres y apellidos son obligatorios.'; return;
+    this.intentoGuardar.set(true);
+    if (!this.puedeGuardarForm()) {
+      this.validarCamposMinimosEnVivo();
+      this.errorForm = 'Completa los campos obligatorios del estudiante.';
+      return;
     }
-    if (this.form.dni.length < 8) {
-      this.errorForm = 'El DNI debe tener 8 digitos.'; return;
-    }
-    if (!this.form.grado) {
-      this.errorForm = 'Selecciona el grado.'; return;
-    }
-    if (!this.form.email) {
-      this.form.email = `${this.form.dni}@estudiante.pe`;
+
+    const errors = validarEstudianteForm(this.form);
+    this.fieldErrors.set(errors);
+    if (Object.keys(errors).length) {
+      this.errorForm = primerErrorEstudiante(errors) ?? 'Revisa los datos del formulario.';
+      return;
     }
 
     const isNew = !this.form.id;
+    if (!isNew && this.auditMotivo.trim().length < 3) {
+      this.errorForm = 'Indique el motivo de la actualización (mínimo 3 caracteres).';
+      return;
+    }
+
+    if (isNew && this.registroSinDocumento) {
+      if (this.sinDocumentoMotivo.trim().length < 3 || this.sinDocumentoSustento.trim().length < 3) {
+        this.errorForm = 'Indique motivo y sustento del registro sin documento (mín. 3 caracteres).';
+        return;
+      }
+      if (this.coincidenciasDuplicado().length && !this.confirmarDuplicado) {
+        this.errorForm = 'Confirme que no se trata de un estudiante duplicado.';
+        return;
+      }
+    }
+
+    this.errorForm = '';
+
+    if (!this.registroSinDocumento && !this.form.email) {
+      this.form.email = `${this.form.dni.trim()}@estudiante.pe`;
+    }
+
+    this.guardandoForm.set(true);
     const req = isNew
-      ? this.expedientesSvc.create(this.form)
-      : this.expedientesSvc.update(this.form);
+      ? (this.registroSinDocumento
+        ? this.expedientesSvc.createSinDocumento(
+            this.form,
+            this.sinDocumentoMotivo.trim(),
+            this.sinDocumentoSustento.trim(),
+            this.confirmarDuplicado,
+          )
+        : this.expedientesSvc.create(this.form))
+      : this.expedientesSvc.update(this.form, this.auditMotivo.trim());
 
     req.subscribe({
       next: () => {
         this.drawerForm.set(false);
         this.errorForm = '';
+        this.resetValidacionForm();
+        this.guardandoForm.set(false);
       },
-      error: () => {
-        this.errorForm = 'No se pudo guardar el expediente.';
+      error: (err: { error?: { message?: string | string[]; coincidencias?: unknown[] }; status?: number }) => {
+        const raw = err?.error?.message;
+        const msg = Array.isArray(raw) ? raw[0] : raw;
+        if (err?.status === 409 && err?.error?.coincidencias) {
+          this.coincidenciasDuplicado.set(
+            err.error.coincidencias as Array<{ id: number; codigo: string; coincidencias: string[] }>,
+          );
+          this.errorForm = typeof msg === 'string' ? msg : 'Se detectaron posibles coincidencias.';
+        } else if (err?.status === 400 && msg) {
+          this.errorForm = msg;
+        } else if (err?.status === 403) {
+          this.errorForm = 'No tiene permiso para editar datos del estudiante.';
+        } else {
+          this.errorForm = msg ?? 'No se pudo guardar el expediente.';
+        }
+        this.guardandoForm.set(false);
       },
     });
+  }
+
+  onCampoBlur(key: string): void {
+    this.camposTocados.update((t) => ({ ...t, [key]: true }));
+    this.validarCampoEnVivo(key);
+  }
+
+  onCampoFormChange(key: string): void {
+    this.normalizarCampoDocumento(key);
+    this.formRevision.update((n) => n + 1);
+
+    if (this.camposTocados()[key] || this.intentoGuardar() || this.fieldErrors()[key]) {
+      this.validarCampoEnVivo(key);
+    } else {
+      this.quitarErrorCampo(key);
+    }
+  }
+
+  private normalizarCampoDocumento(key: string): void {
+    if (key === 'dni') {
+      this.form.dni = this.form.dni.replace(/\D/g, '').slice(0, 8);
+      return;
+    }
+
+    const repKey = key.match(/^(padre|madre|apoderado)-dni$/);
+    if (repKey) {
+      const prefix = repKey[1] as 'padre' | 'madre' | 'apoderado';
+      this.form[prefix].dni = this.form[prefix].dni.replace(/\D/g, '').slice(0, 8);
+    }
+  }
+
+  private validarCamposMinimosEnVivo(): void {
+    for (const key of ['nombres', 'apellidos', 'dni', 'fechaNac', 'grado']) {
+      this.camposTocados.update((t) => ({ ...t, [key]: true }));
+      this.validarCampoEnVivo(key);
+    }
+  }
+
+  private validarCampoEnVivo(key: string): void {
+    const err = validarCampoEstudiante(this.form, key);
+    if (err) {
+      this.fieldErrors.update((errors) => ({ ...errors, [key]: err }));
+    } else {
+      this.quitarErrorCampo(key);
+    }
+  }
+
+  private quitarErrorCampo(key: string): void {
+    if (!this.fieldErrors()[key]) return;
+    this.fieldErrors.update((errors) => {
+      const next = { ...errors };
+      delete next[key];
+      return next;
+    });
+    if (!Object.keys(this.fieldErrors()).length) this.errorForm = '';
+  }
+
+  campoError(key: string): string | null {
+    if (!this.camposTocados()[key] && !this.intentoGuardar()) return null;
+    return this.fieldErrors()[key] ?? null;
+  }
+
+  campoInvalido(key: string): boolean {
+    return !!this.campoError(key);
+  }
+
+  claseCampo(key: string): string {
+    return this.campoInvalido(key) ? 'border-red-400 focus:border-red-500 focus:ring-red-200' : '';
   }
 
   eliminar(id: number): void {
@@ -1139,7 +1591,7 @@ export class EstudiantesListComponent implements OnInit {
   }
 
   // ── Catálogo requisitos ──
-  docsDeGrado(grado: string): DocRequerido[] { return this._catalogo()[grado] ?? []; }
+  docsDeGrado(grado: string): DocumentoRequerido[] { return this._catalogo()[grado] ?? []; }
 
   abrirModalRequisitos(): void {
     this.gradoReqActivo.set(this.expActivo()?.grado ?? this.grados[0]);
@@ -1257,8 +1709,12 @@ export class EstudiantesListComponent implements OnInit {
   }
 
   abrirExpediente(e: Estudiante): void {
-    this.expedientesSvc.refreshOne(e.id).subscribe({
-      next: () => this._syncExpActivo(e.id, true),
+    this.expedientesSvc.loadFull(e.id).subscribe({
+      next: (fresh) => {
+        this._expActivo.set({ ...fresh });
+        this.tabExp.set('personal');
+        this.drawerExp.set(true);
+      },
     });
   }
 

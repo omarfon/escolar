@@ -62,6 +62,34 @@ export interface HistorialCambioSeccion {
   createdAt: string;
 }
 
+export interface SolicitudCambioSeccion {
+  id: number;
+  studentId: number;
+  estudiante: string;
+  dni: string;
+  tipoDocumento: string;
+  nivel: string;
+  grado: string;
+  seccionActual: string;
+  seccionDeseada: string | null;
+  motivo: string;
+  observacion: string;
+  autorizadoPor: string;
+  solicitadoPor: string;
+  anioEscolar: number;
+  estado: 'pendiente' | 'cancelado';
+  createdAt: string;
+}
+
+export interface CreateSolicitudCambioSeccionPayload {
+  studentId: number;
+  seccionDeseada?: string;
+  motivo: string;
+  autorizadoPor: string;
+  observacion?: string;
+  solicitadoPor?: string;
+}
+
 export const MOTIVOS_CAMBIO: { value: MotivoCambioSeccion; label: string }[] = [
   { value: 'equilibrio', label: 'Equilibrio de aulas' },
   { value: 'solicitud_apoderado', label: 'Solicitud del apoderado' },

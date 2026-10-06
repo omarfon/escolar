@@ -142,6 +142,128 @@ export function apoderadoTieneDatos(ap: ApoderadoForm): boolean {
   );
 }
 
+export function validarNombrePersona(
+  valor: string,
+  etiqueta: string,
+  requerido = true,
+): string | null {
+  const v = valor.trim();
+  if (!v) return requerido ? `Ingresa ${etiqueta}.` : null;
+  if (v.length < 2) return `${etiqueta} debe tener al menos 2 caracteres.`;
+  if (!/^[\p{L}\s'.-]+$/u.test(v)) {
+    return `${etiqueta} solo puede contener letras.`;
+  }
+  return null;
+}
+
+export function validarFechaNacimiento(fecha: string): string | null {
+  if (!fecha.trim()) return null;
+  const d = new Date(`${fecha}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return 'La fecha de nacimiento no es válida.';
+  const hoy = new Date();
+  hoy.setHours(0, 0, 0, 0);
+  if (d > hoy) return 'La fecha de nacimiento no puede ser futura.';
+  const edadMin = new Date(hoy);
+  edadMin.setFullYear(edadMin.getFullYear() - 25);
+  if (d < edadMin) return 'Verifica la fecha de nacimiento del estudiante.';
+  return null;
+}
+
+export function validarDireccion(direccion: string): string | null {
+  const v = direccion.trim();
+  if (!v) return 'Ingresa la dirección de domicilio.';
+  if (v.length < 5) return 'La dirección debe ser más descriptiva (mín. 5 caracteres).';
+  return null;
+}
+
+export type ErroresCampoMatricula = Record<string, string>;
+
+export function validarEstudianteCampos(
+  form: Pick<
+    NuevaMatriculaForm,
+    | 'nombres'
+    | 'apellidoPaterno'
+    | 'apellidoMaterno'
+    | 'tipoDocumento'
+    | 'dni'
+    | 'fechaNac'
+    | 'telEmergencia'
+    | 'direccion'
+  >,
+): ErroresCampoMatricula {
+  const errors: ErroresCampoMatricula = {};
+
+  const nombresErr = validarNombrePersona(form.nombres, 'los nombres');
+  if (nombresErr) errors['nombres'] = nombresErr;
+
+  const paternoErr = validarNombrePersona(form.apellidoPaterno, 'el apellido paterno');
+  if (paternoErr) errors['apellidoPaterno'] = paternoErr;
+
+  const maternoErr = validarNombrePersona(form.apellidoMaterno, 'el apellido materno');
+  if (maternoErr) errors['apellidoMaterno'] = maternoErr;
+
+  const docErr = validarNumeroDocumento(form.tipoDocumento, form.dni);
+  if (docErr) errors['dni'] = docErr;
+
+  const fechaErr = validarFechaNacimiento(form.fechaNac);
+  if (fechaErr) errors['fechaNac'] = fechaErr;
+
+  const telErr = validarCelular(form.telEmergencia, false);
+  if (telErr) errors['telEmergencia'] = telErr;
+
+  const dirErr = validarDireccion(form.direccion);
+  if (dirErr) errors['direccion'] = dirErr;
+
+  return errors;
+}
+
+export function validarApoderadosCampos(apoderados: ApoderadoForm[]): ErroresCampoMatricula {
+  const errors: ErroresCampoMatricula = {};
+  const principal = apoderados.find((ap) => ap.esPrincipal);
+
+  if (!principal) {
+    errors['apoderados'] = 'Debe existir un apoderado principal.';
+    return errors;
+  }
+
+  for (let i = 0; i < apoderados.length; i++) {
+    const ap = apoderados[i];
+    const prefix = `ap-${i}`;
+    const esPrincipal = ap.esPrincipal;
+
+    if (!esPrincipal && !apoderadoTieneDatos(ap)) continue;
+
+    const obligatorio = esPrincipal || apoderadoTieneDatos(ap);
+
+    const nombresErr = validarNombrePersona(ap.nombres, 'los nombres', obligatorio);
+    if (nombresErr) errors[`${prefix}-nombres`] = nombresErr;
+
+    const paternoErr = validarNombrePersona(ap.apellidoPaterno, 'el apellido paterno', obligatorio);
+    if (paternoErr) errors[`${prefix}-apellidoPaterno`] = paternoErr;
+
+    const maternoErr = validarNombrePersona(ap.apellidoMaterno, 'el apellido materno', obligatorio);
+    if (maternoErr) errors[`${prefix}-apellidoMaterno`] = maternoErr;
+
+    if (obligatorio || ap.dni.trim()) {
+      const docErr = validarNumeroDocumento(ap.tipoDocumento, ap.dni);
+      if (docErr) errors[`${prefix}-dni`] = docErr;
+    }
+
+    const celErr = validarCelular(ap.celular, esPrincipal);
+    if (celErr) errors[`${prefix}-celular`] = celErr;
+
+    const emailErr = validarEmail(ap.email);
+    if (emailErr) errors[`${prefix}-email`] = emailErr;
+  }
+
+  return errors;
+}
+
+export function primerErrorMatricula(errors: ErroresCampoMatricula): string | null {
+  const keys = Object.keys(errors);
+  return keys.length ? errors[keys[0]] : null;
+}
+
 export function validarApoderado(ap: ApoderadoForm, esPrincipal: boolean): string | null {
   if (!esPrincipal && !apoderadoTieneDatos(ap)) return null;
 

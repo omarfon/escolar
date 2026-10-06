@@ -1,6 +1,7 @@
-﻿import { Component, computed, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { NgClass, TitleCasePipe } from '@angular/common';
+import { RouterLink } from '@angular/router';
 import { LayoutService } from '../../../core/layout/services/layout.service';
 import { OverlayPortalDirective } from '../../../core/overlay/overlay-portal.directive';
 import { InstitucionalService } from '../../administracion/institucional/institucional.service';
@@ -13,6 +14,13 @@ import {
   PrioridadEspera,
   EstadoEspera,
 } from './espera.model';
+import {
+  ErroresCampoEspera,
+  esperaFormularioMinimoListo,
+  primerErrorEspera,
+  validarCampoEspera,
+  validarEsperaForm,
+} from './espera-form.validation';
 
 function gradoKey(value: string): string {
   let t = value
@@ -29,7 +37,7 @@ function gradoKey(value: string): string {
 @Component({
   selector: 'app-espera',
   standalone: true,
-  imports: [FormsModule, NgClass, TitleCasePipe, OverlayPortalDirective],
+  imports: [FormsModule, NgClass, TitleCasePipe, OverlayPortalDirective, RouterLink],
   template: `
     <div class="space-y-5">
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -177,6 +185,16 @@ function gradoKey(value: string): string {
                             (click)="abrirModalAsignar(e)" [disabled]="!e.vacanteDisponible || svc.saving()">
                             <span class="icon icon-sm">how_to_reg</span>
                           </button>
+                          @if (e.estado === 'en_espera' || e.estado === 'notificado') {
+                            <a
+                              class="btn-icon text-teal-600 hover:bg-teal-50"
+                              title="Registrar evaluación"
+                              [routerLink]="['/matricula/evaluaciones']"
+                              [queryParams]="{ waitlistId: e.id }"
+                            >
+                              <span class="icon icon-sm">fact_check</span>
+                            </a>
+                          }
                           @if (e.estado === 'en_espera') {
                             <button class="btn-icon text-amber-500 hover:bg-amber-50" title="Notificar"
                               (click)="notificar(e.id)">
@@ -234,7 +252,7 @@ function gradoKey(value: string): string {
             <h3 class="font-semibold text-gray-900">
               {{ editando() ? 'Editar solicitud' : 'Nueva solicitud' }}
             </h3>
-            <p class="text-xs text-gray-500">Registro en lista de espera</p>
+            <p class="text-xs text-gray-500">Campos obligatorios marcados con *</p>
           </div>
           <button class="btn-icon text-gray-400" (click)="cerrarDrawer()"><span class="icon">close</span></button>
         </div>
@@ -243,45 +261,75 @@ function gradoKey(value: string): string {
           <div class="grid grid-cols-2 gap-3">
             <div class="form-group">
               <label class="form-label">Nombres *</label>
-              <input class="form-input" [(ngModel)]="form.nombres">
+              <input class="form-input" [ngClass]="claseCampo('nombres')"
+                     [ngModel]="form.nombres"
+                     (ngModelChange)="onCampoFormChange('nombres', $event)"
+                     (blur)="onCampoBlur('nombres')">
+              @if (campoError('nombres'); as err) { <p class="form-error mt-1">{{ err }}</p> }
             </div>
             <div class="form-group">
               <label class="form-label">Apellidos *</label>
-              <input class="form-input" [(ngModel)]="form.apellidos">
+              <input class="form-input" [ngClass]="claseCampo('apellidos')"
+                     [ngModel]="form.apellidos"
+                     (ngModelChange)="onCampoFormChange('apellidos', $event)"
+                     (blur)="onCampoBlur('apellidos')">
+              @if (campoError('apellidos'); as err) { <p class="form-error mt-1">{{ err }}</p> }
             </div>
           </div>
           <div class="grid grid-cols-2 gap-3">
             <div class="form-group">
               <label class="form-label">DNI *</label>
-              <input class="form-input" [(ngModel)]="form.dni" maxlength="8">
+              <input class="form-input" [ngClass]="claseCampo('dni')"
+                     [ngModel]="form.dni"
+                     (ngModelChange)="onCampoFormChange('dni', $event)"
+                     (blur)="onCampoBlur('dni')"
+                     maxlength="8" inputmode="numeric">
+              @if (campoError('dni'); as err) { <p class="form-error mt-1">{{ err }}</p> }
             </div>
             <div class="form-group">
               <label class="form-label">Telefono</label>
-              <input class="form-input" [(ngModel)]="form.telefono">
+              <input class="form-input" [ngClass]="claseCampo('telefono')"
+                     [ngModel]="form.telefono"
+                     (ngModelChange)="onCampoFormChange('telefono', $event)"
+                     (blur)="onCampoBlur('telefono')">
+              @if (campoError('telefono'); as err) { <p class="form-error mt-1">{{ err }}</p> }
             </div>
           </div>
           <div class="form-group">
             <label class="form-label">Email</label>
-            <input class="form-input" type="email" [(ngModel)]="form.email">
+            <input class="form-input" type="email" [ngClass]="claseCampo('email')"
+                   [ngModel]="form.email"
+                   (ngModelChange)="onCampoFormChange('email', $event)"
+                   (blur)="onCampoBlur('email')">
+            @if (campoError('email'); as err) { <p class="form-error mt-1">{{ err }}</p> }
           </div>
           <div class="grid grid-cols-2 gap-3">
             <div class="form-group">
               <label class="form-label">Nivel *</label>
-              <select class="form-select" [(ngModel)]="form.nivel" (ngModelChange)="form.grado = ''; form.seccionDeseada = ''">
+              <select class="form-select" [ngClass]="claseCampo('nivel')"
+                      [ngModel]="form.nivel"
+                      (ngModelChange)="onNivelChange($event)"
+                      (blur)="onCampoBlur('nivel')">
                 <option value="">Seleccionar</option>
                 @for (n of niveles(); track n.id) {
                   <option [value]="n.nombre">{{ n.nombre }}</option>
                 }
               </select>
+              @if (campoError('nivel'); as err) { <p class="form-error mt-1">{{ err }}</p> }
             </div>
             <div class="form-group">
               <label class="form-label">Grado *</label>
-              <select class="form-select" [(ngModel)]="form.grado" [disabled]="!form.nivel">
+              <select class="form-select" [ngClass]="claseCampo('grado')"
+                      [ngModel]="form.grado"
+                      (ngModelChange)="onCampoFormChange('grado', $event)"
+                      (blur)="onCampoBlur('grado')"
+                      [disabled]="!form.nivel">
                 <option value="">Seleccionar</option>
                 @for (g of gradosFormulario(); track g) {
                   <option [value]="g">{{ g }}</option>
                 }
               </select>
+              @if (campoError('grado'); as err) { <p class="form-error mt-1">{{ err }}</p> }
             </div>
           </div>
           <div class="grid grid-cols-2 gap-3">
@@ -305,7 +353,11 @@ function gradoKey(value: string): string {
           </div>
           <div class="form-group">
             <label class="form-label">Observacion</label>
-            <textarea class="form-input min-h-20" [(ngModel)]="form.observacion"></textarea>
+            <textarea class="form-input min-h-20" [ngClass]="claseCampo('observacion')"
+                      [ngModel]="form.observacion"
+                      (ngModelChange)="onCampoFormChange('observacion', $event)"
+                      (blur)="onCampoBlur('observacion')"></textarea>
+            @if (campoError('observacion'); as err) { <p class="form-error mt-1">{{ err }}</p> }
           </div>
           @if (errorForm()) {
             <div class="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{{ errorForm() }}</div>
@@ -313,7 +365,10 @@ function gradoKey(value: string): string {
         </div>
 
         <div class="px-6 py-4 border-t bg-gray-50 flex gap-2 shrink-0">
-          <button class="btn btn-primary flex-1" (click)="guardar()" [disabled]="svc.saving()">
+          <button class="btn btn-primary flex-1"
+                  (click)="guardar()"
+                  [disabled]="!puedeGuardarForm() || svc.saving()"
+                  [title]="puedeGuardarForm() ? '' : 'Completa nombres, apellidos, DNI, nivel y grado'">
             {{ svc.saving() ? 'Guardando...' : (editando() ? 'Guardar cambios' : 'Registrar solicitud') }}
           </button>
           <button class="btn btn-secondary" (click)="cerrarDrawer()">Cancelar</button>
@@ -405,6 +460,15 @@ export class EsperaComponent implements OnInit {
   readonly modalAsignar = signal<EsperaItem | null>(null);
   readonly errorForm = signal('');
   readonly notificacion = signal<{ mensaje: string; tipo: 'success' | 'error' } | null>(null);
+  fieldErrors = signal<ErroresCampoEspera>({});
+  camposTocados = signal<Record<string, true>>({});
+  intentoGuardar = signal(false);
+  private readonly formRevision = signal(0);
+
+  readonly puedeGuardarForm = computed(() => {
+    this.formRevision();
+    return esperaFormularioMinimoListo(this.form);
+  });
 
   private readonly _items = signal<EsperaItem[]>([]);
   private readonly _niveles = signal<Nivel[]>([]);
@@ -426,11 +490,13 @@ export class EsperaComponent implements OnInit {
   });
 
   readonly gradosFormulario = computed(() => {
+    this.formRevision();
     const nivel = this._niveles().find((n) => n.nombre === this.form.nivel);
     return nivel?.grados.map((g) => g.nombre) ?? [];
   });
 
   readonly seccionesFormulario = computed(() => {
+    this.formRevision();
     const nivel = this._niveles().find((n) => n.nombre === this.form.nivel);
     const grado = nivel?.grados.find((g) => gradoKey(g.nombre) === gradoKey(this.form.grado));
     return grado?.secciones.map((s) => s.nombre) ?? [];
@@ -529,7 +595,8 @@ export class EsperaComponent implements OnInit {
   abrirDrawer(): void {
     this.editando.set(null);
     this.form = this.formVacio();
-    this.errorForm.set('');
+    this.resetValidacionForm();
+    this.formRevision.update((n) => n + 1);
     this.drawerAbierto.set(true);
   }
 
@@ -547,29 +614,125 @@ export class EsperaComponent implements OnInit {
       prioridad: item.prioridad,
       observacion: item.observacion,
     };
-    this.errorForm.set('');
+    this.resetValidacionForm();
+    this.formRevision.update((n) => n + 1);
     this.drawerAbierto.set(true);
   }
 
   cerrarDrawer(): void {
     this.drawerAbierto.set(false);
     this.editando.set(null);
+    this.resetValidacionForm();
+  }
+
+  private resetValidacionForm(): void {
+    this.fieldErrors.set({});
+    this.camposTocados.set({});
+    this.intentoGuardar.set(false);
+    this.errorForm.set('');
+  }
+
+  onNivelChange(nivel: string): void {
+    this.form.nivel = nivel;
+    this.form.grado = '';
+    this.form.seccionDeseada = '';
+    this.formRevision.update((n) => n + 1);
+    this.onCampoFormChange('nivel', nivel);
+    this.quitarErrorCampo('grado');
+  }
+
+  onCampoBlur(key: string): void {
+    this.camposTocados.update((t) => ({ ...t, [key]: true }));
+    this.validarCampoEnVivo(key);
+  }
+
+  onCampoFormChange(key: string, value: string): void {
+    switch (key) {
+      case 'nombres':
+        this.form.nombres = value;
+        break;
+      case 'apellidos':
+        this.form.apellidos = value;
+        break;
+      case 'dni':
+        this.form.dni = value.replace(/\D/g, '').slice(0, 8);
+        break;
+      case 'telefono':
+        this.form.telefono = value;
+        break;
+      case 'email':
+        this.form.email = value;
+        break;
+      case 'nivel':
+        this.form.nivel = value;
+        break;
+      case 'grado':
+        this.form.grado = value;
+        break;
+      case 'observacion':
+        this.form.observacion = value;
+        break;
+    }
+    this.formRevision.update((n) => n + 1);
+
+    if (this.camposTocados()[key] || this.intentoGuardar() || this.fieldErrors()[key]) {
+      this.validarCampoEnVivo(key);
+    } else {
+      this.quitarErrorCampo(key);
+    }
+  }
+
+  private validarCamposMinimosEnVivo(): void {
+    for (const key of ['nombres', 'apellidos', 'dni', 'nivel', 'grado']) {
+      this.camposTocados.update((t) => ({ ...t, [key]: true }));
+      this.validarCampoEnVivo(key);
+    }
+  }
+
+  private validarCampoEnVivo(key: string): void {
+    const err = validarCampoEspera(this.form, key);
+    if (err) {
+      this.fieldErrors.update((errors) => ({ ...errors, [key]: err }));
+    } else {
+      this.quitarErrorCampo(key);
+    }
+  }
+
+  private quitarErrorCampo(key: string): void {
+    if (!this.fieldErrors()[key]) return;
+    this.fieldErrors.update((errors) => {
+      const next = { ...errors };
+      delete next[key];
+      return next;
+    });
+    if (!Object.keys(this.fieldErrors()).length) this.errorForm.set('');
+  }
+
+  campoError(key: string): string | null {
+    if (!this.camposTocados()[key] && !this.intentoGuardar()) return null;
+    return this.fieldErrors()[key] ?? null;
+  }
+
+  claseCampo(key: string): string {
+    return this.campoError(key) ? 'border-red-400 focus:border-red-500 focus:ring-red-200' : '';
   }
 
   guardar(): void {
+    this.intentoGuardar.set(true);
+    if (!this.puedeGuardarForm()) {
+      this.validarCamposMinimosEnVivo();
+      this.errorForm.set('Completa los campos obligatorios de la solicitud.');
+      return;
+    }
+
+    const errors = validarEsperaForm(this.form);
+    this.fieldErrors.set(errors);
+    if (Object.keys(errors).length) {
+      this.errorForm.set(primerErrorEspera(errors) ?? 'Revisa los datos del formulario.');
+      return;
+    }
+
     this.errorForm.set('');
-    if (!this.form.nombres.trim() || !this.form.apellidos.trim()) {
-      this.errorForm.set('Nombres y apellidos son obligatorios');
-      return;
-    }
-    if (!/^\d{8}$/.test(this.form.dni)) {
-      this.errorForm.set('El DNI debe tener 8 digitos');
-      return;
-    }
-    if (!this.form.nivel || !this.form.grado) {
-      this.errorForm.set('Selecciona nivel y grado');
-      return;
-    }
 
     const payload = {
       nombres: this.form.nombres.trim(),
@@ -590,10 +753,11 @@ export class EsperaComponent implements OnInit {
 
     req.subscribe({
       next: () => {
+        const eraEdicion = !!this.editando();
         this.cerrarDrawer();
         this.cargar();
         this.mostrarNotificacion(
-          this.editando() ? 'Solicitud actualizada' : 'Solicitud registrada en lista de espera',
+          eraEdicion ? 'Solicitud actualizada' : 'Solicitud registrada en lista de espera',
         );
       },
       error: (err) => {

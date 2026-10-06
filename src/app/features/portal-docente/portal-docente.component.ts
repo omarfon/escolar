@@ -1,4 +1,4 @@
-﻿import { Component, computed, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { NgClass } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
 import { LayoutService } from '../../core/layout/services/layout.service';
@@ -20,7 +20,7 @@ interface CursoCardView extends PortalDocenteCursoCard {
     <div class="animate-fade-in space-y-5">
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h2 class="text-2xl font-bold text-gray-900">Mi Aula</h2>
+          <h2 class="text-2xl font-bold text-gray-900">Mis Aulas</h2>
           <p class="text-sm text-gray-500 mt-0.5">
             Cursos y salones asignados
             @if (data(); as d) {
@@ -49,9 +49,9 @@ interface CursoCardView extends PortalDocenteCursoCard {
         @if (data(); as d) {
         <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
           @for (kpi of kpis(); track kpi.label) {
-            <div class="card p-4">
-              <p class="text-xs text-gray-400">{{ kpi.label }}</p>
-              <p class="text-2xl font-bold text-gray-900 mt-1">{{ kpi.value }}</p>
+            <div class="card px-3 py-2.5">
+              <p class="text-[11px] text-gray-400">{{ kpi.label }}</p>
+              <p class="text-xl font-bold text-gray-900 mt-0.5">{{ kpi.value }}</p>
             </div>
           }
         </div>
@@ -59,7 +59,7 @@ interface CursoCardView extends PortalDocenteCursoCard {
         <div>
           <div class="flex items-center justify-between mb-3">
             <h3 class="text-base font-bold text-gray-800 flex items-center gap-2">
-              <span class="icon text-indigo-600">school</span> Mi Aula
+              <span class="icon text-indigo-600">school</span> Mis Aulas
             </h3>
             <p class="text-xs text-gray-400">{{ d.cursos.length }} curso(s) asignado(s)</p>
           </div>
@@ -71,45 +71,41 @@ interface CursoCardView extends PortalDocenteCursoCard {
               <p class="text-xs text-gray-400 mt-2">Un administrador debe asignarte en Académico → Asignación docente.</p>
             </div>
           } @else {
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               @for (c of cursosView(); track c.id) {
-                <div class="card p-5 hover:shadow-md transition-shadow border-l-4" [ngClass]="c.borderColor">
-                  <div class="flex items-start justify-between mb-3">
+                <div class="card px-3 py-3 hover:shadow-md transition-shadow border-l-4" [ngClass]="c.borderColor">
+                  <div class="flex items-start justify-between gap-2 mb-2">
                     <div class="min-w-0">
                       <p class="text-xs font-medium text-indigo-600 truncate">{{ c.aulaLabel }}</p>
-                      <h3 class="font-bold text-gray-800 text-base mt-0.5">{{ c.cursoNombre }}</h3>
-                      <p class="text-sm text-gray-500">{{ c.gradoLabel }} · {{ c.alumnosCount }} alumno{{ c.alumnosCount === 1 ? '' : 's' }}</p>
-                      @if (c.aforo) {
-                        <p class="text-xs text-gray-400">Aforo salón: {{ c.aforo }}</p>
-                      }
-                      <p class="text-xs text-gray-400 mt-1">{{ c.horario }}</p>
-                      <p class="text-xs text-gray-400">{{ c.horasSemanales }} h/semana</p>
+                      <h3 class="font-bold text-gray-800 text-sm mt-0.5 leading-snug">{{ c.cursoNombre }}</h3>
+                      <p class="text-xs text-gray-500 mt-0.5">{{ c.gradoLabel }} · {{ c.alumnosCount }} alumno{{ c.alumnosCount === 1 ? '' : 's' }}</p>
+                      <p class="text-[11px] text-gray-400 mt-0.5">{{ c.horario }} · {{ c.horasSemanales }} h/sem</p>
                     </div>
-                    <div class="w-10 h-10 rounded-xl flex items-center justify-center text-white text-xl shrink-0" [ngClass]="c.iconBg">
+                    <div class="w-8 h-8 rounded-lg flex items-center justify-center text-white text-base shrink-0" [ngClass]="c.iconBg">
                       {{ c.emoji }}
                     </div>
                   </div>
 
-                  <div class="grid grid-cols-3 gap-2 mt-3">
+                  <div class="grid grid-cols-3 gap-1.5">
                     <button type="button" (click)="irAsistencia(c)"
-                      class="flex flex-col items-center gap-1 py-2.5 px-1 rounded-xl border-2 border-transparent bg-gray-50 hover:bg-emerald-50 hover:border-emerald-200 text-gray-600 hover:text-emerald-700 transition-all">
+                      class="flex flex-col items-center gap-0.5 py-1.5 px-1 rounded-lg border border-transparent bg-gray-50 hover:bg-emerald-50 hover:border-emerald-200 text-gray-600 hover:text-emerald-700 transition-all">
                       <span class="icon icon-sm">fact_check</span>
-                      <span class="text-xs font-medium">Asistencia</span>
+                      <span class="text-[10px] font-medium leading-tight">Asistencia</span>
                     </button>
                     <button type="button" (click)="irNotas(c)"
-                      class="flex flex-col items-center gap-1 py-2.5 px-1 rounded-xl border-2 border-transparent bg-gray-50 hover:bg-indigo-50 hover:border-indigo-200 text-gray-600 hover:text-indigo-700 transition-all">
+                      class="flex flex-col items-center gap-0.5 py-1.5 px-1 rounded-lg border border-transparent bg-gray-50 hover:bg-indigo-50 hover:border-indigo-200 text-gray-600 hover:text-indigo-700 transition-all">
                       <span class="icon icon-sm">grade</span>
-                      <span class="text-xs font-medium">Notas</span>
+                      <span class="text-[10px] font-medium leading-tight">Notas</span>
                     </button>
                     <button type="button" (click)="irRecursos(c)"
-                      class="flex flex-col items-center gap-1 py-2.5 px-1 rounded-xl border-2 border-transparent bg-gray-50 hover:bg-violet-50 hover:border-violet-200 text-gray-600 hover:text-violet-700 transition-all">
+                      class="flex flex-col items-center gap-0.5 py-1.5 px-1 rounded-lg border border-transparent bg-gray-50 hover:bg-violet-50 hover:border-violet-200 text-gray-600 hover:text-violet-700 transition-all">
                       <span class="icon icon-sm">attach_file</span>
-                      <span class="text-xs font-medium">Material</span>
+                      <span class="text-[10px] font-medium leading-tight">Material</span>
                     </button>
                     <button type="button" (click)="irTemario(c)"
-                      class="flex flex-col items-center gap-1 py-2.5 px-1 rounded-xl border-2 border-transparent bg-gray-50 hover:bg-teal-50 hover:border-teal-200 text-gray-600 hover:text-teal-700 transition-all col-span-3">
+                      class="flex flex-col items-center gap-0.5 py-1.5 px-1 rounded-lg border border-transparent bg-gray-50 hover:bg-teal-50 hover:border-teal-200 text-gray-600 hover:text-teal-700 transition-all col-span-3">
                       <span class="icon icon-sm">calendar_month</span>
-                      <span class="text-xs font-medium">Temario</span>
+                      <span class="text-[10px] font-medium leading-tight">Temario</span>
                     </button>
                   </div>
                 </div>
@@ -162,7 +158,7 @@ export class PortalDocenteComponent implements OnInit {
   });
 
   ngOnInit(): void {
-    this.layout.setTitle('Mi Aula');
+    this.layout.setTitle('Mis Aulas');
     this.cargar();
   }
 

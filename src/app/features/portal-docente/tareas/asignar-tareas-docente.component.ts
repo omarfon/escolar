@@ -44,15 +44,15 @@ import {
   } @else if (!salones().length) {
     <div class="card p-12 text-center text-gray-500">No tienes salones asignados.</div>
   } @else {
-    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
       @for (s of salones(); track salonKey(s)) {
-        <button type="button" class="card p-5 text-left hover:shadow-md border-l-4 border-l-indigo-500 transition-shadow"
+        <button type="button" class="card px-3 py-3 text-left hover:shadow-md border-l-4 border-l-indigo-500 transition-shadow"
           (click)="seleccionarSalon(s)">
-          <div class="text-xs font-semibold uppercase tracking-wide text-indigo-600">{{ s.nivel }}</div>
-          <h3 class="font-bold text-gray-800 text-lg mt-0.5">{{ s.grado }} "{{ s.seccion }}"</h3>
-          <p class="text-sm text-gray-500 mt-1">{{ s.totalAlumnos }} alumno(s)</p>
+          <div class="text-[10px] font-semibold uppercase tracking-wide text-indigo-600">{{ s.nivel }}</div>
+          <h3 class="font-bold text-gray-800 text-base leading-snug mt-0.5">{{ s.grado }} "{{ s.seccion }}"</h3>
+          <p class="text-xs text-gray-500 mt-0.5">{{ s.totalAlumnos }} alumno(s)</p>
           @if (s.cursos.length) {
-            <div class="mt-3 flex flex-wrap gap-1">
+            <div class="mt-2 flex flex-wrap gap-1">
               @for (c of s.cursos.slice(0, 3); track c) {
                 <span class="badge badge-gray text-[10px]">{{ c }}</span>
               }

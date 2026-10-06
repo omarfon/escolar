@@ -3,6 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { Observable, catchError, finalize, throwError } from 'rxjs';
 import { environment } from '@environments/environment';
 import {
+  CreateRolePayload,
   RolDto,
   RolesResponse,
   UpdateRolePermissionsPayload,
@@ -22,6 +23,18 @@ export class RolesService {
       catchError((err) => throwError(() => err)),
       finalize(() => this.loading.set(false)),
     );
+  }
+
+  crear(payload: CreateRolePayload): Observable<RolDto> {
+    this.saving.set(true);
+    return this.http.post<RolDto>(this.base, payload).pipe(
+      catchError((err) => throwError(() => err)),
+      finalize(() => this.saving.set(false)),
+    );
+  }
+
+  instituciones(): Observable<{ id: number; nombre: string }[]> {
+    return this.http.get<{ id: number; nombre: string }[]>(`${environment.apiUrl}/institution-directory`);
   }
 
   updatePermissions(codigo: string, payload: UpdateRolePermissionsPayload): Observable<RolDto> {

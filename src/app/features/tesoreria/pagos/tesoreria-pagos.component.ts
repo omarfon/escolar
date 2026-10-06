@@ -2,6 +2,7 @@
 import { FormsModule } from '@angular/forms';
 import { DecimalPipe, NgClass } from '@angular/common';
 import { LayoutService } from '../../../core/layout/services/layout.service';
+import { BoletaVentaViewComponent } from '../../../core/treasury/boleta-venta-view.component';
 import { PagosService } from './pagos.service';
 import {
   BoletaVenta,
@@ -19,7 +20,7 @@ type MetodoModal = 'efectivo' | 'transferencia' | 'deposito' | 'visa';
 @Component({
   selector: 'app-tesoreria-pagos',
   standalone: true,
-  imports: [FormsModule, NgClass, DecimalPipe],
+  imports: [FormsModule, NgClass, DecimalPipe, BoletaVentaViewComponent],
   template: `
 <div class="space-y-5 animate-fade-in">
 
@@ -98,12 +99,12 @@ type MetodoModal = 'efectivo' | 'transferencia' | 'deposito' | 'visa';
               <th class="text-right">Saldo</th>
               <th>Vencimiento</th>
               <th>Estado</th>
-              <th class="text-center w-28">Acciones</th>
+              <th class="text-center w-32">Acciones</th>
             </tr>
           </thead>
           <tbody>
             @for (c of cargosVista(); track c.id) {
-              <tr [ngClass]="c.estado === 'pagado' ? 'opacity-70' : ''">
+              <tr>
                 <td>
                   <div class="font-medium text-sm">{{ c.alumno }}</div>
                   <div class="text-xs text-gray-400">{{ c.codigoAlumno || '—' }}</div>
@@ -128,10 +129,14 @@ type MetodoModal = 'efectivo' | 'transferencia' | 'deposito' | 'visa';
                         (click)="abrirModal(c)">
                         <span class="icon icon-sm">payments</span>
                       </button>
-                    } @else if (ultimoPagoId(c)) {
-                      <button type="button" class="btn btn-secondary btn-sm" title="Ver boleta"
-                        (click)="verBoleta(ultimoPagoId(c)!)">
-                        <span class="icon icon-sm">receipt_long</span>
+                    } @else if (ultimoPagoId(c); as pid) {
+                      <button type="button" class="btn btn-ghost btn-icon text-indigo-600" title="Ver boleta"
+                        (click)="verBoleta(pid)">
+                        <span class="icon icon-sm">visibility</span>
+                      </button>
+                      <button type="button" class="btn btn-ghost btn-icon text-emerald-600" title="Descargar / imprimir boleta"
+                        (click)="verBoleta(pid, true)">
+                        <span class="icon icon-sm">download</span>
                       </button>
                     }
                   </div>
@@ -273,31 +278,19 @@ type MetodoModal = 'efectivo' | 'transferencia' | 'deposito' | 'visa';
 
 <!-- Modal boleta -->
 @if (modalBoleta()) {
-  <div class="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4" (click)="cerrarBoleta()">
-    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto" (click)="$event.stopPropagation()">
+  <div class="boleta-modal-overlay fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4" (click)="cerrarBoleta()">
+    <div class="boleta-modal-panel bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[95vh] overflow-y-auto" (click)="$event.stopPropagation()">
       @if (svc.loadingBoleta()) {
         <div class="p-12 text-center text-gray-400 text-sm">Cargando boleta…</div>
       } @else if (boleta(); as b) {
-        <div class="p-6 space-y-4">
-          <div class="flex justify-between border-b pb-4">
-            <div>
-              <p class="text-xs text-gray-500 uppercase">Boleta de venta</p>
-              <h3 class="font-bold text-gray-900">{{ b.institucion.nombre }}</h3>
-              <p class="text-xs text-gray-500">RUC {{ b.institucion.ruc }}</p>
-            </div>
-            <p class="text-xl font-bold text-indigo-700">{{ b.numeroBoleta }}</p>
-          </div>
-          <div class="text-sm space-y-1">
-            <p><span class="text-gray-500">Estudiante:</span> <strong>{{ b.estudiante.nombreCompleto }}</strong></p>
-            <p><span class="text-gray-500">Concepto:</span> {{ b.concepto }} · {{ b.periodoLabel }}</p>
-            <p><span class="text-gray-500">Método:</span> {{ metodoPagoLabel(b.metodoPago) }}
-              @if (b.tarjetaUltimos4) { · **** {{ b.tarjetaUltimos4 }} }
-            </p>
-          </div>
-          <div class="text-right text-2xl font-bold text-emerald-700">S/ {{ b.monto | number:'1.2-2' }}</div>
+        <div class="p-4 sm:p-6">
+          <app-boleta-venta-view [boleta]="b" />
         </div>
-        <div class="px-6 py-4 border-t bg-gray-50 flex justify-end">
+        <div class="boleta-no-print px-6 py-4 border-t bg-gray-50 flex justify-end gap-2 sticky bottom-0">
           <button type="button" class="btn btn-secondary" (click)="cerrarBoleta()">Cerrar</button>
+          <button type="button" class="btn btn-primary" (click)="imprimirBoleta()">
+            <span class="icon icon-sm">print</span> Imprimir / PDF
+          </button>
         </div>
       }
     </div>
@@ -340,6 +333,7 @@ export class TesoreriaPagosComponent implements OnInit {
   readonly toast = signal<{ msg: string; tipo: 'ok' | 'err' } | null>(null);
   readonly boleta = signal<BoletaVenta | null>(null);
   readonly pagosPorCargo = signal<Map<number, number>>(new Map());
+  private imprimirAlCargarBoleta = false;
 
   formManual = { monto: 0, referencia: '', fechaPago: new Date().toISOString().slice(0, 10) };
   formVisa = {
@@ -532,24 +526,37 @@ export class TesoreriaPagosComponent implements OnInit {
   }
 
   ultimoPagoId(c: CargoPago): number | null {
-    return this.pagosPorCargo().get(c.id) ?? null;
+    return this.pagosPorCargo().get(c.id) ?? c.ultimoPagoId ?? null;
   }
 
-  verBoleta(paymentId: number): void {
+  verBoleta(paymentId: number, imprimir = false): void {
+    this.imprimirAlCargarBoleta = imprimir;
     this.boleta.set(null);
     this.modalBoleta.set(true);
     this.svc.getReceipt(paymentId).subscribe({
-      next: (b) => this.boleta.set(b),
+      next: (b) => {
+        this.boleta.set(b);
+        if (this.imprimirAlCargarBoleta) {
+          this.imprimirAlCargarBoleta = false;
+          setTimeout(() => this.imprimirBoleta(), 300);
+        }
+      },
       error: (err: Error) => {
+        this.imprimirAlCargarBoleta = false;
         this.modalBoleta.set(false);
         this.mostrarToast(err.message, 'err');
       },
     });
   }
 
+  imprimirBoleta(): void {
+    window.print();
+  }
+
   cerrarBoleta(): void {
     this.modalBoleta.set(false);
     this.boleta.set(null);
+    this.imprimirAlCargarBoleta = false;
   }
 
   formatearTarjeta(): void {

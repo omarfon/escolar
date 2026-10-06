@@ -5,6 +5,8 @@ import { LayoutService } from '../../../core/layout/services/layout.service';
 import { AsistenciaRegistroComponent } from '../../asistencia/registro/asistencia-registro.component';
 import { DocenteSalonAsignado } from './asistencia-docente.model';
 import { AsistenciaDocenteService } from './asistencia-docente.service';
+import { MaestrosPeriodosAcademicosService } from '../../matricula/maestros/periodos-academicos/periodos-academicos.service';
+import { PeriodoAcademicoItem } from '../../matricula/maestros/periodos-academicos/periodos-academicos.model';
 
 @Component({
   standalone: true,
@@ -25,7 +27,10 @@ import { AsistenciaDocenteService } from './asistencia-docente.service';
         <h2 class="text-xl font-bold text-gray-800">Asistencia docente</h2>
         <p class="text-sm text-gray-500">
           Selecciona un salón asignado para tomar la asistencia del día
-          @if (anioEscolar()) { · Año {{ anioEscolar() }} }
+          @if (anioEscolar()) {
+            · A.E. {{ anioEscolar() }}
+            @if (periodoActual()) { · {{ periodoActual()!.nombre }} }
+          }
         </p>
       </div>
     </div>
@@ -43,35 +48,29 @@ import { AsistenciaDocenteService } from './asistencia-docente.service';
         <p class="text-sm mt-1">Contacta a coordinación académica para revisar tu asignación.</p>
       </div>
     } @else {
-      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
         @for (s of salones(); track salonKey(s)) {
           <button type="button"
-                  class="card p-5 text-left hover:shadow-md hover:border-indigo-200 border border-transparent transition-all border-l-4 border-l-indigo-500"
+                  class="card px-3 py-3 text-left hover:shadow-md hover:border-indigo-200 border border-transparent transition-all border-l-4 border-l-indigo-500"
                   (click)="seleccionarSalon(s)">
-            <div class="flex items-start justify-between gap-3">
+            <div class="flex items-center justify-between gap-2">
               <div class="min-w-0">
-                <div class="text-xs font-semibold uppercase tracking-wide text-indigo-600">{{ s.nivel }}</div>
-                <h3 class="font-bold text-gray-800 text-lg mt-0.5">{{ s.grado }} "{{ s.seccion }}"</h3>
-                <p class="text-sm text-gray-500 mt-1">{{ s.totalAlumnos }} alumno(s) · Aforo {{ s.aforo || '—' }}</p>
+                <div class="text-[10px] font-semibold uppercase tracking-wide text-indigo-600">{{ s.nivel }}</div>
+                <h3 class="font-bold text-gray-800 text-base leading-snug">{{ s.grado }} "{{ s.seccion }}"</h3>
+                <p class="text-xs text-gray-500 mt-0.5">{{ s.totalAlumnos }} alumno(s)</p>
               </div>
-              <div class="w-11 h-11 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center text-xl shrink-0">
-                📋
-              </div>
+              <span class="icon text-indigo-500 shrink-0">fact_check</span>
             </div>
             @if (s.cursos.length) {
-              <div class="mt-3 flex flex-wrap gap-1.5">
+              <div class="mt-2 flex flex-wrap gap-1">
                 @for (c of s.cursos.slice(0, 3); track c) {
-                  <span class="badge badge-gray text-xs">{{ c }}</span>
+                  <span class="badge badge-gray text-[10px]">{{ c }}</span>
                 }
                 @if (s.cursos.length > 3) {
-                  <span class="badge badge-gray text-xs">+{{ s.cursos.length - 3 }}</span>
+                  <span class="badge badge-gray text-[10px]">+{{ s.cursos.length - 3 }}</span>
                 }
               </div>
             }
-            <div class="mt-4 text-sm font-medium text-indigo-600 flex items-center gap-1">
-              Tomar asistencia
-              <span class="icon text-base">arrow_forward</span>
-            </div>
           </button>
         }
       </div>
@@ -100,10 +99,12 @@ export class AsistenciaDocenteComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   readonly svc = inject(AsistenciaDocenteService);
+  private readonly periodosSvc = inject(MaestrosPeriodosAcademicosService);
 
   salones = signal<DocenteSalonAsignado[]>([]);
   salonSeleccionado = signal<DocenteSalonAsignado | null>(null);
   anioEscolar = signal<number | null>(null);
+  periodoActual = signal<PeriodoAcademicoItem | null>(null);
   error = signal('');
   toast = signal<{ msg: string; tipo: 'ok' | 'err' } | null>(null);
 
@@ -129,7 +130,13 @@ export class AsistenciaDocenteComponent implements OnInit {
 
   cargarSalones(): void {
     this.error.set('');
-    this.svc.loadMisSalones(2026).subscribe({
+    this.periodosSvc.resolveContext().subscribe({
+      next: (ctx) => {
+        this.periodoActual.set(ctx.periodoActual);
+        this.anioEscolar.set(ctx.anioEscolar);
+      },
+    });
+    this.svc.loadMisSalones().subscribe({
       next: (res) => {
         this.salones.set(res.salones);
         this.anioEscolar.set(res.anioEscolar);

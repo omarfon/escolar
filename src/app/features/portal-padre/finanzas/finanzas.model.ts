@@ -130,16 +130,44 @@ export function filtrarCargos(
   cargos: CargoCuenta[],
   filtro: FiltroCargo,
 ): CargoCuenta[] {
+  let result: CargoCuenta[];
   switch (filtro) {
     case 'pagados':
-      return cargos.filter(c => c.estado === 'pagado');
+      result = cargos.filter(c => c.estado === 'pagado');
+      break;
     case 'pendientes':
-      return cargos.filter(c => c.estado === 'pendiente' || c.estado === 'parcial');
+      result = cargos.filter(c => c.estado === 'pendiente' || c.estado === 'parcial');
+      break;
     case 'vencidos':
-      return cargos.filter(c => c.estado === 'vencido');
+      result = cargos.filter(c => c.estado === 'vencido');
+      break;
     default:
-      return cargos;
+      result = [...cargos];
   }
+  return ordenarCargosPendientesPrimero(result);
+}
+
+export function esCargoPendiente(c: CargoCuenta): boolean {
+  return c.saldo > 0 || c.estado === 'pendiente' || c.estado === 'parcial' || c.estado === 'vencido';
+}
+
+export function ordenarCargosPendientesPrimero(cargos: CargoCuenta[]): CargoCuenta[] {
+  return [...cargos].sort((a, b) => {
+    const peso = (c: CargoCuenta) =>
+      c.estado === 'vencido' ? 0 : c.estado === 'parcial' ? 1 : c.estado === 'pendiente' ? 2 : c.estado === 'pagado' ? 4 : 3;
+    const pa = peso(a);
+    const pb = peso(b);
+    if (pa !== pb) return pa - pb;
+    return a.fechaVencimiento.localeCompare(b.fechaVencimiento);
+  });
+}
+
+export function cargosPendientesCuenta(c: EstadoCuentaHijo): CargoCuenta[] {
+  const items: CargoCuenta[] = [];
+  if (c.matricula && esCargoPendiente(c.matricula)) items.push(c.matricula);
+  items.push(...c.mensualidades.filter(esCargoPendiente));
+  items.push(...c.otros.filter(esCargoPendiente));
+  return ordenarCargosPendientesPrimero(items);
 }
 
 export function formatFechaCorta(iso: string): string {

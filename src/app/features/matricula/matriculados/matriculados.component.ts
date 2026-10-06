@@ -3,6 +3,8 @@ import { FormsModule } from '@angular/forms';
 import { NgClass } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { LayoutService } from '../../../core/layout/services/layout.service';
+import { TenantContextService } from '../../../core/tenant/tenant-context.service';
+import { markTenantReloadReady, setupTenantReload } from '../../../core/tenant/tenant-reload.util';
 import {
   Estudiante,
   ExpedientesService,
@@ -289,6 +291,24 @@ import { FutDetalleComponent } from '../shared/fut-detalle.component';
           </span>
           <span class="icon text-gray-300 group-hover:text-teal-600 shrink-0">chevron_right</span>
         </button>
+        @if (detalle()!.estado === 'activo') {
+          <a
+            class="mt-2 w-full btn btn-secondary justify-center"
+            [routerLink]="['/matricula/retiro']"
+            [queryParams]="{ studentId: detalle()!.id }"
+          >
+            <span class="icon icon-sm">person_off</span> Registrar retiro
+          </a>
+        }
+        @if (detalle()!.estado === 'retirado') {
+          <a
+            class="mt-2 w-full btn btn-secondary justify-center"
+            [routerLink]="['/matricula/reingreso']"
+            [queryParams]="{ studentId: detalle()!.id }"
+          >
+            <span class="icon icon-sm">person_add</span> Registrar reingreso
+          </a>
+        }
       </div>
 
       <div>
@@ -329,7 +349,19 @@ import { FutDetalleComponent } from '../shared/fut-detalle.component';
 })
 export class MatriculadosComponent implements OnInit {
   private readonly layout = inject(LayoutService);
+  private readonly tenant = inject(TenantContextService);
   private readonly expedientesSvc = inject(ExpedientesService);
+  private readonly _tenantReloadReady = setupTenantReload(
+    () => this.recargarPagina(),
+    {
+      onBeforeReload: () => {
+        this.detalle.set(null);
+        this.futAbierto.set(false);
+        this.paginaActual.set(1);
+        this.expedientesSvc.reset();
+      },
+    },
+  );
 
   readonly loading = this.expedientesSvc.loading;
   readonly loadError = this.expedientesSvc.error;
@@ -341,28 +373,24 @@ export class MatriculadosComponent implements OnInit {
 
   readonly filtro = signal({ q: '', grado: '', seccion: '', anio: '' });
 
-  readonly matriculados = computed(() =>
-    this.expedientesSvc.estudiantes().filter((e) => e.estado === 'activo'),
-  );
+  readonly matriculados = computed(() => this.expedientesSvc.estudiantes());
 
   readonly filtrados = computed(() => {
-    const { q, grado, seccion, anio } = this.filtro();
+    const { seccion, anio } = this.filtro();
     return this.matriculados().filter((e) => {
-      const matchQ = this.coincideBusqueda(e, q);
-      const matchG = !grado || e.grado === grado;
       const matchS = !seccion || e.seccion === seccion;
       const matchA = !anio || e.anioIngreso === anio;
-      return matchQ && matchG && matchS && matchA;
+      return matchS && matchA;
     });
   });
 
-  readonly totalFiltrados = computed(() => this.filtrados().length);
+  readonly totalFiltrados = computed(() => this.expedientesSvc.total());
   readonly totalPaginas = computed(() =>
     Math.max(1, Math.ceil(this.totalFiltrados() / this.POR_PAGINA)),
   );
   readonly inicio = computed(() => (this.paginaActual() - 1) * this.POR_PAGINA);
   readonly fin = computed(() => Math.min(this.inicio() + this.POR_PAGINA, this.totalFiltrados()));
-  readonly paginados = computed(() => this.filtrados().slice(this.inicio(), this.fin()));
+  readonly paginados = computed(() => this.filtrados());
   readonly paginas = computed(() => {
     const total = this.totalPaginas();
     const actual = this.paginaActual();
@@ -425,11 +453,26 @@ export class MatriculadosComponent implements OnInit {
 
   ngOnInit(): void {
     this.layout.setTitle('Alumnos Matriculados');
-    this.expedientesSvc.load();
+    if (this.tenant.requiresSelection()) {
+      this.expedientesSvc.reset();
+    } else {
+      this.recargarPagina();
+    }
+    markTenantReloadReady(this._tenantReloadReady);
+  }
+
+  recargarPagina(): void {
+    this.expedientesSvc.load({
+      page: this.paginaActual(),
+      pageSize: this.POR_PAGINA,
+      q: this.filtro().q,
+      grado: this.filtro().grado,
+      estado: 'activo',
+    });
   }
 
   recargar(): void {
-    this.expedientesSvc.load();
+    this.recargarPagina();
   }
 
   setFiltro(campo: 'q' | 'grado' | 'seccion' | 'anio', valor: string): void {
@@ -465,10 +508,10 @@ export class MatriculadosComponent implements OnInit {
 
     if (campo === 'q') {
       if (this.busquedaTimer) clearTimeout(this.busquedaTimer);
-      this.busquedaTimer = setTimeout(() => {
-        this.expedientesSvc.load(valor.trim() || undefined);
-      }, 350);
+      this.busquedaTimer = setTimeout(() => this.recargarPagina(), 350);
+      return;
     }
+    this.recargarPagina();
   }
 
   private coincideBusqueda(e: Estudiante, q: string): boolean {
@@ -503,7 +546,7 @@ export class MatriculadosComponent implements OnInit {
     if (this.busquedaTimer) clearTimeout(this.busquedaTimer);
     this.filtro.set({ q: '', grado: '', seccion: '', anio: '' });
     this.paginaActual.set(1);
-    this.expedientesSvc.load();
+    this.recargarPagina();
   }
 
   abrirDetalle(e: Estudiante): void {

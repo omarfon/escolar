@@ -6,8 +6,10 @@ import { ApiExpediente } from '../../../core/api/api.models';
 import {
   CambioSeccionPayload,
   CambioSeccionResult,
+  CreateSolicitudCambioSeccionPayload,
   HistorialCambioSeccion,
   OcupacionSeccion,
+  SolicitudCambioSeccion,
 } from './cambio-seccion.model';
 
 @Injectable({ providedIn: 'root' })
@@ -56,5 +58,49 @@ export class CambioSeccionService {
       catchError((err) => throwError(() => err)),
       finalize(() => this.saving.set(false)),
     );
+  }
+
+  searchStudents(q?: string): Observable<ApiExpediente[]> {
+    let params = new HttpParams();
+    if (q?.trim()) params = params.set('q', q.trim());
+    return this.http.get<ApiExpediente[]>(this.base, { params });
+  }
+
+  loadRequests(params?: { nivel?: string; grado?: string }): Observable<SolicitudCambioSeccion[]> {
+    let httpParams = new HttpParams();
+    if (params?.nivel) httpParams = httpParams.set('nivel', params.nivel);
+    if (params?.grado) httpParams = httpParams.set('grado', params.grado);
+    return this.http.get<SolicitudCambioSeccion[]>(`${this.base}/section-change-requests`, {
+      params: httpParams,
+    });
+  }
+
+  createRequest(payload: CreateSolicitudCambioSeccionPayload): Observable<SolicitudCambioSeccion> {
+    this.saving.set(true);
+    return this.http
+      .post<SolicitudCambioSeccion>(`${this.base}/section-change-requests`, payload)
+      .pipe(
+        catchError((err) => throwError(() => err)),
+        finalize(() => this.saving.set(false)),
+      );
+  }
+
+  cancelRequest(id: number): Observable<{ id: number; estado: string }> {
+    return this.http.patch<{ id: number; estado: string }>(
+      `${this.base}/section-change-requests/${id}/cancel`,
+      {},
+    );
+  }
+
+  processRequest(id: number, nuevaSeccion?: string): Observable<CambioSeccionResult> {
+    this.saving.set(true);
+    return this.http
+      .post<CambioSeccionResult>(`${this.base}/section-change-requests/${id}/process`, {
+        nuevaSeccion,
+      })
+      .pipe(
+        catchError((err) => throwError(() => err)),
+        finalize(() => this.saving.set(false)),
+      );
   }
 }

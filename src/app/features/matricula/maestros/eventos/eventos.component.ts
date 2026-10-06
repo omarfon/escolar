@@ -1,7 +1,8 @@
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { NgClass } from '@angular/common';
 import { LayoutService } from '../../../../core/layout/services/layout.service';
+import { markTenantReloadReady, setupTenantReload } from '../../../../core/tenant/tenant-reload.util';
 import { InstitucionalService } from '../../../administracion/institucional/institucional.service';
 import { MaestrosEventosService } from './eventos.service';
 import { EventoDetallePreviewComponent } from '../../../comunicaciones/eventos/evento-detalle-preview.component';
@@ -19,6 +20,13 @@ import {
   TIPOS_EVENTO,
 } from '../../../comunicaciones/eventos/eventos.model';
 import { Nivel } from '../../../administracion/institucional/institucional.model';
+import {
+  ErroresCampoMaestroEvento,
+  maestroEventoFormularioMinimoListo,
+  primerErrorMaestroEvento,
+  validarCampoMaestroEvento,
+  validarMaestroEventoForm,
+} from './maestro-evento-form.validation';
 
 @Component({
   selector: 'app-maestros-eventos',
@@ -217,6 +225,12 @@ import { Nivel } from '../../../administracion/institucional/institucional.model
     </div>
 
     <div class="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+      @if (errorForm()) {
+        <div class="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          <span class="icon icon-sm text-red-500">error_outline</span> {{ errorForm() }}
+        </div>
+      }
+
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label class="form-label">Estado</label>
@@ -228,22 +242,34 @@ import { Nivel } from '../../../administracion/institucional/institucional.model
           <p class="text-xs text-gray-400 mt-1">Editable manualmente. Al cancelar se despublica del calendario.</p>
         </div>
         <div>
-          <label class="form-label">Tipo</label>
-          <select class="form-input w-full" [(ngModel)]="form.tipo">
+          <label class="form-label">Tipo <span class="text-red-400">*</span></label>
+          <select class="form-input w-full" [ngClass]="claseCampo('tipo')"
+                  [(ngModel)]="form.tipo"
+                  (ngModelChange)="onCampoFormChange('tipo')"
+                  (blur)="onCampoBlur('tipo')">
             @for (t of tiposForm; track t.value) {
               <option [value]="t.value">{{ t.label }}</option>
             }
           </select>
+          @if (campoError('tipo'); as err) { <p class="form-error mt-1">{{ err }}</p> }
         </div>
       </div>
 
       <div>
-        <label class="form-label">Título</label>
-        <input class="form-input w-full" [(ngModel)]="form.titulo" />
+        <label class="form-label">Título <span class="text-red-400">*</span></label>
+        <input class="form-input w-full" [ngClass]="claseCampo('titulo')"
+               [(ngModel)]="form.titulo"
+               (ngModelChange)="onCampoFormChange('titulo')"
+               (blur)="onCampoBlur('titulo')" />
+        @if (campoError('titulo'); as err) { <p class="form-error mt-1">{{ err }}</p> }
       </div>
       <div>
-        <label class="form-label">Descripción</label>
-        <textarea class="form-input w-full h-24 resize-none" [(ngModel)]="form.descripcion"></textarea>
+        <label class="form-label">Descripción <span class="text-gray-400 font-normal">(opcional)</span></label>
+        <textarea class="form-input w-full h-24 resize-none" [ngClass]="claseCampo('descripcion')"
+                  [(ngModel)]="form.descripcion"
+                  (ngModelChange)="onCampoFormChange('descripcion')"
+                  (blur)="onCampoBlur('descripcion')"></textarea>
+        @if (campoError('descripcion'); as err) { <p class="form-error mt-1">{{ err }}</p> }
       </div>
 
       <div class="rounded-xl border border-gray-200 p-4 space-y-3 bg-gray-50/50">
@@ -271,46 +297,64 @@ import { Nivel } from '../../../administracion/institucional/institucional.model
 
         @if (form.visibilidad === 'limitado') {
           <div>
-            <label class="form-label">Dirigido a</label>
-            <select class="form-input w-full" [(ngModel)]="form.audienciaLimitada" (ngModelChange)="onAudienciaChange()">
+            <label class="form-label">Dirigido a <span class="text-red-400">*</span></label>
+            <select class="form-input w-full" [ngClass]="claseCampo('audienciaLimitada')"
+                    [(ngModel)]="form.audienciaLimitada"
+                    (ngModelChange)="onAudienciaChange()"
+                    (blur)="onCampoBlur('audienciaLimitada')">
               @for (a of audienciaLimitadaOpts; track a.value) {
                 <option [value]="a.value">{{ a.label }}</option>
               }
             </select>
+            @if (campoError('audienciaLimitada'); as err) { <p class="form-error mt-1">{{ err }}</p> }
           </div>
           @if (form.audienciaLimitada === 'salon') {
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
-                <label class="form-label">Nivel</label>
-                <select class="form-input w-full" [(ngModel)]="form.nivel" (ngModelChange)="onNivelSalonChange()">
+                <label class="form-label">Nivel <span class="text-red-400">*</span></label>
+                <select class="form-input w-full" [ngClass]="claseCampo('nivel')"
+                        [(ngModel)]="form.nivel"
+                        (ngModelChange)="onNivelSalonChange()"
+                        (blur)="onCampoBlur('nivel')">
                   <option value="">Seleccionar</option>
                   @for (n of niveles(); track n.id) {
                     <option [value]="n.nombre">{{ n.nombre }}</option>
                   }
                 </select>
+                @if (campoError('nivel'); as err) { <p class="form-error mt-1">{{ err }}</p> }
               </div>
               <div>
-                <label class="form-label">Grado</label>
-                <select class="form-input w-full" [(ngModel)]="form.grado" [disabled]="!form.nivel">
+                <label class="form-label">Grado <span class="text-red-400">*</span></label>
+                <select class="form-input w-full" [ngClass]="claseCampo('grado')"
+                        [(ngModel)]="form.grado"
+                        (ngModelChange)="onCampoFormChange('grado')"
+                        (blur)="onCampoBlur('grado')"
+                        [disabled]="!form.nivel">
                   <option value="">Seleccionar</option>
                   @for (g of gradosSalonList(); track g) {
                     <option [value]="g">{{ g }}</option>
                   }
                 </select>
+                @if (campoError('grado'); as err) { <p class="form-error mt-1">{{ err }}</p> }
               </div>
               <div>
-                <label class="form-label">Sección</label>
-                <select class="form-input w-full" [(ngModel)]="form.seccion" [disabled]="!form.grado">
+                <label class="form-label">Sección <span class="text-red-400">*</span></label>
+                <select class="form-input w-full" [ngClass]="claseCampo('seccion')"
+                        [(ngModel)]="form.seccion"
+                        (ngModelChange)="onCampoFormChange('seccion')"
+                        (blur)="onCampoBlur('seccion')"
+                        [disabled]="!form.grado">
                   <option value="">Seleccionar</option>
                   @for (s of seccionesSalonList(); track s) {
                     <option [value]="s">{{ s }}</option>
                   }
                 </select>
+                @if (campoError('seccion'); as err) { <p class="form-error mt-1">{{ err }}</p> }
               </div>
             </div>
           } @else {
             <div>
-              <label class="form-label">Nivel (opcional)</label>
+              <label class="form-label">Nivel <span class="text-gray-400 font-normal">(opcional)</span></label>
               <select class="form-input w-full" [(ngModel)]="form.nivel">
                 <option value="">Todos los niveles</option>
                 @for (n of niveles(); track n.id) {
@@ -336,28 +380,53 @@ import { Nivel } from '../../../administracion/institucional/institucional.model
 
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <label class="form-label">Fecha inicio</label>
-          <input type="date" class="form-input w-full" [(ngModel)]="form.fechaInicio" />
+          <label class="form-label">Fecha inicio <span class="text-red-400">*</span></label>
+          <input type="date" class="form-input w-full" [ngClass]="claseCampo('fechaInicio')"
+                 [(ngModel)]="form.fechaInicio"
+                 (ngModelChange)="onCampoFormChange('fechaInicio')"
+                 (blur)="onCampoBlur('fechaInicio')" />
+          @if (campoError('fechaInicio'); as err) { <p class="form-error mt-1">{{ err }}</p> }
         </div>
         <div>
-          <label class="form-label">Fecha fin</label>
-          <input type="date" class="form-input w-full" [(ngModel)]="form.fechaFin" />
+          <label class="form-label">Fecha fin <span class="text-gray-400 font-normal">(opcional)</span></label>
+          <input type="date" class="form-input w-full" [ngClass]="claseCampo('fechaFin')"
+                 [(ngModel)]="form.fechaFin"
+                 (ngModelChange)="onCampoFormChange('fechaFin')"
+                 (blur)="onCampoBlur('fechaFin')" />
+          @if (campoError('fechaFin'); as err) { <p class="form-error mt-1">{{ err }}</p> }
         </div>
         <div>
           <label class="form-label">Hora inicio</label>
-          <input type="time" class="form-input w-full" [(ngModel)]="form.horaInicio" />
+          <input type="time" class="form-input w-full" [ngClass]="claseCampo('horaInicio')"
+                 [(ngModel)]="form.horaInicio"
+                 (ngModelChange)="onCampoFormChange('horaInicio')"
+                 (blur)="onCampoBlur('horaInicio')" />
+          @if (campoError('horaInicio'); as err) { <p class="form-error mt-1">{{ err }}</p> }
         </div>
         <div>
-          <label class="form-label">Hora fin</label>
-          <input type="time" class="form-input w-full" [(ngModel)]="form.horaFin" />
+          <label class="form-label">Hora fin <span class="text-gray-400 font-normal">(opcional)</span></label>
+          <input type="time" class="form-input w-full" [ngClass]="claseCampo('horaFin')"
+                 [(ngModel)]="form.horaFin"
+                 (ngModelChange)="onCampoFormChange('horaFin')"
+                 (blur)="onCampoBlur('horaFin')" />
+          @if (campoError('horaFin'); as err) { <p class="form-error mt-1">{{ err }}</p> }
         </div>
         <div class="sm:col-span-2">
-          <label class="form-label">Lugar</label>
-          <input class="form-input w-full" [(ngModel)]="form.lugar" />
+          <label class="form-label">Lugar <span class="text-gray-400 font-normal">(opcional)</span></label>
+          <input class="form-input w-full" placeholder="Auditorio, patio..."
+                 [ngClass]="claseCampo('lugar')"
+                 [(ngModel)]="form.lugar"
+                 (ngModelChange)="onCampoFormChange('lugar')"
+                 (blur)="onCampoBlur('lugar')" />
+          @if (campoError('lugar'); as err) { <p class="form-error mt-1">{{ err }}</p> }
         </div>
         <div class="sm:col-span-2">
-          <label class="form-label">Responsable</label>
-          <input class="form-input w-full" [(ngModel)]="form.responsable" />
+          <label class="form-label">Responsable <span class="text-gray-400 font-normal">(opcional)</span></label>
+          <input class="form-input w-full" [ngClass]="claseCampo('responsable')"
+                 [(ngModel)]="form.responsable"
+                 (ngModelChange)="onCampoFormChange('responsable')"
+                 (blur)="onCampoBlur('responsable')" />
+          @if (campoError('responsable'); as err) { <p class="form-error mt-1">{{ err }}</p> }
         </div>
       </div>
 
@@ -369,7 +438,10 @@ import { Nivel } from '../../../administracion/institucional/institucional.model
 
     <div class="px-6 py-4 border-t border-gray-200 flex gap-3 shrink-0">
       <button type="button" class="btn btn-secondary flex-1" (click)="cerrarModal()">Cancelar</button>
-      <button type="button" class="btn btn-primary flex-1" [disabled]="svc.saving()" (click)="guardar()">
+      <button type="button" class="btn btn-primary flex-1"
+              [disabled]="!puedeGuardarForm() || svc.saving()"
+              [title]="puedeGuardarForm() ? '' : 'Completa título, tipo, fecha de inicio y visibilidad'"
+              (click)="guardar()">
         {{ svc.saving() ? 'Guardando…' : (editId() ? 'Guardar cambios' : 'Crear evento') }}
       </button>
     </div>
@@ -378,6 +450,7 @@ import { Nivel } from '../../../administracion/institucional/institucional.model
   `,
 })
 export class MaestrosEventosComponent implements OnInit {
+  private readonly _tenantReloadReady = setupTenantReload(() => this.cargar());
   private readonly layout = inject(LayoutService);
   private readonly institucional = inject(InstitucionalService);
   readonly svc = inject(MaestrosEventosService);
@@ -386,6 +459,17 @@ export class MaestrosEventosComponent implements OnInit {
   readonly detalle = signal<EventoItem | null>(null);
   readonly nombreInstitucion = signal('');
   readonly error = signal('');
+  errorForm = signal('');
+  fieldErrors = signal<ErroresCampoMaestroEvento>({});
+  camposTocados = signal<Record<string, true>>({});
+  intentoGuardar = signal(false);
+  private readonly formRevision = signal(0);
+
+  readonly puedeGuardarForm = computed(() => {
+    this.formRevision();
+    return maestroEventoFormularioMinimoListo(this.valoresFormulario());
+  });
+
   readonly toast = signal<{ msg: string; type: 'ok' | 'error' } | null>(null);
   readonly modalOpen = signal(false);
   readonly editId = signal<number | null>(null);
@@ -434,6 +518,7 @@ export class MaestrosEventosComponent implements OnInit {
       next: (niveles) => this.niveles.set(niveles.filter((n) => n.activo)),
     });
     this.cargar();
+    markTenantReloadReady(this._tenantReloadReady);
   }
 
   visibilidadCfg(e: EventoItem) {
@@ -468,6 +553,7 @@ export class MaestrosEventosComponent implements OnInit {
       this.form.grado = '';
       this.form.seccion = '';
     }
+    this.onCampoFormChange('visibilidad');
   }
 
   onAudienciaChange(): void {
@@ -475,11 +561,13 @@ export class MaestrosEventosComponent implements OnInit {
       this.form.grado = '';
       this.form.seccion = '';
     }
+    this.onCampoFormChange('audienciaLimitada');
   }
 
   onNivelSalonChange(): void {
     this.form.grado = '';
     this.form.seccion = '';
+    this.onCampoFormChange('nivel');
   }
 
   private formDestinatarios(): EventoDestinatario {
@@ -585,29 +673,144 @@ export class MaestrosEventosComponent implements OnInit {
   abrirModal(evento?: EventoItem): void {
     this.editId.set(evento?.id ?? null);
     this.form = this.mapEventoToForm(evento);
+    this.resetValidacionForm();
     this.modalOpen.set(true);
   }
 
   cerrarModal(): void {
     this.modalOpen.set(false);
     this.editId.set(null);
+    this.resetValidacionForm();
+  }
+
+  private resetValidacionForm(): void {
+    this.fieldErrors.set({});
+    this.camposTocados.set({});
+    this.intentoGuardar.set(false);
+    this.errorForm.set('');
+  }
+
+  private valoresFormulario() {
+    return {
+      titulo: this.form.titulo,
+      descripcion: this.form.descripcion,
+      tipo: this.form.tipo,
+      fechaInicio: this.form.fechaInicio,
+      fechaFin: this.form.fechaFin,
+      horaInicio: this.form.horaInicio,
+      horaFin: this.form.horaFin,
+      lugar: this.form.lugar,
+      visibilidad: this.form.visibilidad,
+      audienciaLimitada: this.form.audienciaLimitada,
+      nivel: this.form.nivel,
+      grado: this.form.grado,
+      seccion: this.form.seccion,
+      responsable: this.form.responsable,
+      estado: this.form.estado,
+    };
+  }
+
+  onCampoBlur(key: string): void {
+    this.camposTocados.update((t) => ({ ...t, [key]: true }));
+    this.validarCampoEnVivo(key);
+  }
+
+  onCampoFormChange(key: string): void {
+    this.formRevision.update((n) => n + 1);
+
+    if (this.camposTocados()[key] || this.intentoGuardar() || this.fieldErrors()[key]) {
+      this.validarCampoEnVivo(key);
+    } else {
+      this.quitarErrorCampo(key);
+    }
+
+    if (key === 'fechaInicio') {
+      if (this.camposTocados()['fechaFin']) this.validarCampoEnVivo('fechaFin');
+      if (this.camposTocados()['horaFin'] || this.camposTocados()['horaInicio']) {
+        this.validarCampoEnVivo('horaFin');
+      }
+    }
+
+    if (key === 'fechaFin' && (this.camposTocados()['horaFin'] || this.camposTocados()['horaInicio'])) {
+      this.validarCampoEnVivo('horaFin');
+    }
+
+    if (key === 'horaInicio' && this.camposTocados()['horaFin']) {
+      this.validarCampoEnVivo('horaFin');
+    }
+
+    if (key === 'visibilidad' || key === 'audienciaLimitada') {
+      for (const dep of ['nivel', 'grado', 'seccion'] as const) {
+        if (this.camposTocados()[dep] || this.intentoGuardar()) {
+          this.validarCampoEnVivo(dep);
+        } else {
+          this.quitarErrorCampo(dep);
+        }
+      }
+    }
+
+    if (key === 'nivel' && this.camposTocados()['grado']) {
+      this.validarCampoEnVivo('grado');
+    }
+    if (key === 'grado' && this.camposTocados()['seccion']) {
+      this.validarCampoEnVivo('seccion');
+    }
+  }
+
+  private validarCamposMinimosEnVivo(): void {
+    for (const key of ['titulo', 'tipo', 'fechaInicio', 'visibilidad', 'audienciaLimitada', 'nivel', 'grado', 'seccion']) {
+      this.camposTocados.update((t) => ({ ...t, [key]: true }));
+      this.validarCampoEnVivo(key);
+    }
+  }
+
+  private validarCampoEnVivo(key: string): void {
+    const err = validarCampoMaestroEvento(this.valoresFormulario(), key);
+    if (err) {
+      this.fieldErrors.update((errors) => ({ ...errors, [key]: err }));
+    } else {
+      this.quitarErrorCampo(key);
+    }
+  }
+
+  private quitarErrorCampo(key: string): void {
+    if (!this.fieldErrors()[key]) return;
+    this.fieldErrors.update((errors) => {
+      const next = { ...errors };
+      delete next[key];
+      return next;
+    });
+    if (!Object.keys(this.fieldErrors()).length) this.errorForm.set('');
+  }
+
+  campoError(key: string): string | null {
+    if (!this.camposTocados()[key] && !this.intentoGuardar()) return null;
+    return this.fieldErrors()[key] ?? null;
+  }
+
+  claseCampo(key: string): string {
+    return this.campoError(key) ? 'border-red-400 focus:border-red-500 focus:ring-red-200' : '';
   }
 
   guardar(): void {
-    const titulo = this.form.titulo.trim();
-    if (!titulo || !this.form.fechaInicio) return;
-
-    if (
-      this.form.visibilidad === 'limitado' &&
-      this.form.audienciaLimitada === 'salon' &&
-      (!this.form.nivel || !this.form.grado || !this.form.seccion)
-    ) {
-      this.mostrarToast('Seleccione nivel, grado y sección del salón', 'error');
+    this.intentoGuardar.set(true);
+    if (!this.puedeGuardarForm()) {
+      this.validarCamposMinimosEnVivo();
+      this.errorForm.set('Completa los campos obligatorios del evento.');
       return;
     }
 
+    const errors = validarMaestroEventoForm(this.valoresFormulario());
+    this.fieldErrors.set(errors);
+    if (Object.keys(errors).length) {
+      this.errorForm.set(primerErrorMaestroEvento(errors) ?? 'Revisa los datos del formulario.');
+      return;
+    }
+
+    this.errorForm.set('');
+
     const payload = {
-      titulo,
+      titulo: this.form.titulo.trim(),
       descripcion: this.form.descripcion.trim(),
       tipo: this.form.tipo,
       fechaInicio: this.form.fechaInicio,

@@ -2,6 +2,7 @@ import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { NgClass } from '@angular/common';
 import { LayoutService } from '../../../core/layout/services/layout.service';
+import { markTenantReloadReady, setupTenantReload } from '../../../core/tenant/tenant-reload.util';
 import { AuthService } from '../../../core/auth/services/auth.service';
 import { InstitucionalService } from '../../administracion/institucional/institucional.service';
 import { Nivel } from '../../administracion/institucional/institucional.model';
@@ -457,6 +458,19 @@ export class JustificacionesComponent implements OnInit {
   private readonly auth = inject(AuthService);
   readonly svc = inject(JustificacionesService);
   private readonly institucional = inject(InstitucionalService);
+  private readonly _tenantReloadReady = setupTenantReload(() => {
+    this.institucional.loadEducationLevels().subscribe({
+      next: (niveles) => this._niveles.set(niveles),
+    });
+    this.cargar();
+  }, {
+    onBeforeReload: () => {
+      this._pendientes.set([]);
+      this._historial.set([]);
+      this.modalAbierto.set(false);
+      this.seleccionado.set(null);
+    },
+  });
 
   readonly motivos = MOTIVOS_JUSTIFICACION;
   readonly diasPlazo = DIAS_PLAZO_JUSTIFICACION;
@@ -546,6 +560,7 @@ export class JustificacionesComponent implements OnInit {
       next: (niveles) => this._niveles.set(niveles),
     });
     this.cargar();
+    markTenantReloadReady(this._tenantReloadReady);
   }
 
   cargar(): void {

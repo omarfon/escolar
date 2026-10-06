@@ -198,6 +198,7 @@ export class LayoutService {
         { label: 'Rectificación de notas', icon: 'edit_note', route: '/evaluacion/rectificacion-notas', permisos: ['evaluacion.rectificar', 'evaluacion.aprobar'] },
         { label: 'Auditoría de notas', icon: 'history_edu', route: '/evaluacion/auditoria-cambios', permisos: ['evaluacion.reportes', 'admin.reportes'] },
         { label: 'Auditoría de competencias', icon: 'history_edu', route: '/evaluacion/auditoria-competencias', permisos: ['evaluacion.reportes', 'admin.reportes'] },
+        { label: 'Reportes',          icon: 'bar_chart',      route: '/evaluacion/reportes',    permisos: ['evaluacion.reportes', 'admin.reportes'] },
         { label: 'Promedios',         icon: 'calculate',      route: '/evaluacion/promedios',   permisos: ['evaluacion.reportes', 'evaluacion.ver'] },
         { label: 'Libretas',          icon: 'picture_as_pdf', route: '/evaluacion/libretas',    permisos: ['evaluacion.ver'] },
         { label: 'Actas',             icon: 'article',        route: '/evaluacion/actas',       permisos: ['evaluacion.aprobar', 'evaluacion.ver'] },

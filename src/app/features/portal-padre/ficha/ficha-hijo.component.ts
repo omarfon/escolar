@@ -3,11 +3,12 @@ import { DecimalPipe, NgClass, NgTemplateOutlet } from '@angular/common';
 import { LayoutService } from '../../../core/layout/services/layout.service';
 import { SeguimientoService } from '../seguimiento/seguimiento.service';
 import { HijoResumen, parentescoLabel } from '../seguimiento/seguimiento.model';
+import { HijoSelectorComponent } from '../shared/hijo-selector.component';
 import { FichaHijoService } from './ficha-hijo.service';
 
 @Component({
   standalone: true,
-  imports: [DecimalPipe, NgClass, NgTemplateOutlet],
+  imports: [DecimalPipe, NgClass, NgTemplateOutlet, HijoSelectorComponent],
   template: `
 <div class="space-y-5 animate-fade-in">
   <div>
@@ -15,31 +16,9 @@ import { FichaHijoService } from './ficha-hijo.service';
     <p class="text-sm text-gray-500 mt-0.5">Datos personales, apoderados e historial académico</p>
   </div>
 
-  @if (segSvc.loadingHijos()) {
-    <div class="card p-10 flex flex-col items-center text-gray-400">
-      <span class="icon icon-xl animate-spin mb-3">progress_activity</span>
-      <p class="text-sm">Cargando hijos…</p>
-    </div>
-  } @else if (!segSvc.hijos().length) {
-    <div class="card p-10 text-center text-gray-400">
-      <span class="icon icon-xl mb-3">family_restroom</span>
-      <p class="text-sm">No hay alumnos vinculados.</p>
-    </div>
-  } @else {
-    <div class="flex flex-wrap gap-2">
-      @for (h of segSvc.hijos(); track h.studentId) {
-        <button type="button"
-          class="px-3 py-2 rounded-xl border text-left transition-all min-w-[160px]"
-          [ngClass]="hijoId() === h.studentId
-            ? 'border-indigo-500 bg-indigo-50 ring-1 ring-indigo-200'
-            : 'border-gray-200 bg-white hover:border-gray-300'"
-          (click)="seleccionarHijo(h)">
-          <div class="text-sm font-semibold text-gray-800">{{ h.nombreCompleto }}</div>
-          <div class="text-xs text-gray-500 mt-0.5">{{ h.aulaLabel }} · {{ parentescoLabel(h.parentesco) }}</div>
-        </button>
-      }
-    </div>
+  <app-hijo-selector (hijoChange)="onHijoChange($event)" />
 
+  @if (segSvc.hijos().length) {
     @if (svc.loading()) {
       <div class="card p-10 flex flex-col items-center text-gray-400">
         <span class="icon icon-xl animate-spin mb-3">progress_activity</span>
@@ -77,9 +56,9 @@ import { FichaHijoService } from './ficha-hijo.service';
           <h4 class="font-semibold text-gray-800 flex items-center gap-2">
             <span class="icon text-emerald-600">family_restroom</span> Apoderados
           </h4>
-          <ng-container *ngTemplateOutlet="repBlock; context: { $implicit: e.apoderado, titulo: 'Apoderado' }"></ng-container>
-          <ng-container *ngTemplateOutlet="repBlock; context: { $implicit: e.padre, titulo: 'Padre' }"></ng-container>
-          <ng-container *ngTemplateOutlet="repBlock; context: { $implicit: e.madre, titulo: 'Madre' }"></ng-container>
+          <ng-container *ngTemplateOutlet="repBlock; context: { $implicit: e.apoderado, titulo: 'Apoderado principal', principal: true }"></ng-container>
+          <ng-container *ngTemplateOutlet="repBlock; context: { $implicit: e.padre, titulo: 'Padre', principal: false }"></ng-container>
+          <ng-container *ngTemplateOutlet="repBlock; context: { $implicit: e.madre, titulo: 'Madre', principal: false }"></ng-container>
         </div>
       </div>
 
@@ -114,10 +93,18 @@ import { FichaHijoService } from './ficha-hijo.service';
   }
 </div>
 
-<ng-template #repBlock let-rep let-titulo="titulo">
+<ng-template #repBlock let-rep let-titulo="titulo" let-principal="principal">
   @if (rep?.nombres) {
-    <div class="p-3 bg-gray-50 rounded-xl text-sm">
-      <p class="text-xs text-gray-400 mb-1">{{ titulo }}</p>
+    <div class="p-3 rounded-xl text-sm"
+      [ngClass]="principal ? 'bg-indigo-50 border-2 border-indigo-200' : 'bg-gray-50'">
+      <div class="flex flex-wrap items-center gap-1.5 mb-1">
+        <p class="text-xs font-semibold" [ngClass]="principal ? 'text-indigo-700' : 'text-gray-400'">{{ titulo }}</p>
+        @if (principal) {
+          <span class="inline-flex items-center gap-0.5 text-[9px] bg-indigo-600 text-white px-1.5 py-0.5 rounded-full font-semibold">
+            <span class="icon" style="font-size:10px">star</span> Principal
+          </span>
+        }
+      </div>
       <p class="font-semibold">{{ rep.nombres }} {{ rep.apellidos }}</p>
       <p class="text-gray-500 text-xs mt-1">DNI {{ rep.dni || '—' }} · {{ rep.telefono || '—' }}</p>
       @if (rep.email) { <p class="text-gray-500 text-xs">{{ rep.email }}</p> }
@@ -137,18 +124,10 @@ export class FichaHijoComponent implements OnInit {
 
   ngOnInit(): void {
     this.layout.setTitle('Ficha del alumno');
-    this.segSvc.loadHijos().subscribe({
-      next: hijos => {
-        if (hijos[0]) {
-          this.segSvc.seleccionarHijo(hijos[0]);
-          this.cargarFicha(hijos[0].studentId);
-        }
-      },
-    });
   }
 
-  seleccionarHijo(hijo: HijoResumen): void {
-    if (this.hijoId() === hijo.studentId) return;
+  onHijoChange(hijo: HijoResumen): void {
+    if (this.hijoId() === hijo.studentId && this.ficha()) return;
     this.segSvc.seleccionarHijo(hijo);
     this.cargarFicha(hijo.studentId);
   }

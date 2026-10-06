@@ -1,9 +1,15 @@
-﻿import { Component, inject, OnDestroy, OnInit, signal, computed } from '@angular/core';
+import { Component, computed, inject, OnDestroy, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { NgClass } from '@angular/common';
 import { ActivatedRoute } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { LayoutService } from '../../../core/layout/services/layout.service';
+import { TenantContextService } from '../../../core/tenant/tenant-context.service';
+import {
+  TenantInstitutionConsultaModo,
+  TenantInstitutionPickerComponent,
+} from '../../../core/tenant/tenant-institution-picker.component';
+import { markTenantReloadReady, setupTenantReload } from '../../../core/tenant/tenant-reload.util';
 import { OverlayPortalDirective } from '../../../core/overlay/overlay-portal.directive';
 import {
   escapeHtml,
@@ -11,6 +17,7 @@ import {
   wrapPrintDocumentHtml,
   writeHtmlToIframe,
 } from '../../../core/print/print-html.util';
+import { etiquetaGradoConNivel } from '../../../core/academico/grado-display.util';
 import { AsignacionService } from './asignacion.service';
 import {
   AsignacionDocente,
@@ -66,12 +73,53 @@ function gradosIncluyen(grado: string, grados: string[]): boolean {
   return grados.some((g) => gradoAsignacionKey(g) === key);
 }
 
+function normMatchText(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+/** Especialidad del docente alineada con el área o nombre del curso seleccionado. */
+function docenteEnsenaCurso(docente: Docente, cur: Curso): boolean {
+  if (!docente.activo) return false;
+
+  const esp = normMatchText(docente.especialidad);
+  const area = normMatchText(cur.area);
+  const nombre = normMatchText(cur.nombre);
+
+  const pares: [string[], string[]][] = [
+    [['matematic'], ['matematic', 'algebra', 'geometria', 'aritmetica', 'trigonometria']],
+    [['comunicacion'], ['comunicacion', 'comprension lectora', 'produccion de textos', 'lengua']],
+    [['ciencias', 'ciencia'], ['ciencia', 'biologia', 'fisica', 'quimica', 'cta', 'tecnologia']],
+    [['historia'], ['historia', 'ccss', 'personal social', 'geografia', 'dpcc', 'ciencias sociales']],
+    [['educacion fisica'], ['educacion fisica', 'psicomotricidad']],
+    [['arte'], ['arte y cultura', 'arte']],
+    [['ingles'], ['ingles']],
+    [['musica'], ['musica']],
+    [['religion', 'religiosa'], ['religion', 'religiosa']],
+    [['tecnologia'], ['tecnologia', 'trabajo']],
+    [['tutoria'], ['tutoria']],
+  ];
+
+  for (const [espKeys, curKeys] of pares) {
+    if (!espKeys.some((k) => esp.includes(k))) continue;
+    if (curKeys.some((k) => area.includes(k) || nombre.includes(k))) return true;
+  }
+
+  const tokens = [...area.split(/\s+/), ...nombre.split(/\s+/)]
+    .map((t) => t.trim())
+    .filter((t) => t.length >= 4);
+  return tokens.some((t) => esp.includes(t));
+}
+
 const PRINT_PREVIEW_FRAME_ID = 'asignacion-print-preview-frame';
 
 @Component({
   selector: 'app-asignacion',
   standalone: true,
-  imports: [FormsModule, NgClass, OverlayPortalDirective],
+  imports: [FormsModule, NgClass, OverlayPortalDirective, TenantInstitutionPickerComponent],
   template: `
 <div class="min-h-screen bg-gray-50 animate-fade-in">
 
@@ -93,12 +141,14 @@ const PRINT_PREVIEW_FRAME_ID = 'asignacion-print-preview-frame';
           </svg>
           Exportar
         </button>
-        <button class="btn btn-primary text-sm gap-1.5" (click)="abrirDrawer()">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-          </svg>
-          Nueva Asignación
-        </button>
+        @if (puedeGestionar()) {
+          <button class="btn btn-primary text-sm gap-1.5" (click)="abrirDrawer()">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+            Nueva Asignación
+          </button>
+        }
       </div>
     </div>
 
@@ -120,6 +170,25 @@ const PRINT_PREVIEW_FRAME_ID = 'asignacion-print-preview-frame';
   </div>
 
   <div class="p-6 max-w-[1400px] mx-auto">
+
+    <div class="mb-4 card p-4">
+      <app-tenant-institution-picker
+        #instPickerAsignacion
+        [allowGlobal]="false"
+        hint="Seleccione la institución antes de consultar asignaciones por docente."
+        (modoChange)="onModoInstitucion($event)"
+      />
+    </div>
+
+    @if (requiereSeleccionInstitucion()) {
+      <div class="card p-12 text-center space-y-3 mb-4">
+        <span class="icon text-4xl text-amber-500">school</span>
+        <p class="text-gray-700 font-medium">Seleccione una institución educativa</p>
+        <p class="text-sm text-gray-500 max-w-md mx-auto">
+          Elija la IE en el selector para ver docentes, asignaciones y cobertura.
+        </p>
+      </div>
+    }
 
     @if (loadError()) {
       <div class="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
@@ -211,7 +280,7 @@ const PRINT_PREVIEW_FRAME_ID = 'asignacion-print-preview-frame';
             <select class="form-input w-32" [ngModel]="fGrado()" (ngModelChange)="fGrado.set($event)">
               <option value="">Todos</option>
               @for (g of gradosFiltro(); track g) {
-                <option [value]="g">{{ g }}</option>
+                <option [value]="g">{{ fNivel() ? etiquetaGrado(fNivel(), g) : g }}</option>
               }
             </select>
           </div>
@@ -292,7 +361,7 @@ const PRINT_PREVIEW_FRAME_ID = 'asignacion-print-preview-frame';
                       'badge-purple': a.nivel === 'Secundaria'
                     }">{{ a.nivel }}</span>
                   </td>
-                  <td class="font-semibold text-gray-800">{{ a.grado }}</td>
+                  <td class="font-semibold text-gray-800">{{ etiquetaGrado(a.nivel, a.grado) }}</td>
                   <td>
                     <div class="flex gap-1 flex-wrap">
                       @for (s of a.secciones; track s) {
@@ -554,7 +623,9 @@ const PRINT_PREVIEW_FRAME_ID = 'asignacion-print-preview-frame';
                 <th class="text-left px-3 py-3 font-semibold text-gray-600 border-b border-r border-gray-200 sticky left-0 bg-gray-50 z-10 w-40">Curso</th>
                 <th class="text-center px-2 py-3 font-semibold text-gray-600 border-b border-r border-gray-200 w-8">H/s</th>
                 @for (g of gradosCob(); track g) {
-                  <th class="text-center px-3 py-3 font-semibold text-gray-700 border-b border-r border-gray-200 min-w-[110px]">{{ g }}</th>
+                  <th class="text-center px-3 py-3 font-semibold text-gray-700 border-b border-r border-gray-200 min-w-[110px]">
+                    {{ etiquetaGrado(nivelCob(), g) }}
+                  </th>
                 }
               </tr>
             </thead>
@@ -783,9 +854,10 @@ const PRINT_PREVIEW_FRAME_ID = 'asignacion-print-preview-frame';
                 [ngClass]="dGrado() === g
                   ? 'bg-indigo-100 text-indigo-700 border-indigo-400'
                   : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'"
-                (click)="onDGradoChange(g)">{{ g }}</button>
+                (click)="onDGradoChange(g)">{{ etiquetaGrado(dNivel(), g) }}</button>
             }
           </div>
+          <p class="text-xs text-gray-500 mt-1">Ej.: «5° Secundaria» y «5° Primaria» son grados distintos.</p>
         </div>
 
         <!-- Curso -->
@@ -798,22 +870,30 @@ const PRINT_PREVIEW_FRAME_ID = 'asignacion-print-preview-frame';
             }
           </select>
           @if (dCursosDisp().length === 0) {
-            <p class="text-xs text-amber-600 mt-1">No hay cursos definidos para {{ dNivel() }} · {{ dGrado() }}</p>
+            <p class="text-xs text-amber-600 mt-1">No hay cursos definidos para {{ etiquetaGrado(dNivel(), dGrado()) }}</p>
           }
         </div>
 
         <!-- Docente -->
         <div>
           <label class="form-label">Docente <span class="text-red-500">*</span></label>
-          <select class="form-input w-full" [ngModel]="dDocId()" (ngModelChange)="dDocId.set($event ? +$event : null)">
-            <option [ngValue]="null">-- Seleccionar docente --</option>
-            @for (d of _docentes(); track d.id) {
+          <select class="form-input w-full"
+                  [ngModel]="dDocId()"
+                  (ngModelChange)="dDocId.set($event ? +$event : null)"
+                  [disabled]="!dCursoId()">
+            <option [ngValue]="null">{{ dCursoId() ? '-- Seleccionar docente --' : '-- Seleccione un curso primero --' }}</option>
+            @for (d of dDocentesDisp(); track d.id) {
               @let stats = docenteStats(d.id);
               <option [ngValue]="d.id">
                 {{ d.apellidos }}, {{ d.nombres }} — {{ d.especialidad }} ({{ stats.totalHoras }}/{{ d.maxHoras }}h)
               </option>
             }
           </select>
+          @if (dCursoId() && !dDocentesDisp().length) {
+            <p class="text-xs text-amber-600 mt-1">No hay docentes con especialidad acorde al curso seleccionado.</p>
+          } @else if (dCursoId()) {
+            <p class="text-xs text-gray-500 mt-1">{{ dDocentesDisp().length }} docente(s) habilitado(s) para enseñar este curso.</p>
+          }
 
           <!-- Selected docente load preview -->
           @if (dDocId()) {
@@ -865,7 +945,7 @@ const PRINT_PREVIEW_FRAME_ID = 'asignacion-print-preview-frame';
             <div class="space-y-1 text-xs text-indigo-800">
               <div><span class="text-indigo-500">Docente:</span> {{ prevDoc?.apellidos }}, {{ prevDoc?.nombres }}</div>
               <div><span class="text-indigo-500">Curso:</span> {{ prevCur?.nombre }}</div>
-              <div><span class="text-indigo-500">Nivel / Grado:</span> {{ dNivel() }} · {{ dGrado() }}</div>
+              <div><span class="text-indigo-500">Grado:</span> {{ etiquetaGrado(dNivel(), dGrado()) }}</div>
               <div><span class="text-indigo-500">Secciones:</span> {{ dSecciones().join(', ') }}</div>
               <div><span class="text-indigo-500">Horas/sem:</span> {{ prevCur?.horasSemanales }}h × {{ dSecciones().length }} sec = <strong>{{ (prevCur?.horasSemanales ?? 0) * dSecciones().length }}h</strong></div>
             </div>
@@ -969,14 +1049,32 @@ const PRINT_PREVIEW_FRAME_ID = 'asignacion-print-preview-frame';
   `
 })
 export class AsignacionComponent implements OnInit, OnDestroy {
+  private readonly _tenantReloadReady = setupTenantReload(() => {
+    this.syncPickerDesdeTenant();
+    this.cargarDatos();
+  }, {
+    onBeforeReload: () => this.limpiarDatos(),
+  });
   private readonly layout = inject(LayoutService);
   private readonly route = inject(ActivatedRoute);
+  readonly tenant = inject(TenantContextService);
   readonly svc = inject(AsignacionService);
   private cargarSub?: Subscription;
+
+  readonly modoConsulta = signal<TenantInstitutionConsultaModo>('institution');
+  readonly requiereSeleccionInstitucion = computed(
+    () =>
+      this.tenant.canSelectInstitution() &&
+      this.modoConsulta() === 'pending',
+  );
+  readonly puedeGestionar = computed(
+    () => !this.requiereSeleccionInstitucion(),
+  );
 
   readonly Math = Math;
   readonly PRINT_PREVIEW_FRAME_ID = PRINT_PREVIEW_FRAME_ID;
   readonly gradosIncluyen = gradosIncluyen;
+  readonly etiquetaGrado = etiquetaGradoConNivel;
   readonly DOCENTES_POR_PAGINA = 10;
   readonly NIVELES: Nivel[] = ['Inicial', 'Primaria', 'Secundaria'];
   readonly TABS = [
@@ -1185,6 +1283,26 @@ export class AsignacionComponent implements OnInit, OnDestroy {
     ),
   );
 
+  dDocentesDisp = computed(() => {
+    const cursoId = this.dCursoId();
+    if (!cursoId) return [];
+
+    const cur = this.curById(cursoId);
+    if (!cur) return [];
+
+    const docentes = this._docentes()
+      .filter((d) => docenteEnsenaCurso(d, cur))
+      .sort((a, b) => `${a.apellidos} ${a.nombres}`.localeCompare(`${b.apellidos} ${b.nombres}`, 'es'));
+
+    const docId = this.dDocId();
+    if (docId != null && !docentes.some((d) => d.id === docId)) {
+      const actual = this.docById(docId);
+      if (actual) return [actual, ...docentes];
+    }
+
+    return docentes;
+  });
+
   // ── Methods ───────────────────────────────────────────────────────────
   ngOnInit(): void {
     this.layout.setTitle('Asignación Docente');
@@ -1192,7 +1310,44 @@ export class AsignacionComponent implements OnInit, OnDestroy {
     if (tabParam === 'docentes' || tabParam === 'cobertura' || tabParam === 'asignaciones') {
       this.tab.set(tabParam);
     }
+    this.inicializarModoConsulta();
+    if (!this.requiereSeleccionInstitucion()) {
+      this.cargarDatos();
+    }
+    markTenantReloadReady(this._tenantReloadReady);
+  }
+
+  onModoInstitucion(modo: TenantInstitutionConsultaModo): void {
+    this.modoConsulta.set(modo);
+    if (modo === 'pending') {
+      this.limpiarDatos();
+      return;
+    }
     this.cargarDatos();
+  }
+
+  private inicializarModoConsulta(): void {
+    if (!this.tenant.canSelectInstitution()) {
+      this.modoConsulta.set('institution');
+      return;
+    }
+    this.modoConsulta.set(
+      this.tenant.activeInstitutionId() != null ? 'institution' : 'pending',
+    );
+  }
+
+  private syncPickerDesdeTenant(): void {
+    if (!this.tenant.canSelectInstitution()) return;
+    const id = this.tenant.activeInstitutionId();
+    this.modoConsulta.set(id != null ? 'institution' : 'pending');
+  }
+
+  private limpiarDatos(): void {
+    this._docentes.set([]);
+    this._cursos.set([]);
+    this._asig.set([]);
+    this.seccionesPorGrado.set({});
+    this.loadError.set('');
   }
 
   ngOnDestroy(): void {
@@ -1340,6 +1495,10 @@ export class AsignacionComponent implements OnInit, OnDestroy {
   cargarDatos(): void {
     this.cargarSub?.unsubscribe();
     this.loadError.set('');
+    if (this.requiereSeleccionInstitucion()) {
+      this.limpiarDatos();
+      return;
+    }
     this.cargarSub = this.svc.loadContext(this.anioEscolar()).subscribe({
       next: (ctx) => {
         this.anioEscolar.set(ctx.anioEscolar);
@@ -1545,9 +1704,29 @@ export class AsignacionComponent implements OnInit, OnDestroy {
     const grados = this.gradosPorNivel(n);
     this.dGrado.set(grados[0]);
     this.dCursoId.set(null);
+    this.dDocId.set(null);
   }
-  onDGradoChange(g: string): void { this.dGrado.set(g); this.dCursoId.set(null); }
-  onDCursoChange(id: number | null): void { this.dCursoId.set(id); }
+  onDGradoChange(g: string): void {
+    this.dGrado.set(g);
+    this.dCursoId.set(null);
+    this.dDocId.set(null);
+  }
+  onDCursoChange(id: number | null): void {
+    this.dCursoId.set(id);
+    const docId = this.dDocId();
+    if (docId == null || id == null) return;
+
+    const cur = this.curById(id);
+    if (!cur) {
+      this.dDocId.set(null);
+      return;
+    }
+
+    const doc = this.docById(docId);
+    if (!doc || !docenteEnsenaCurso(doc, cur)) {
+      this.dDocId.set(null);
+    }
+  }
 
   toggleSeccion(s: string): void {
     const cur = this.dSecciones();

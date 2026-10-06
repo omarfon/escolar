@@ -6,9 +6,25 @@ export type RolUsuario =
   | 'TESORERO'
   | 'PADRE'
   | 'ESTUDIANTE'
-  | 'BIBLIOTECARIO';
+  | 'BIBLIOTECARIO'
+  | 'UGEL'
+  | 'DRE'
+  | 'MINEDU';
 
+export type AmbitoTerritorial = 'MINEDU' | 'DRE' | 'UGEL' | 'IE';
 export type EstadoUsuario = 'activo' | 'inactivo' | 'bloqueado';
+
+export interface UserRoleAssignment {
+  id?: number;
+  roleCodigo: RolUsuario;
+  roleLabel?: string;
+  ambito: AmbitoTerritorial;
+  dreCodigo?: string;
+  ugelCodigo?: string;
+  institutionId?: number | null;
+  esPrincipal: boolean;
+  activo?: boolean;
+}
 
 export interface Usuario {
   id: number;
@@ -19,6 +35,8 @@ export interface Usuario {
   username?: string;
   telefono: string;
   rol: RolUsuario;
+  roles: RolUsuario[];
+  roleAssignments: UserRoleAssignment[];
   sede: string;
   estado: EstadoUsuario;
   ultimoAcceso: string | null;
@@ -36,6 +54,8 @@ export interface CreateUsuarioPayload {
   estado?: EstadoUsuario;
   cargo?: string;
   password: string;
+  roleAssignments?: UserRoleAssignment[];
+  roleAssignmentsMotivo?: string;
 }
 
 export interface UpdateUsuarioPayload {
@@ -49,6 +69,11 @@ export interface UpdateUsuarioPayload {
   estado?: EstadoUsuario;
   cargo?: string;
   password?: string;
+}
+
+export interface SetRoleAssignmentsPayload {
+  motivo: string;
+  assignments: UserRoleAssignment[];
 }
 
 export interface BulkImportUsuariosPayload {

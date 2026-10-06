@@ -22,3 +22,12 @@ export interface SyncSalonesResult {
   created: number;
   skipped: number;
 }
+
+export interface CreateSalonPayload {
+  anioEscolar: number;
+  nivel: string;
+  grado: string;
+  seccion: string;
+  aforo: number;
+  activo?: boolean;
+}

@@ -13,6 +13,9 @@ export type BitacoraAccion =
 
 export type BitacoraNivel = 'info' | 'warning' | 'critical';
 
+export type BitacoraResultado = 'success' | 'error';
+export type BitacoraTipoVista = 'todos' | 'accesos';
+
 export interface BitacoraItem {
   id: number;
   usuarioId: number | null;
@@ -26,6 +29,8 @@ export interface BitacoraItem {
   detalle: Record<string, unknown> | null;
   ip: string;
   nivel: BitacoraNivel;
+  resultado: BitacoraResultado;
+  correlationId: string | null;
   createdAt: string;
   fechaDisplay: string;
   horaDisplay: string;
@@ -36,22 +41,49 @@ export interface BitacoraResumen {
   hoy: number;
   criticos: number;
   advertencias: number;
+  accesos: number;
+  accesosFallidos: number;
   porModulo: { modulo: string; total: number }[];
+}
+
+export interface BitacoraPagination {
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
 }
 
 export interface BitacoraResponse {
   resumen: BitacoraResumen;
   items: BitacoraItem[];
+  pagination: BitacoraPagination;
+}
+
+export interface BitacoraContext {
+  institucion: {
+    nombre: string;
+    siglas: string;
+    anioEscolar: number;
+    ugel?: string;
+    dre?: string;
+  };
+  retencionDias: number;
+  permisoConsulta: string;
+  permisoExportacion: string;
 }
 
 export interface BitacoraFilters {
+  tipo: BitacoraTipoVista;
   modulo: string;
   accion: string;
   nivel: string;
+  resultado: string;
   usuario: string;
   desde: string;
   hasta: string;
   busqueda: string;
+  page: number;
+  pageSize: number;
 }
 
 export const MODULOS_BITACORA = [

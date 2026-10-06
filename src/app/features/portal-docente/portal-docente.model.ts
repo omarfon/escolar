@@ -10,6 +10,7 @@ export interface PortalDocenteCursoCard {
   id: string;
   assignmentId: number;
   cursoId: number;
+  curriculumId: number | null;
   cursoNombre: string;
   nivel: string;
   grado: string;
@@ -114,6 +115,7 @@ export function mapMiAulaToDocenteDetail(
 
   return {
     id: aula.docente.id,
+    institutionId: user?.institutionId ?? 0,
     nombres: user?.nombre ?? nombresRaw ?? '',
     apellidos: user?.apellido ?? apellidosRaw ?? '',
     nombreCompleto: aula.docente.nombreCompleto,

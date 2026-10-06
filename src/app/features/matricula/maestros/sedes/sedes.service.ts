@@ -2,6 +2,8 @@ import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http';
 import { Observable, catchError, finalize, throwError } from 'rxjs';
 import { environment } from '@environments/environment';
+import { TenantContextService } from '../../../../core/tenant/tenant-context.service';
+import { withInstitutionParams } from '../../../../core/tenant/tenant-http.util';
 import {
   CreateMaestroSedePayload,
   MaestroSedeItem,
@@ -12,6 +14,7 @@ import {
 @Injectable({ providedIn: 'root' })
 export class MaestrosSedesService {
   private readonly http = inject(HttpClient);
+  private readonly tenant = inject(TenantContextService);
   private readonly base = `${environment.apiUrl}/maestros/sedes`;
 
   readonly loading = signal(false);
@@ -20,7 +23,11 @@ export class MaestrosSedesService {
   list(institutionId?: number): Observable<MaestroSedesCatalog> {
     this.loading.set(true);
     let params = new HttpParams();
-    if (institutionId) params = params.set('institutionId', String(institutionId));
+    if (institutionId) {
+      params = params.set('institutionId', String(institutionId));
+    } else {
+      params = withInstitutionParams(this.tenant, params);
+    }
     return this.http.get<MaestroSedesCatalog>(this.base, { params }).pipe(
       catchError((err) => throwError(() => new Error(this.extractError(err)))),
       finalize(() => this.loading.set(false)),

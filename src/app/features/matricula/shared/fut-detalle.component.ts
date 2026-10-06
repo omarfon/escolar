@@ -102,8 +102,21 @@ import {
             </h3>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
               @for (rep of representantes(); track rep.label) {
-                <div class="rounded-xl border border-gray-100 bg-gray-50/80 p-3 text-sm">
-                  <div class="text-xs font-bold text-gray-500 uppercase mb-2">{{ rep.label }}</div>
+                <div class="rounded-xl border p-3 text-sm"
+                  [ngClass]="rep.esPrincipal
+                    ? 'border-2 border-indigo-200 bg-gradient-to-br from-indigo-50/90 to-white shadow-sm'
+                    : 'border-gray-100 bg-gray-50/80'">
+                  <div class="flex flex-wrap items-center gap-1.5 mb-2">
+                    <div class="text-xs font-bold uppercase"
+                      [ngClass]="rep.esPrincipal ? 'text-indigo-800' : 'text-gray-500'">
+                      {{ rep.esPrincipal ? 'Apoderado principal' : rep.label }}
+                    </div>
+                    @if (rep.esPrincipal) {
+                      <span class="inline-flex items-center gap-0.5 text-[9px] bg-indigo-600 text-white px-1.5 py-0.5 rounded-full font-semibold normal-case">
+                        <span class="icon" style="font-size:10px">star</span> Principal
+                      </span>
+                    }
+                  </div>
                   @if (rep.datos.nombres) {
                     <div class="font-semibold text-gray-900">{{ rep.datos.nombres }} {{ rep.datos.apellidos }}</div>
                     <div class="text-xs text-gray-500 mt-1 space-y-0.5">
@@ -216,9 +229,9 @@ export class FutDetalleComponent {
   readonly representantes = computed(() => {
     const s = this.e();
     return [
-      { label: 'Padre', datos: s.padre },
-      { label: 'Madre', datos: s.madre },
-      { label: 'Apoderado', datos: s.apoderado },
+      { label: 'Apoderado', datos: s.apoderado, esPrincipal: true },
+      { label: 'Padre', datos: s.padre, esPrincipal: false },
+      { label: 'Madre', datos: s.madre, esPrincipal: false },
     ];
   });
 

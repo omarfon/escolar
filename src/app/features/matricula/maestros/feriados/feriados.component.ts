@@ -1,4 +1,4 @@
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { NgClass, DatePipe } from '@angular/common';
 import { MaestrosFeriadosService } from './feriados.service';
@@ -8,6 +8,14 @@ import {
   MaestroFeriadoTipo,
   TIPO_FERIADO_CFG,
 } from './feriados.model';
+import {
+  ErroresCampoFeriado,
+  feriadoFormularioMinimoListo,
+  primerErrorFeriado,
+  validarCampoFeriado,
+  validarFeriadoForm,
+} from './feriado-form.validation';
+import { markTenantReloadReady, setupTenantReload } from '../../../../core/tenant/tenant-reload.util';
 
 @Component({
   selector: 'app-maestros-feriados',
@@ -28,25 +36,25 @@ import {
     </button>
   </div>
 
-  <div class="card p-4 flex flex-wrap items-end gap-3">
-    <div>
-      <label class="text-xs text-gray-500 font-medium">Año escolar</label>
-      <select class="input mt-1 w-36" [(ngModel)]="filtroAnio" (ngModelChange)="cargar()">
+  <div class="card p-4 flex flex-wrap items-end gap-4">
+    <div class="form-group w-36">
+      <label class="form-label">Año escolar</label>
+      <select class="form-select" [(ngModel)]="filtroAnio" (ngModelChange)="cargar()">
         @for (a of aniosDisponibles; track a) {
           <option [ngValue]="a">{{ a }}</option>
         }
       </select>
     </div>
-    <div>
-      <label class="text-xs text-gray-500 font-medium">Tipo</label>
-      <select class="input mt-1 w-40" [(ngModel)]="filtroTipo" (ngModelChange)="cargar()">
+    <div class="form-group w-40">
+      <label class="form-label">Tipo</label>
+      <select class="form-select" [(ngModel)]="filtroTipo" (ngModelChange)="cargar()">
         <option value="">Todos</option>
         <option value="nacional">Nacional</option>
         <option value="local">Local</option>
         <option value="institucional">Institucional</option>
       </select>
     </div>
-    <p class="text-xs text-gray-400 ml-auto">{{ feriadosFiltrados().length }} feriado(s)</p>
+    <p class="text-xs text-gray-400 ml-auto pb-2">{{ feriadosFiltrados().length }} feriado(s)</p>
   </div>
 
   @if (resumenMes()) {
@@ -115,37 +123,68 @@ import {
         (click)="$event.stopPropagation()">
         <h2 class="text-lg font-bold text-gray-900">{{ editId() ? 'Editar feriado' : 'Nuevo feriado' }}</h2>
 
+        @if (errorForm()) {
+          <div class="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+            <span class="icon icon-sm text-red-500">error_outline</span> {{ errorForm() }}
+          </div>
+        }
+
         <div class="grid grid-cols-2 gap-3">
           <div>
-            <label class="form-label">Año escolar</label>
-            <input type="number" class="form-input w-full" [(ngModel)]="formAnio" min="2000" />
+            <label class="form-label">Año escolar <span class="text-red-400">*</span></label>
+            <input type="number" class="form-input w-full" min="2000" step="1"
+                   [ngClass]="claseCampo('anioEscolar')"
+                   [(ngModel)]="formAnio"
+                   (ngModelChange)="onCampoFormChange('anioEscolar')"
+                   (blur)="onCampoBlur('anioEscolar')" />
+            @if (campoError('anioEscolar'); as err) { <p class="form-error mt-1">{{ err }}</p> }
           </div>
           <div>
-            <label class="form-label">Fecha</label>
-            <input type="date" class="form-input w-full" [(ngModel)]="formFecha" />
+            <label class="form-label">Fecha <span class="text-red-400">*</span></label>
+            <input type="date" class="form-input w-full"
+                   [ngClass]="claseCampo('fecha')"
+                   [(ngModel)]="formFecha"
+                   (ngModelChange)="onCampoFormChange('fecha')"
+                   (blur)="onCampoBlur('fecha')" />
+            @if (campoError('fecha'); as err) { <p class="form-error mt-1">{{ err }}</p> }
           </div>
         </div>
         <div>
-          <label class="form-label">Nombre</label>
-          <input class="form-input w-full" [(ngModel)]="formNombre" placeholder="Ej. Fiestas Patrias" />
+          <label class="form-label">Nombre <span class="text-red-400">*</span></label>
+          <input class="form-input w-full" placeholder="Ej. Fiestas Patrias"
+                 [ngClass]="claseCampo('nombre')"
+                 [(ngModel)]="formNombre"
+                 (ngModelChange)="onCampoFormChange('nombre')"
+                 (blur)="onCampoBlur('nombre')" />
+          @if (campoError('nombre'); as err) { <p class="form-error mt-1">{{ err }}</p> }
         </div>
         <div>
-          <label class="form-label">Tipo</label>
-          <select class="form-input w-full" [(ngModel)]="formTipo">
+          <label class="form-label">Tipo <span class="text-red-400">*</span></label>
+          <select class="form-input w-full" [ngClass]="claseCampo('tipo')"
+                  [(ngModel)]="formTipo"
+                  (ngModelChange)="onCampoFormChange('tipo')"
+                  (blur)="onCampoBlur('tipo')">
             <option value="nacional">Nacional</option>
             <option value="local">Local</option>
             <option value="institucional">Institucional</option>
           </select>
+          @if (campoError('tipo'); as err) { <p class="form-error mt-1">{{ err }}</p> }
         </div>
         <div>
-          <label class="form-label">Descripción (opcional)</label>
-          <textarea class="form-input w-full" rows="2" [(ngModel)]="formDescripcion"></textarea>
+          <label class="form-label">Descripción <span class="text-gray-400 font-normal">(opcional)</span></label>
+          <textarea class="form-input w-full" rows="2"
+                    [ngClass]="claseCampo('descripcion')"
+                    [(ngModel)]="formDescripcion"
+                    (ngModelChange)="onCampoFormChange('descripcion')"
+                    (blur)="onCampoBlur('descripcion')"></textarea>
+          @if (campoError('descripcion'); as err) { <p class="form-error mt-1">{{ err }}</p> }
         </div>
 
         <div class="flex gap-2 pt-2">
           <button class="btn btn-secondary flex-1" (click)="cerrarModal()">Cancelar</button>
           <button class="btn btn-primary flex-1" (click)="guardar()"
-            [disabled]="!puedeGuardar() || svc.saving()">
+            [disabled]="!puedeGuardarForm() || svc.saving()"
+            [title]="puedeGuardarForm() ? '' : 'Completa año escolar, fecha, nombre y tipo'">
             {{ editId() ? 'Guardar' : 'Crear' }}
           </button>
         </div>
@@ -163,12 +202,24 @@ import {
   `,
 })
 export class MaestrosFeriadosComponent implements OnInit {
+  private readonly _tenantReloadReady = setupTenantReload(() => this.cargar());
   readonly svc = inject(MaestrosFeriadosService);
 
   readonly feriados = signal<MaestroFeriadoItem[]>([]);
   readonly modalOpen = signal(false);
   readonly editId = signal<number | null>(null);
   readonly error = signal('');
+  errorForm = signal('');
+  fieldErrors = signal<ErroresCampoFeriado>({});
+  camposTocados = signal<Record<string, true>>({});
+  intentoGuardar = signal(false);
+  private readonly formRevision = signal(0);
+
+  readonly puedeGuardarForm = computed(() => {
+    this.formRevision();
+    return feriadoFormularioMinimoListo(this.valoresFormulario());
+  });
+
   readonly toast = signal<{ msg: string; type: 'success' | 'error' } | null>(null);
   readonly resumenMes = signal<{ diasClase: number; diasLaborables: number; feriadosEnRango: unknown[] } | null>(null);
 
@@ -184,6 +235,7 @@ export class MaestrosFeriadosComponent implements OnInit {
 
   ngOnInit(): void {
     this.cargar();
+    markTenantReloadReady(this._tenantReloadReady);
   }
 
   feriadosFiltrados(): MaestroFeriadoItem[] {
@@ -231,20 +283,112 @@ export class MaestrosFeriadosComponent implements OnInit {
       this.formTipo = 'institucional';
       this.formDescripcion = '';
     }
+    this.resetValidacionForm();
     this.modalOpen.set(true);
   }
 
   cerrarModal(): void {
     this.modalOpen.set(false);
     this.editId.set(null);
+    this.resetValidacionForm();
   }
 
-  puedeGuardar(): boolean {
-    return !!this.formNombre.trim() && !!this.formFecha && this.formAnio >= 2000;
+  private resetValidacionForm(): void {
+    this.fieldErrors.set({});
+    this.camposTocados.set({});
+    this.intentoGuardar.set(false);
+    this.errorForm.set('');
+  }
+
+  private valoresFormulario() {
+    return {
+      anioEscolar: Number(this.formAnio),
+      fecha: this.formFecha,
+      nombre: this.formNombre,
+      tipo: this.formTipo,
+      descripcion: this.formDescripcion,
+    };
+  }
+
+  onCampoBlur(key: string): void {
+    this.camposTocados.update((t) => ({ ...t, [key]: true }));
+    this.validarCampoEnVivo(key);
+  }
+
+  onCampoFormChange(key: string): void {
+    this.formRevision.update((n) => n + 1);
+
+    if (key === 'anioEscolar') {
+      const n = Number(this.formAnio);
+      this.formAnio = Number.isFinite(n) ? n : 0;
+    }
+
+    if (this.camposTocados()[key] || this.intentoGuardar() || this.fieldErrors()[key]) {
+      this.validarCampoEnVivo(key);
+    } else {
+      this.quitarErrorCampo(key);
+    }
+
+    if (key === 'anioEscolar' && this.camposTocados()['fecha']) {
+      this.validarCampoEnVivo('fecha');
+    }
+    if (key === 'fecha' && this.camposTocados()['anioEscolar']) {
+      this.validarCampoEnVivo('fecha');
+    }
+  }
+
+  private validarCamposMinimosEnVivo(): void {
+    for (const key of ['anioEscolar', 'fecha', 'nombre', 'tipo']) {
+      this.camposTocados.update((t) => ({ ...t, [key]: true }));
+      this.validarCampoEnVivo(key);
+    }
+  }
+
+  private validarCampoEnVivo(key: string): void {
+    const err = validarCampoFeriado(this.valoresFormulario(), key);
+    if (err) {
+      this.fieldErrors.update((errors) => ({ ...errors, [key]: err }));
+    } else {
+      this.quitarErrorCampo(key);
+    }
+  }
+
+  private quitarErrorCampo(key: string): void {
+    if (!this.fieldErrors()[key]) return;
+    this.fieldErrors.update((errors) => {
+      const next = { ...errors };
+      delete next[key];
+      return next;
+    });
+    if (!Object.keys(this.fieldErrors()).length) this.errorForm.set('');
+  }
+
+  campoError(key: string): string | null {
+    if (!this.camposTocados()[key] && !this.intentoGuardar()) return null;
+    return this.fieldErrors()[key] ?? null;
+  }
+
+  claseCampo(key: string): string {
+    return this.campoError(key) ? 'border-red-400 focus:border-red-500 focus:ring-red-200' : '';
   }
 
   guardar(): void {
-    if (!this.puedeGuardar()) return;
+    this.intentoGuardar.set(true);
+    if (!this.puedeGuardarForm()) {
+      this.validarCamposMinimosEnVivo();
+      this.errorForm.set('Completa los campos obligatorios del feriado.');
+      return;
+    }
+
+    const errors = validarFeriadoForm(this.valoresFormulario());
+    this.fieldErrors.set(errors);
+    if (Object.keys(errors).length) {
+      this.errorForm.set(primerErrorFeriado(errors) ?? 'Revisa los datos del formulario.');
+      return;
+    }
+
+    this.errorForm.set('');
+
     const payload: CreateMaestroFeriadoPayload = {
       anioEscolar: this.formAnio,
       fecha: this.formFecha,

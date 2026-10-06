@@ -1,13 +1,20 @@
 ﻿import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { NgClass } from '@angular/common';
+import { AuthService } from '../../../core/auth/services/auth.service';
 import { LayoutService } from '../../../core/layout/services/layout.service';
+import { TenantContextService } from '../../../core/tenant/tenant-context.service';
+import { markTenantReloadReady, setupTenantReload } from '../../../core/tenant/tenant-reload.util';
 import {
   combinarRequisitosConDocumentos,
   DocumentoMatriculaVista,
 } from '../shared/documentos-requisitos';
 import { Estudiante, ExpedientesService } from '../services/expedientes.service';
-import { ApiStudentDocumentsResponse } from '../../../core/api/api.models';
+import {
+  ApiDocumentoArchivo,
+  ApiStudentDocumentsResponse,
+  StudentDocumentsContext,
+} from '../../../core/api/api.models';
 
 @Component({
   standalone: true,
@@ -18,8 +25,19 @@ import { ApiStudentDocumentsResponse } from '../../../core/api/api.models';
         <div>
           <h2 class="text-2xl font-bold text-gray-900 tracking-tight">Documentos de Estudiantes</h2>
           <p class="text-sm text-gray-500 mt-0.5">
-            Busca un alumno y actualiza los documentos solicitados en matrícula
+            Busca un alumno y carga los documentos sustentatorios (FUT, identidad, etc.)
           </p>
+          @if (context(); as ctx) {
+            <p class="text-xs text-gray-400 mt-1">
+              Máx. {{ ctx.maxMb }} MB · Formatos: {{ ctx.formatosPermitidos.join(', ') }}
+              · Almacén: {{ ctx.storageDriver === 'minio' ? 'MinIO' : 'Local' }}
+            </p>
+          }
+          @if (tenant.requiresSelection()) {
+            <p class="text-xs text-amber-600 mt-1">
+              Seleccione una institución educativa en el encabezado para ver el padrón.
+            </p>
+          }
           @if (!loading() && !error() && resultados().length) {
             <p class="text-xs text-teal-600 mt-1">
               {{ resultados().length }} estudiante(s) desde la base de datos
@@ -195,11 +213,20 @@ import { ApiStudentDocumentsResponse } from '../../../core/api/api.models';
                             @if (!doc.registrado) {
                               <span class="badge badge-yellow text-[10px]">Sin registrar</span>
                             }
+                            @if (doc.archivo) {
+                              <span class="badge badge-blue text-[10px]">v{{ doc.archivo.version }}</span>
+                            }
                             <span class="badge text-[10px]"
                               [ngClass]="doc.estado === 'entregado' ? 'badge-green' : doc.estado === 'vencido' ? 'badge-red' : 'badge-gray'">
                               {{ doc.estado }}
                             </span>
                           </div>
+                          @if (doc.archivo) {
+                            <p class="text-[11px] text-gray-400 mt-1 truncate">
+                              {{ doc.archivo.nombreArchivo }} · {{ formatBytes(doc.archivo.tamanoBytes) }}
+                              · SHA {{ doc.archivo.sha256.slice(0, 8) }}…
+                            </p>
+                          }
                         </div>
                       </div>
 
@@ -211,14 +238,16 @@ import { ApiStudentDocumentsResponse } from '../../../core/api/api.models';
                           (ngModelChange)="doc.numero = $event"
                           (blur)="guardarCampo(doc)"
                         >
-                        <label class="btn btn-secondary btn-sm cursor-pointer whitespace-nowrap">
-                          <span class="icon icon-sm">{{ doc.imagenUrl ? 'image' : 'upload_file' }}</span>
-                          {{ doc.imagenUrl ? 'Cambiar' : 'Adjuntar' }}
-                          <input type="file" accept="image/*,application/pdf" class="hidden"
-                            (change)="onArchivo(doc, $event)">
-                        </label>
-                        @if (doc.imagenUrl) {
-                          <button class="btn btn-ghost btn-sm" (click)="verImagen(doc)">
+                        @if (puedeCargar()) {
+                          <label class="btn btn-secondary btn-sm cursor-pointer whitespace-nowrap">
+                            <span class="icon icon-sm">{{ doc.archivo ? 'upload_file' : 'upload_file' }}</span>
+                            {{ doc.archivo ? 'Nueva versión' : 'Cargar archivo' }}
+                            <input type="file" [accept]="acceptTipos()" class="hidden"
+                              (change)="onSeleccionArchivo(doc, $event)">
+                          </label>
+                        }
+                        @if (doc.archivo || doc.imagenUrl) {
+                          <button class="btn btn-ghost btn-sm" (click)="verDocumento(doc)">
                             <span class="icon icon-sm">visibility</span>
                           </button>
                         }
@@ -234,14 +263,39 @@ import { ApiStudentDocumentsResponse } from '../../../core/api/api.models';
       </div>
     </div>
 
+    @if (uploadDoc()) {
+      <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+        <div class="card w-full max-w-md p-5 space-y-4" role="dialog" aria-modal="true">
+          <h3 class="font-semibold text-gray-900">Confirmar carga — {{ uploadDoc()!.tipo }}</h3>
+          <p class="text-sm text-gray-600 truncate">{{ uploadNombreArchivo() }}</p>
+          <div>
+            <label class="form-label mb-1 block">Motivo *</label>
+            <textarea class="form-input min-h-[4rem]" rows="2" [(ngModel)]="uploadMotivo"
+              placeholder="Ej: Entrega de FUT firmada en secretaría"></textarea>
+          </div>
+          <div class="flex gap-2 justify-end">
+            <button class="btn btn-secondary" (click)="cancelarUpload()">Cancelar</button>
+            <button class="btn btn-primary" [disabled]="uploadMotivo.trim().length < 3 || saving()"
+              (click)="confirmarUpload()">
+              {{ saving() ? 'Subiendo…' : 'Subir documento' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    }
+
     @if (visorUrl()) {
-      <div class="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4" (click)="visorUrl.set('')">
+      <div class="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4" (click)="cerrarVisor()">
         <div class="bg-white rounded-xl max-w-3xl w-full max-h-[90vh] overflow-auto p-4" (click)="$event.stopPropagation()">
           <div class="flex justify-between mb-3">
             <span class="font-semibold text-sm">{{ visorTitulo() }}</span>
-            <button class="btn-icon" (click)="visorUrl.set('')"><span class="icon">close</span></button>
+            <button class="btn-icon" (click)="cerrarVisor()"><span class="icon">close</span></button>
           </div>
-          <img [src]="visorUrl()" alt="documento" class="max-w-full mx-auto">
+          @if (visorEsPdf()) {
+            <iframe [src]="visorUrl()" class="w-full h-[70vh] border-0" title="documento pdf"></iframe>
+          } @else {
+            <img [src]="visorUrl()" alt="documento" class="max-w-full mx-auto">
+          }
         </div>
       </div>
     }
@@ -249,7 +303,13 @@ import { ApiStudentDocumentsResponse } from '../../../core/api/api.models';
 })
 export class DocumentosComponent implements OnInit {
   private readonly layout = inject(LayoutService);
+  private readonly auth = inject(AuthService);
+  readonly tenant = inject(TenantContextService);
   private readonly expedientesSvc = inject(ExpedientesService);
+  private readonly _tenantReloadReady = setupTenantReload(
+    () => this.recargarInstitucion(),
+    { onBeforeReload: () => this.limpiarUiInstitucion() },
+  );
 
   readonly loading = this.expedientesSvc.loading;
   readonly error = this.expedientesSvc.error;
@@ -265,6 +325,11 @@ export class DocumentosComponent implements OnInit {
   readonly mensajeTipo = signal<'ok' | 'error'>('ok');
   readonly visorUrl = signal('');
   readonly visorTitulo = signal('');
+  readonly visorEsPdf = signal(false);
+  readonly context = signal<StudentDocumentsContext | null>(null);
+  readonly uploadDoc = signal<DocumentoMatriculaVista | null>(null);
+  readonly uploadFile = signal<File | null>(null);
+  uploadMotivo = '';
 
   readonly resultados = computed(() => {
     const q = this.busqueda().trim().toLowerCase();
@@ -297,8 +362,13 @@ export class DocumentosComponent implements OnInit {
       fechaEntrega: d.fechaEntrega,
       imagenUrl: d.imagenUrl,
       registrado: d.registrado,
+      archivo: d.archivo ?? null,
     }));
   });
+
+  readonly uploadNombreArchivo = computed(
+    () => this.uploadFile()?.name ?? '',
+  );
 
   readonly entregadosActual = computed(() =>
     this.filas().filter((d) => d.estado === 'entregado').length,
@@ -316,7 +386,49 @@ export class DocumentosComponent implements OnInit {
 
   ngOnInit(): void {
     this.layout.setTitle('Documentos');
-    this.expedientesSvc.load();
+    if (this.tenant.requiresSelection()) {
+      this.limpiarUiInstitucion();
+    } else {
+      this.recargarInstitucion();
+    }
+    markTenantReloadReady(this._tenantReloadReady);
+  }
+
+  private limpiarUiInstitucion(): void {
+    this.busqueda.set('');
+    this.seleccionado.set(null);
+    this.documentosAlumno.set(null);
+    this.docsError.set('');
+    this.mensaje.set('');
+    this.cancelarUpload();
+    this.cerrarVisor();
+    this.expedientesSvc.reset();
+  }
+
+  private recargarInstitucion(): void {
+    this.expedientesSvc.getDocumentsContext().subscribe({
+      next: (ctx) => this.context.set(ctx),
+      error: () => this.context.set(null),
+    });
+    this.expedientesSvc.load({ immediate: true });
+  }
+
+  puedeCargar(): boolean {
+    return this.auth.hasAnyPermiso(
+      'estudiantes.documentos',
+      'estudiantes.editar',
+      'matricula.editar',
+    );
+  }
+
+  acceptTipos(): string {
+    return this.context()?.mimeTypes.join(',') ?? 'image/*,application/pdf';
+  }
+
+  formatBytes(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   }
 
   onBusquedaChange(value: string): void {
@@ -405,26 +517,111 @@ export class DocumentosComponent implements OnInit {
     this.persistirDocumento(doc);
   }
 
-  onArchivo(doc: DocumentoMatriculaVista, event: Event): void {
-    const file = (event.target as HTMLInputElement).files?.[0];
+  onSeleccionArchivo(doc: DocumentoMatriculaVista, event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      doc.imagenUrl = e.target?.result as string;
-      doc.estado = 'entregado';
-      if (!doc.fechaEntrega) {
-        const hoy = new Date();
-        doc.fechaEntrega = `${String(hoy.getDate()).padStart(2, '0')}/${String(hoy.getMonth() + 1).padStart(2, '0')}/${hoy.getFullYear()}`;
-      }
-      this.persistirDocumento(doc);
-    };
-    reader.readAsDataURL(file);
+
+    const maxBytes = this.context()?.maxBytes ?? 10 * 1024 * 1024;
+    if (file.size > maxBytes) {
+      this.mensajeTipo.set('error');
+      this.mensaje.set(`El archivo supera el límite de ${this.formatBytes(maxBytes)}.`);
+      return;
+    }
+
+    this.uploadDoc.set(doc);
+    this.uploadFile.set(file);
+    this.uploadMotivo = '';
   }
 
-  verImagen(doc: DocumentoMatriculaVista): void {
-    if (!doc.imagenUrl) return;
-    this.visorUrl.set(doc.imagenUrl);
-    this.visorTitulo.set(doc.tipo);
+  cancelarUpload(): void {
+    this.uploadDoc.set(null);
+    this.uploadFile.set(null);
+    this.uploadMotivo = '';
+  }
+
+  confirmarUpload(): void {
+    const e = this.seleccionado();
+    const doc = this.uploadDoc();
+    const file = this.uploadFile();
+    if (!e || !doc || !file || this.uploadMotivo.trim().length < 3) return;
+
+    const ejecutarUpload = (docId: number) => {
+      this.saving.set(true);
+      this.expedientesSvc
+        .uploadDocumentFile(e.id, docId, file, {
+          motivo: this.uploadMotivo.trim(),
+          numero: doc.numero,
+        })
+        .subscribe({
+          next: () => {
+            this.saving.set(false);
+            this.cancelarUpload();
+            this.mensajeTipo.set('ok');
+            this.mensaje.set(`Documento "${doc.tipo}" cargado correctamente.`);
+            this.cargarDocumentos(e.id);
+            this.expedientesSvc.refreshOne(e.id).subscribe();
+          },
+          error: (err) => {
+            this.saving.set(false);
+            this.mensajeTipo.set('error');
+            this.mensaje.set(err?.error?.message ?? 'No se pudo cargar el archivo.');
+          },
+        });
+    };
+
+    if (doc.id) {
+      ejecutarUpload(doc.id);
+      return;
+    }
+
+    this.saving.set(true);
+    this.expedientesSvc
+      .addDocument(e.id, { tipo: doc.tipo, estado: 'pendiente', numero: doc.numero })
+      .subscribe({
+        next: (created) => {
+          this.saving.set(false);
+          ejecutarUpload(created.id);
+        },
+        error: () => {
+          this.saving.set(false);
+          this.mensajeTipo.set('error');
+          this.mensaje.set('No se pudo registrar el documento antes de la carga.');
+        },
+      });
+  }
+
+  verDocumento(doc: DocumentoMatriculaVista & { archivo?: ApiDocumentoArchivo | null }): void {
+    const e = this.seleccionado();
+    if (doc.archivo && e?.id && doc.id) {
+      this.expedientesSvc
+        .downloadDocumentBlob(e.id, doc.id, doc.archivo.versionId)
+        .subscribe({
+          next: (blob) => {
+            const url = URL.createObjectURL(blob);
+            this.visorEsPdf.set(doc.archivo!.mimeType === 'application/pdf');
+            this.visorUrl.set(url);
+            this.visorTitulo.set(`${doc.tipo} · v${doc.archivo!.version}`);
+          },
+          error: () => {
+            this.mensajeTipo.set('error');
+            this.mensaje.set('No se pudo abrir el documento.');
+          },
+        });
+      return;
+    }
+    if (doc.imagenUrl?.startsWith('data:') || doc.imagenUrl?.startsWith('/uploads')) {
+      this.visorEsPdf.set(doc.imagenUrl.includes('pdf'));
+      this.visorUrl.set(doc.imagenUrl);
+      this.visorTitulo.set(doc.tipo);
+    }
+  }
+
+  cerrarVisor(): void {
+    const url = this.visorUrl();
+    if (url.startsWith('blob:')) URL.revokeObjectURL(url);
+    this.visorUrl.set('');
   }
 
   private persistirDocumento(doc: DocumentoMatriculaVista): void {

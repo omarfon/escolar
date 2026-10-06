@@ -1,11 +1,14 @@
-﻿import { Component, computed, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { DecimalPipe, NgClass, NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { LayoutService } from '../../../core/layout/services/layout.service';
+import { BoletaVentaViewComponent } from '../../../core/treasury/boleta-venta-view.component';
 import { AuthService } from '../../../core/auth/services/auth.service';
 import { HijoResumen, parentescoLabel } from '../seguimiento/seguimiento.model';
+import { SeguimientoService } from '../seguimiento/seguimiento.service';
+import { HijoSelectorComponent } from '../shared/hijo-selector.component';
 import { FinanzasPadreService } from './finanzas-padre.service';
 import {
   BoletaVenta,
@@ -15,12 +18,14 @@ import {
   filtrarCargos,
   formatFechaCorta,
   FiltroCargo,
+  cargosPendientesCuenta,
   metodoPagoLabel,
+  PagoRegistrado,
 } from './finanzas.model';
 
 @Component({
   standalone: true,
-  imports: [NgClass, DecimalPipe, NgTemplateOutlet, FormsModule],
+  imports: [NgClass, DecimalPipe, NgTemplateOutlet, FormsModule, BoletaVentaViewComponent, HijoSelectorComponent],
   template: `
 <div class="space-y-5 animate-fade-in">
 
@@ -32,38 +37,14 @@ import {
       </p>
     </div>
     <button class="btn btn-secondary btn-sm" (click)="cargar()"
-      [disabled]="svc.loadingHijos() || svc.loadingCuenta()">
+      [disabled]="segSvc.loadingHijos() || svc.loadingCuenta()">
       <span class="icon icon-sm">refresh</span> Actualizar
     </button>
   </div>
 
-  @if (svc.loadingHijos()) {
-    <div class="card p-12 flex flex-col items-center text-gray-400">
-      <span class="icon icon-xl animate-spin mb-3">progress_activity</span>
-      <p class="text-sm">Cargando hijos…</p>
-    </div>
-  } @else if (!svc.hijos().length) {
-    <div class="card p-10 text-center text-gray-400">
-      <span class="icon icon-xl mb-3">family_restroom</span>
-      <p class="text-sm">No hay alumnos vinculados a tu cuenta.</p>
-    </div>
-  } @else {
-    <div class="flex flex-wrap gap-2">
-      @for (h of svc.hijos(); track h.studentId) {
-        <button type="button"
-          class="px-3 py-2 rounded-xl border text-left transition-all min-w-[160px]"
-          [ngClass]="hijoId() === h.studentId
-            ? 'border-emerald-500 bg-emerald-50 ring-1 ring-emerald-200'
-            : 'border-gray-200 bg-white hover:border-gray-300'"
-          (click)="seleccionarHijo(h)">
-          <div class="text-sm font-semibold text-gray-800">{{ h.nombreCompleto }}</div>
-          <div class="text-xs text-gray-500 mt-0.5">
-            {{ h.aulaLabel }} · {{ parentescoLabel(h.parentesco) }}
-          </div>
-        </button>
-      }
-    </div>
+  <app-hijo-selector (hijoChange)="onHijoChange($event)" />
 
+  @if (segSvc.hijos().length) {
     @if (svc.loadingCuenta()) {
       <div class="card p-10 flex flex-col items-center text-gray-400">
         <span class="icon icon-xl animate-spin mb-3">progress_activity</span>
@@ -98,6 +79,11 @@ import {
         @for (tab of tabs; track tab.id) {
           <button type="button" class="tab" [class.tab-active]="vista() === tab.id" (click)="vista.set(tab.id)">
             <span class="icon icon-sm">{{ tab.icon }}</span> {{ tab.label }}
+            @if (tab.id === 'cuenta' && cargosPendientes().length) {
+              <span class="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800">
+                {{ cargosPendientes().length }}
+              </span>
+            }
             @if (tab.id === 'pagos' && pagosRealizados().length) {
               <span class="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-700">
                 {{ pagosRealizados().length }}
@@ -108,13 +94,42 @@ import {
       </div>
 
       @if (vista() === 'cuenta') {
+        @if (cargosPendientes().length) {
+          <div class="card overflow-hidden border-2 border-amber-200">
+            <div class="px-5 py-4 border-b border-amber-100 bg-gradient-to-r from-amber-50 to-white">
+              <h4 class="font-semibold text-gray-900 flex items-center gap-2">
+                <span class="icon text-amber-600">pending_actions</span>
+                Pagos pendientes
+              </h4>
+              <p class="text-xs text-gray-500 mt-0.5">
+                {{ cargosPendientes().length }} concepto(s) por pagar · total S/ {{ totalPendiente() | number:'1.2-2' }}
+              </p>
+            </div>
+            <div class="divide-y divide-gray-100">
+              @for (cargo of cargosPendientes(); track cargo.id) {
+                <div class="px-5 py-4 bg-white">
+                  <ng-container *ngTemplateOutlet="cargoRow; context: { $implicit: cargo, destacado: false }"></ng-container>
+                </div>
+              }
+            </div>
+          </div>
+        } @else {
+          <div class="card p-8 text-center border border-emerald-100 bg-emerald-50/40">
+            <span class="icon text-3xl text-emerald-500 mb-2">check_circle</span>
+            <p class="text-sm font-medium text-emerald-800">No tienes pagos pendientes</p>
+            <p class="text-xs text-emerald-700 mt-1">Todos los conceptos del año están al día.</p>
+          </div>
+        }
+
         @if (c.matricula; as mat) {
+          @if (mat.estado === 'pagado') {
           <div class="card p-5">
             <h4 class="font-semibold text-gray-800 mb-3 flex items-center gap-2">
               <span class="icon text-emerald-600">school</span> Matrícula
             </h4>
             <ng-container *ngTemplateOutlet="cargoRow; context: { $implicit: mat, destacado: true }"></ng-container>
           </div>
+          }
         }
 
         <div class="card overflow-hidden">
@@ -157,7 +172,7 @@ import {
               </h4>
             </div>
             <div class="divide-y divide-gray-100">
-              @for (cargo of c.otros; track cargo.id) {
+              @for (cargo of otrosFiltrados(); track cargo.id) {
                 <div class="px-5 py-4">
                   <ng-container *ngTemplateOutlet="cargoRow; context: { $implicit: cargo, destacado: false }"></ng-container>
                 </div>
@@ -210,9 +225,16 @@ import {
                       <td class="text-sm text-gray-500">{{ p.numeroBoleta || '—' }}</td>
                       <td class="text-right font-semibold text-emerald-700">S/ {{ p.monto | number:'1.2-2' }}</td>
                       <td class="text-right">
-                        <button type="button" class="btn btn-secondary btn-xs" (click)="verBoleta(p.id)">
-                          <span class="icon icon-sm">receipt_long</span> Boleta
-                        </button>
+                        <div class="flex items-center justify-end gap-1">
+                          <button type="button" class="btn btn-ghost btn-icon text-indigo-600" title="Ver boleta"
+                            (click)="verBoleta(p.id)">
+                            <span class="icon icon-sm">visibility</span>
+                          </button>
+                          <button type="button" class="btn btn-ghost btn-icon text-emerald-600" title="Descargar / imprimir"
+                            (click)="verBoleta(p.id, true)">
+                            <span class="icon icon-sm">download</span>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   }
@@ -258,6 +280,21 @@ import {
           (click)="abrirPagoVisa(cargo)">
           <span class="icon">credit_card</span>
         </button>
+      } @else if (ultimoPago(cargo); as pago) {
+        <div class="flex items-center gap-1 shrink-0">
+          <button type="button"
+            class="btn btn-ghost btn-icon text-indigo-600"
+            title="Ver boleta {{ pago.numeroBoleta }}"
+            (click)="verBoleta(pago.id)">
+            <span class="icon icon-sm">visibility</span>
+          </button>
+          <button type="button"
+            class="btn btn-ghost btn-icon text-emerald-600"
+            title="Descargar / imprimir boleta"
+            (click)="verBoleta(pago.id, true)">
+            <span class="icon icon-sm">download</span>
+          </button>
+        </div>
       }
     </div>
   </div>
@@ -317,73 +354,21 @@ import {
 }
 
 @if (modalBoleta()) {
-  <div class="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4" (click)="cerrarBoleta()">
-    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto" (click)="$event.stopPropagation()">
+  <div class="boleta-modal-overlay fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4" (click)="cerrarBoleta()">
+    <div class="boleta-modal-panel bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[95vh] overflow-y-auto" (click)="$event.stopPropagation()">
       @if (svc.loadingBoleta()) {
         <div class="p-12 flex flex-col items-center text-gray-400">
           <span class="icon icon-xl animate-spin mb-3">progress_activity</span>
           <p class="text-sm">Cargando boleta…</p>
         </div>
       } @else if (boleta(); as b) {
-        <div class="p-6 space-y-5" id="boleta-print">
-          <div class="flex items-start justify-between gap-4 border-b pb-4">
-            <div>
-              <p class="text-xs text-gray-500 uppercase tracking-wide">Boleta de venta</p>
-              <h3 class="text-lg font-bold text-gray-900">{{ b.institucion.nombre }}</h3>
-              <p class="text-xs text-gray-500">RUC {{ b.institucion.ruc }} · Cód. modular {{ b.institucion.codigoModular }}</p>
-              <p class="text-xs text-gray-500">{{ b.institucion.direccion }}</p>
-            </div>
-            <div class="text-right shrink-0">
-              <p class="text-2xl font-bold text-indigo-700">{{ b.numeroBoleta }}</p>
-              <p class="text-xs text-gray-500 mt-1">Emisión: {{ formatFechaCorta(b.fechaEmision) }}</p>
-            </div>
-          </div>
-          <div class="grid sm:grid-cols-2 gap-4 text-sm">
-            <div class="p-3 bg-gray-50 rounded-xl">
-              <p class="text-xs text-gray-400 mb-1">Estudiante</p>
-              <p class="font-semibold">{{ b.estudiante.nombreCompleto }}</p>
-              <p class="text-gray-500 text-xs">{{ b.estudiante.nivel }} {{ b.estudiante.grado }} "{{ b.estudiante.seccion }}"</p>
-            </div>
-            <div class="p-3 bg-gray-50 rounded-xl">
-              <p class="text-xs text-gray-400 mb-1">Apoderado</p>
-              <p class="font-semibold">{{ b.apoderado || '—' }}</p>
-              <p class="text-gray-500 text-xs">A.E. {{ b.anioEscolar }}</p>
-            </div>
-          </div>
-          <table class="w-full text-sm border border-gray-200 rounded-xl overflow-hidden">
-            <thead class="bg-gray-50">
-              <tr>
-                <th class="text-left px-4 py-2 text-xs text-gray-500">Concepto</th>
-                <th class="text-left px-4 py-2 text-xs text-gray-500">Periodo</th>
-                <th class="text-right px-4 py-2 text-xs text-gray-500">Importe</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr class="border-t border-gray-100">
-                <td class="px-4 py-3">{{ b.concepto }}</td>
-                <td class="px-4 py-3 text-gray-600">{{ b.periodoLabel }}</td>
-                <td class="px-4 py-3 text-right font-bold">S/ {{ b.monto | number:'1.2-2' }}</td>
-              </tr>
-            </tbody>
-          </table>
-          <div class="flex flex-wrap justify-between gap-3 text-sm border-t pt-4">
-            <div>
-              <p class="text-gray-500">Método de pago</p>
-              <p class="font-medium">{{ metodoPagoLabel(b.metodoPago) }}
-                @if (b.tarjetaUltimos4) { · {{ b.tarjetaMarca }} **** {{ b.tarjetaUltimos4 }} }
-              </p>
-              @if (b.referencia) { <p class="text-xs text-gray-400 mt-0.5">Ref. {{ b.referencia }}</p> }
-            </div>
-            <div class="text-right">
-              <p class="text-gray-500">Total pagado</p>
-              <p class="text-2xl font-bold text-emerald-700">S/ {{ b.monto | number:'1.2-2' }}</p>
-            </div>
-          </div>
+        <div class="p-4 sm:p-6">
+          <app-boleta-venta-view [boleta]="b" />
         </div>
-        <div class="px-6 py-4 border-t bg-gray-50 flex justify-end gap-2">
+        <div class="boleta-no-print px-6 py-4 border-t bg-gray-50 flex justify-end gap-2 sticky bottom-0">
           <button type="button" class="btn btn-secondary" (click)="cerrarBoleta()">Cerrar</button>
           <button type="button" class="btn btn-primary" (click)="imprimirBoleta()">
-            <span class="icon icon-sm">print</span> Imprimir
+            <span class="icon icon-sm">print</span> Imprimir / PDF
           </button>
         </div>
       }
@@ -404,6 +389,7 @@ export class FinanzasPadreComponent implements OnInit {
   private readonly layout = inject(LayoutService);
   readonly auth = inject(AuthService);
   readonly svc = inject(FinanzasPadreService);
+  readonly segSvc = inject(SeguimientoService);
 
   readonly parentescoLabel = parentescoLabel;
   readonly estadoCargoBadge = estadoCargoBadge;
@@ -417,6 +403,7 @@ export class FinanzasPadreComponent implements OnInit {
   boleta = signal<BoletaVenta | null>(null);
   errorPago = signal('');
   toast = signal<{ tipo: 'success' | 'error'; mensaje: string } | null>(null);
+  private imprimirAlCargarBoleta = false;
 
   formVisa = {
     numeroTarjeta: '',
@@ -431,12 +418,12 @@ export class FinanzasPadreComponent implements OnInit {
     { id: 'pagos', label: 'Pagos realizados', icon: 'payments' },
   ];
 
-  filtro = signal<FiltroCargo>('todos');
+  filtro = signal<FiltroCargo>('pendientes');
   readonly filtros: { id: FiltroCargo; label: string }[] = [
-    { id: 'todos', label: 'Todas' },
-    { id: 'pagados', label: 'Pagadas' },
     { id: 'pendientes', label: 'Pendientes' },
     { id: 'vencidos', label: 'Vencidas' },
+    { id: 'todos', label: 'Todas' },
+    { id: 'pagados', label: 'Pagadas' },
   ];
 
   hijoId = computed(() => this.svc.hijoSeleccionado()?.studentId ?? null);
@@ -448,14 +435,30 @@ export class FinanzasPadreComponent implements OnInit {
     return filtrarCargos(c.mensualidades, this.filtro());
   });
 
+  cargosPendientes = computed(() => {
+    const c = this.cuenta();
+    if (!c) return [];
+    return cargosPendientesCuenta(c);
+  });
+
+  totalPendiente = computed(() =>
+    this.cargosPendientes().reduce((sum, c) => sum + c.saldo, 0),
+  );
+
+  otrosFiltrados = computed(() => {
+    const c = this.cuenta();
+    if (!c) return [];
+    return filtrarCargos(c.otros, this.filtro());
+  });
+
   kpis = computed(() => {
     const r = this.cuenta()?.resumen;
     if (!r) return [];
     return [
-      { label: 'Total año', value: r.totalDeuda, color: 'text-gray-800' },
-      { label: 'Pagado', value: r.totalPagado, color: 'text-emerald-600' },
       { label: 'Pendiente', value: r.pendiente, color: 'text-amber-600' },
       { label: 'Vencido', value: r.vencido, color: 'text-red-600' },
+      { label: 'Pagado', value: r.totalPagado, color: 'text-emerald-600' },
+      { label: 'Total año', value: r.totalDeuda, color: 'text-gray-800' },
     ];
   });
 
@@ -483,24 +486,30 @@ export class FinanzasPadreComponent implements OnInit {
 
   ngOnInit(): void {
     this.layout.setTitle('Estado de Cuenta');
-    this.cargar();
   }
 
   cargar(): void {
-    this.svc.loadHijos().subscribe({
-      next: hijos => {
-        if (hijos[0]) {
-          this.svc.loadEstadoCuenta(hijos[0].studentId).subscribe();
+    const hijo = this.segSvc.hijoSeleccionado();
+    if (hijo) {
+      this.svc.loadEstadoCuenta(hijo.studentId).subscribe();
+      return;
+    }
+    this.segSvc.loadHijos().subscribe({
+      next: () => {
+        const seleccionado = this.segSvc.hijoSeleccionado();
+        if (seleccionado) {
+          this.svc.loadEstadoCuenta(seleccionado.studentId).subscribe();
         }
       },
     });
   }
 
-  seleccionarHijo(hijo: HijoResumen): void {
-    if (this.hijoId() === hijo.studentId) return;
-    this.filtro.set('todos');
+  onHijoChange(hijo: HijoResumen): void {
+    if (this.hijoId() === hijo.studentId && this.cuenta()) return;
+    this.filtro.set('pendientes');
     this.vista.set('cuenta');
-    this.svc.seleccionarHijo(hijo).subscribe();
+    this.segSvc.seleccionarHijo(hijo);
+    this.svc.loadEstadoCuenta(hijo.studentId).subscribe();
   }
 
   tipoPagoBadge(tipo: string): string {
@@ -555,7 +564,8 @@ export class FinanzasPadreComponent implements OnInit {
     }).subscribe({
       next: result => {
         this.cerrarPagoVisa();
-        this.vista.set('pagos');
+        this.vista.set('cuenta');
+        this.filtro.set('pendientes');
         this.mostrarToast('success', `Pago registrado · Boleta ${result.numeroBoleta}`);
         this.svc.loadEstadoCuenta(studentId).subscribe();
       },
@@ -566,14 +576,29 @@ export class FinanzasPadreComponent implements OnInit {
     });
   }
 
-  verBoleta(paymentId: number): void {
+  ultimoPago(cargo: CargoCuenta): PagoRegistrado | null {
+    if (!cargo.pagos?.length) return null;
+    return cargo.pagos.reduce((a, b) =>
+      b.fechaPago.localeCompare(a.fechaPago) > 0 ? b : a,
+    );
+  }
+
+  verBoleta(paymentId: number, imprimir = false): void {
     const studentId = this.hijoId();
     if (!studentId) return;
+    this.imprimirAlCargarBoleta = imprimir;
     this.boleta.set(null);
     this.modalBoleta.set(true);
     this.svc.getBoleta(studentId, paymentId).subscribe({
-      next: data => this.boleta.set(data),
+      next: data => {
+        this.boleta.set(data);
+        if (this.imprimirAlCargarBoleta) {
+          this.imprimirAlCargarBoleta = false;
+          setTimeout(() => this.imprimirBoleta(), 300);
+        }
+      },
       error: () => {
+        this.imprimirAlCargarBoleta = false;
         this.modalBoleta.set(false);
         this.mostrarToast('error', 'No se pudo cargar la boleta');
       },
@@ -583,6 +608,7 @@ export class FinanzasPadreComponent implements OnInit {
   cerrarBoleta(): void {
     this.modalBoleta.set(false);
     this.boleta.set(null);
+    this.imprimirAlCargarBoleta = false;
   }
 
   imprimirBoleta(): void {

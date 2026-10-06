@@ -2,6 +2,8 @@ import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable, catchError, finalize, throwError } from 'rxjs';
 import { environment } from '@environments/environment';
+import { TenantContextService } from '../../../core/tenant/tenant-context.service';
+import { withInstitutionParams } from '../../../core/tenant/tenant-http.util';
 import {
   AssignEsperaPayload,
   AssignEsperaResult,
@@ -13,6 +15,7 @@ import {
 @Injectable({ providedIn: 'root' })
 export class EsperaService {
   private readonly http = inject(HttpClient);
+  private readonly tenant = inject(TenantContextService);
   private readonly base = `${environment.apiUrl}/waitlist`;
 
   readonly loading = signal(false);
@@ -30,6 +33,7 @@ export class EsperaService {
     if (filters?.grado) params = params.set('grado', filters.grado);
     if (filters?.estado) params = params.set('estado', filters.estado);
     if (filters?.prioridad) params = params.set('prioridad', filters.prioridad);
+    params = withInstitutionParams(this.tenant, params);
 
     return this.http.get<EsperaItem[]>(this.base, { params }).pipe(
       catchError((err) => throwError(() => err)),

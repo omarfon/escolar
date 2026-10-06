@@ -3,11 +3,15 @@ import { FormsModule } from '@angular/forms';
 import { NgClass } from '@angular/common';
 import { LayoutService } from '../../../core/layout/services/layout.service';
 import { BitacoraService } from './bitacora.service';
+import { markTenantReloadReady, setupTenantReload } from '../../../core/tenant/tenant-reload.util';
 import {
   ACCIONES_BITACORA,
+  BitacoraContext,
   BitacoraFilters,
   BitacoraItem,
+  BitacoraPagination,
   BitacoraResumen,
+  BitacoraTipoVista,
   MODULOS_BITACORA,
   NIVELES_BITACORA,
   accionBadge,
@@ -27,13 +31,40 @@ import {
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h2 class="text-2xl font-bold text-gray-900">Bitácora del Sistema</h2>
-          <p class="text-sm text-gray-400 mt-0.5">
-            Registro de acciones y eventos de auditoría del sistema escolar
-            · se conservan los últimos 15 días
-          </p>
+          @if (context(); as ctx) {
+            <p class="text-sm text-gray-500 mt-0.5">{{ ctx.institucion.nombre }} · A.E. {{ ctx.institucion.anioEscolar }}</p>
+            <p class="text-xs text-gray-400">Retención {{ ctx.retencionDias }} días · consulta protegida RBAC</p>
+          } @else {
+            <p class="text-sm text-gray-400 mt-0.5">Registro de acciones y eventos de auditoría</p>
+          }
         </div>
-        <button class="btn btn-secondary btn-sm" (click)="cargar()" [disabled]="svc.loading()">
-          <span class="icon icon-sm">refresh</span> Actualizar
+        <div class="flex flex-wrap gap-2">
+          <button class="btn btn-secondary btn-sm" (click)="exportar()" [disabled]="svc.exporting() || svc.loading()">
+            <span class="icon icon-sm">download</span>
+            @if (svc.exporting()) { Exportando… } @else { Exportar CSV }
+          </button>
+          <button class="btn btn-secondary btn-sm" (click)="cargar()" [disabled]="svc.loading()">
+            <span class="icon icon-sm">refresh</span> Actualizar
+          </button>
+        </div>
+      </div>
+
+      <div class="flex gap-2 border-b border-gray-200">
+        <button type="button" class="px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors"
+          [class.border-indigo-600]="filtro().tipo === 'todos'"
+          [class.text-indigo-600]="filtro().tipo === 'todos'"
+          [class.border-transparent]="filtro().tipo !== 'todos'"
+          [class.text-gray-500]="filtro().tipo !== 'todos'"
+          (click)="setTipoVista('todos')">
+          Todos los eventos
+        </button>
+        <button type="button" class="px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors"
+          [class.border-indigo-600]="filtro().tipo === 'accesos'"
+          [class.text-indigo-600]="filtro().tipo === 'accesos'"
+          [class.border-transparent]="filtro().tipo !== 'accesos'"
+          [class.text-gray-500]="filtro().tipo !== 'accesos'"
+          (click)="setTipoVista('accesos')">
+          Accesos (login / logout)
         </button>
       </div>
 
@@ -92,6 +123,14 @@ import {
             </select>
           </div>
           <div>
+            <label class="form-label mb-1 block">Resultado</label>
+            <select class="form-select" [ngModel]="filtro().resultado" (ngModelChange)="setFiltro('resultado', $event)">
+              <option value="">Todos</option>
+              <option value="success">Exitoso</option>
+              <option value="error">Error / fallido</option>
+            </select>
+          </div>
+          <div>
             <label class="form-label mb-1 block">Usuario</label>
             <input class="form-input" placeholder="Nombre o rol..."
               [ngModel]="filtro().usuario" (ngModelChange)="setFiltro('usuario', $event)">
@@ -115,7 +154,12 @@ import {
         </div>
       </div>
 
-      @if (svc.loading()) {
+      @if (error()) {
+        <div class="card p-8 text-center" role="alert">
+          <span class="icon icon-xl text-red-400 mb-2">lock</span>
+          <p class="text-sm text-gray-600">{{ error() }}</p>
+        </div>
+      } @else if (svc.loading()) {
         <div class="card p-12 flex flex-col items-center text-gray-400">
           <span class="icon icon-xl animate-spin mb-3">progress_activity</span>
           <p class="text-sm">Cargando bitácora…</p>
@@ -141,6 +185,9 @@ import {
                   <div class="flex flex-wrap items-center gap-2 mb-1">
                     <span class="font-semibold text-gray-900 text-sm">{{ item.descripcion }}</span>
                     <span class="badge text-[10px]" [ngClass]="accionBadge(item.accion)">{{ accionLabel(item.accion) }}</span>
+                    <span class="badge text-[10px]" [ngClass]="item.resultado === 'success' ? 'badge-green' : 'badge-red'">
+                      {{ item.resultado === 'success' ? 'OK' : 'Fallido' }}
+                    </span>
                     <span class="badge text-[10px]" [ngClass]="nivelBadge(item.nivel)">{{ nivelLabel(item.nivel) }}</span>
                   </div>
                   <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
@@ -166,6 +213,20 @@ import {
             }
           </div>
         </div>
+
+        @if (pagination(); as p) {
+          <div class="px-4 py-3 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-3 text-sm text-gray-500">
+            <span>Página {{ p.page }} de {{ p.totalPages }} · {{ p.totalItems }} registro(s)</span>
+            <div class="flex gap-2">
+              <button class="btn btn-secondary btn-sm" [disabled]="p.page <= 1 || svc.loading()" (click)="irPagina(p.page - 1)">
+                Anterior
+              </button>
+              <button class="btn btn-secondary btn-sm" [disabled]="p.page >= p.totalPages || svc.loading()" (click)="irPagina(p.page + 1)">
+                Siguiente
+              </button>
+            </div>
+          </div>
+        }
       }
     </div>
 
@@ -210,6 +271,18 @@ import {
                 <p class="text-xs text-gray-400 mb-1">Nivel</p>
                 <span class="badge text-xs" [ngClass]="nivelBadge(d.nivel)">{{ nivelLabel(d.nivel) }}</span>
               </div>
+              <div>
+                <p class="text-xs text-gray-400 mb-1">Resultado</p>
+                <span class="badge text-xs" [ngClass]="d.resultado === 'success' ? 'badge-green' : 'badge-red'">
+                  {{ d.resultado === 'success' ? 'Exitoso' : 'Fallido' }}
+                </span>
+              </div>
+              @if (d.correlationId) {
+                <div>
+                  <p class="text-xs text-gray-400 mb-1">Correlación</p>
+                  <p class="text-gray-800 font-mono text-xs break-all">{{ d.correlationId }}</p>
+                </div>
+              }
               @if (d.ip) {
                 <div class="col-span-2">
                   <p class="text-xs text-gray-400 mb-1">Dirección IP</p>
@@ -237,6 +310,7 @@ import {
   `,
 })
 export class BitacoraComponent implements OnInit {
+  private readonly _tenantReloadReady = setupTenantReload(() => this.cargar());
   private readonly layout = inject(LayoutService);
   readonly svc = inject(BitacoraService);
 
@@ -246,25 +320,39 @@ export class BitacoraComponent implements OnInit {
 
   readonly items = signal<BitacoraItem[]>([]);
   readonly resumen = signal<BitacoraResumen | null>(null);
+  readonly pagination = signal<BitacoraPagination | null>(null);
+  readonly context = signal<BitacoraContext | null>(null);
+  readonly error = signal('');
   readonly detalle = signal<BitacoraItem | null>(null);
   readonly filtro = signal<BitacoraFilters>({
+    tipo: 'todos',
     modulo: '',
     accion: '',
     nivel: '',
+    resultado: '',
     usuario: '',
     desde: '',
     hasta: '',
     busqueda: '',
+    page: 1,
+    pageSize: 50,
   });
 
   readonly kpis = computed(() => {
     const r = this.resumen();
+    const filtro = this.filtro();
     if (!r) return [];
     return [
       { label: 'Total registros', value: r.total, icon: 'history', bg: 'bg-indigo-50', color: 'text-indigo-600' },
       { label: 'Hoy', value: r.hoy, icon: 'today', bg: 'bg-blue-50', color: 'text-blue-600' },
       { label: 'Advertencias', value: r.advertencias, icon: 'warning', bg: 'bg-amber-50', color: 'text-amber-600', text: 'text-amber-700' },
       { label: 'Críticos', value: r.criticos, icon: 'error', bg: 'bg-red-50', color: 'text-red-600', text: 'text-red-600' },
+      ...(filtro.tipo === 'accesos'
+        ? [
+            { label: 'Accesos', value: r.accesos, icon: 'login', bg: 'bg-indigo-50', color: 'text-indigo-600' },
+            { label: 'Fallidos', value: r.accesosFallidos, icon: 'block', bg: 'bg-red-50', color: 'text-red-600', text: 'text-red-600' },
+          ]
+        : []),
     ];
   });
 
@@ -279,33 +367,85 @@ export class BitacoraComponent implements OnInit {
 
   ngOnInit(): void {
     this.layout.setTitle('Bitácora del Sistema');
+    this.svc.loadContext().subscribe({
+      next: ctx => this.context.set(ctx),
+      error: () => this.context.set(null),
+    });
     this.cargar();
+    markTenantReloadReady(this._tenantReloadReady);
   }
 
   cargar(): void {
     const f = this.filtro();
+    this.error.set('');
     this.svc.load({
+      tipo: f.tipo,
       modulo: f.modulo || undefined,
       accion: f.accion || undefined,
       nivel: f.nivel || undefined,
+      resultado: f.resultado || undefined,
+      usuario: f.usuario || undefined,
+      desde: f.desde || undefined,
+      hasta: f.hasta || undefined,
+      busqueda: f.busqueda || undefined,
+      page: f.page,
+      pageSize: f.pageSize,
+    }).subscribe({
+      next: res => {
+        this.items.set(res.items);
+        this.resumen.set(res.resumen);
+        this.pagination.set(res.pagination);
+      },
+      error: (err) => {
+        this.items.set([]);
+        this.resumen.set(null);
+        this.pagination.set(null);
+        if (err?.status === 403 || err?.status === 401) {
+          this.error.set('No tiene permiso para consultar la bitácora de auditoría.');
+        } else {
+          this.error.set('No se pudo cargar la bitácora. Intente nuevamente.');
+        }
+      },
+    });
+  }
+
+  setTipoVista(tipo: BitacoraTipoVista): void {
+    this.filtro.update(f => ({ ...f, tipo, page: 1 }));
+    this.cargar();
+  }
+
+  irPagina(page: number): void {
+    this.filtro.update(f => ({ ...f, page: Math.max(1, page) }));
+    this.cargar();
+  }
+
+  exportar(): void {
+    const f = this.filtro();
+    this.svc.exportCsv({
+      tipo: f.tipo,
+      modulo: f.modulo || undefined,
+      accion: f.accion || undefined,
+      nivel: f.nivel || undefined,
+      resultado: f.resultado || undefined,
       usuario: f.usuario || undefined,
       desde: f.desde || undefined,
       hasta: f.hasta || undefined,
       busqueda: f.busqueda || undefined,
     }).subscribe({
-      next: res => {
-        this.items.set(res.items);
-        this.resumen.set(res.resumen);
+      next: (blob) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = f.tipo === 'accesos' ? 'auditoria_accesos.csv' : 'auditoria_bitacora.csv';
+        a.click();
+        URL.revokeObjectURL(url);
       },
-      error: () => {
-        this.items.set([]);
-        this.resumen.set(null);
-      },
+      error: () => this.error.set('No se pudo exportar la bitácora.'),
     });
   }
 
-  setFiltro(campo: keyof BitacoraFilters, valor: string): void {
-    this.filtro.update(f => ({ ...f, [campo]: valor }));
+  setFiltro(campo: keyof BitacoraFilters, valor: string | number): void {
+    this.filtro.update(f => ({ ...f, [campo]: valor, page: campo === 'page' ? Number(valor) : 1 }));
     if (campo === 'busqueda') {
       clearTimeout(this.busquedaTimer);
       this.busquedaTimer = setTimeout(() => this.cargar(), 350);

@@ -1,4 +1,4 @@
-﻿import { Component, inject, OnInit, signal, computed } from '@angular/core';
+import { Component, inject, OnInit, signal, computed } from '@angular/core';
 import { NgClass, DecimalPipe, SlicePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { LayoutService } from '../../../core/layout/services/layout.service';
@@ -9,6 +9,13 @@ import {
   TipoConcepto,
 } from './conceptos.model';
 import { ConceptosService } from './conceptos.service';
+import {
+  ErroresCampoConcepto,
+  conceptoFormularioMinimoListo,
+  primerErrorConcepto,
+  validarCampoConcepto,
+  validarConceptoForm,
+} from './concepto-form.validation';
 
 // ── Component ─────────────────────────────────────────────────────────────────
 @Component({
@@ -261,18 +268,32 @@ import { ConceptosService } from './conceptos.service';
     <!-- Drawer body -->
     <div class="flex-1 overflow-y-auto px-6 py-5 space-y-4">
 
+      @if (errorForm()) {
+        <div class="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          <span class="text-base">⚠️</span> {{ errorForm() }}
+        </div>
+      }
+
       <!-- Nombre -->
       <div>
         <label class="form-label">Nombre del concepto <span class="text-red-500">*</span></label>
         <input class="form-input" placeholder="Ej: Pensión de Enseñanza"
-          [ngModel]="fNombre()" (ngModelChange)="fNombre.set($event)">
+               [ngClass]="claseCampo('nombre')"
+               [ngModel]="fNombre()"
+               (ngModelChange)="onCampoFormChange('nombre', $event)"
+               (blur)="onCampoBlur('nombre')">
+        @if (campoError('nombre'); as err) { <p class="form-error mt-1">{{ err }}</p> }
       </div>
 
       <!-- Descripción -->
       <div>
-        <label class="form-label">Descripción</label>
+        <label class="form-label">Descripción <span class="text-gray-400 font-normal">(opcional)</span></label>
         <textarea class="form-input resize-none" rows="3" placeholder="Descripción detallada del concepto…"
-          [ngModel]="fDescripcion()" (ngModelChange)="fDescripcion.set($event)"></textarea>
+                  [ngClass]="claseCampo('descripcion')"
+                  [ngModel]="fDescripcion()"
+                  (ngModelChange)="onCampoFormChange('descripcion', $event)"
+                  (blur)="onCampoBlur('descripcion')"></textarea>
+        @if (campoError('descripcion'); as err) { <p class="form-error mt-1">{{ err }}</p> }
       </div>
 
       <!-- Monto -->
@@ -281,28 +302,40 @@ import { ConceptosService } from './conceptos.service';
         <div class="relative">
           <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-medium text-sm">S/</span>
           <input type="number" class="form-input pl-8" min="0" step="0.01" placeholder="0.00"
-            [ngModel]="fMonto()" (ngModelChange)="fMonto.set(+$event)">
+                 [ngClass]="claseCampo('monto')"
+                 [ngModel]="fMonto()"
+                 (ngModelChange)="onCampoFormChange('monto', $event)"
+                 (blur)="onCampoBlur('monto')">
         </div>
+        @if (campoError('monto'); as err) { <p class="form-error mt-1">{{ err }}</p> }
       </div>
 
       <!-- Tipo + Periodicidad -->
       <div class="grid grid-cols-2 gap-3">
         <div>
           <label class="form-label">Tipo <span class="text-red-500">*</span></label>
-          <select class="form-input" [ngModel]="fTipo()" (ngModelChange)="fTipo.set($any($event))">
+          <select class="form-input" [ngClass]="claseCampo('tipo')"
+                  [ngModel]="fTipo()"
+                  (ngModelChange)="onCampoFormChange('tipo', $event)"
+                  (blur)="onCampoBlur('tipo')">
             <option value="obligatorio">Obligatorio</option>
             <option value="voluntario">Voluntario</option>
             <option value="eventual">Eventual</option>
           </select>
+          @if (campoError('tipo'); as err) { <p class="form-error mt-1">{{ err }}</p> }
         </div>
         <div>
           <label class="form-label">Periodicidad <span class="text-red-500">*</span></label>
-          <select class="form-input" [ngModel]="fPeriodicidad()" (ngModelChange)="fPeriodicidad.set($any($event))">
+          <select class="form-input" [ngClass]="claseCampo('periodicidad')"
+                  [ngModel]="fPeriodicidad()"
+                  (ngModelChange)="onCampoFormChange('periodicidad', $event)"
+                  (blur)="onCampoBlur('periodicidad')">
             <option value="mensual">Mensual</option>
             <option value="bimestral">Bimestral</option>
             <option value="anual">Anual</option>
             <option value="único">Único</option>
           </select>
+          @if (campoError('periodicidad'); as err) { <p class="form-error mt-1">{{ err }}</p> }
         </div>
       </div>
 
@@ -311,11 +344,12 @@ import { ConceptosService } from './conceptos.service';
         <label class="form-label">Nivel educativo</label>
         <div class="flex gap-2 flex-wrap mt-1">
           @for (nv of NIVELES; track nv) {
-            <button class="px-3 py-1.5 rounded-lg text-sm font-medium border-2 transition-all"
+            <button type="button" class="px-3 py-1.5 rounded-lg text-sm font-medium border-2 transition-all"
               [ngClass]="fNivel()===nv ? nivelBtnActive(nv) : 'border-gray-200 text-gray-500 hover:border-gray-300 bg-white'"
-              (click)="fNivel.set($any(nv))">{{ nv }}</button>
+              (click)="seleccionarNivel(nv)">{{ nv }}</button>
           }
         </div>
+        @if (campoError('nivel'); as err) { <p class="form-error mt-1">{{ err }}</p> }
       </div>
 
       <!-- Activo toggle -->
@@ -345,9 +379,10 @@ import { ConceptosService } from './conceptos.service';
     <!-- Drawer footer -->
     <div class="px-6 py-4 border-t border-gray-100 bg-gray-50 flex gap-3 justify-end">
       <button (click)="cerrarDrawer()" class="btn btn-secondary text-sm">Cancelar</button>
-      <button (click)="guardar()" [disabled]="!puedeGuardar()"
+      <button (click)="guardar()" [disabled]="!puedeGuardarForm()"
         class="btn btn-primary text-sm gap-1.5"
-        [ngClass]="!puedeGuardar() ? 'opacity-40 cursor-not-allowed' : ''">
+        [ngClass]="!puedeGuardarForm() ? 'opacity-40 cursor-not-allowed' : ''"
+        [title]="puedeGuardarForm() ? '' : 'Completa nombre, monto, tipo y periodicidad'">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
         </svg>
@@ -427,6 +462,10 @@ export class ConceptosComponent implements OnInit {
   fPeriodicidad    = signal<Periodicidad>('mensual');
   fNivel           = signal<NivelConcepto>('Todos');
   fActivo          = signal(true);
+  errorForm = signal('');
+  fieldErrors = signal<ErroresCampoConcepto>({});
+  camposTocados = signal<Record<string, true>>({});
+  intentoGuardar = signal(false);
 
   // Eliminar
   confirmarEliminarId = signal<number | null>(null);
@@ -482,7 +521,16 @@ export class ConceptosComponent implements OnInit {
     return id ? (this._lista().find(c => c.id === id)?.nombre ?? '') : '';
   });
 
-  puedeGuardar = computed(() => this.fNombre().trim().length > 0 && this.fMonto() > 0);
+  readonly puedeGuardarForm = computed(() =>
+    conceptoFormularioMinimoListo({
+      nombre: this.fNombre(),
+      descripcion: this.fDescripcion(),
+      monto: this.fMonto(),
+      tipo: this.fTipo(),
+      periodicidad: this.fPeriodicidad(),
+      nivel: this.fNivel(),
+    }),
+  );
 
   // ── Lifecycle ──────────────────────────────────────────────────────────
   ngOnInit(): void {
@@ -545,12 +593,126 @@ export class ConceptosComponent implements OnInit {
       this.fTipo.set('obligatorio'); this.fPeriodicidad.set('mensual');
       this.fNivel.set('Todos'); this.fActivo.set(true);
     }
+    this.resetValidacionForm();
     this.drawerOpen.set(true);
   }
-  cerrarDrawer(): void { this.drawerOpen.set(false); }
+  cerrarDrawer(): void {
+    this.drawerOpen.set(false);
+    this.resetValidacionForm();
+  }
+
+  private resetValidacionForm(): void {
+    this.fieldErrors.set({});
+    this.camposTocados.set({});
+    this.intentoGuardar.set(false);
+    this.errorForm.set('');
+  }
+
+  private valoresFormulario() {
+    return {
+      nombre: this.fNombre(),
+      descripcion: this.fDescripcion(),
+      monto: this.fMonto(),
+      tipo: this.fTipo(),
+      periodicidad: this.fPeriodicidad(),
+      nivel: this.fNivel(),
+    };
+  }
+
+  onCampoBlur(key: string): void {
+    this.camposTocados.update((t) => ({ ...t, [key]: true }));
+    this.validarCampoEnVivo(key);
+  }
+
+  onCampoFormChange(key: string, value: string | number | TipoConcepto | Periodicidad): void {
+    switch (key) {
+      case 'nombre':
+        this.fNombre.set(String(value));
+        break;
+      case 'descripcion':
+        this.fDescripcion.set(String(value));
+        break;
+      case 'monto': {
+        const n = Number(value);
+        this.fMonto.set(Number.isFinite(n) ? n : 0);
+        break;
+      }
+      case 'tipo':
+        this.fTipo.set(value as TipoConcepto);
+        break;
+      case 'periodicidad':
+        this.fPeriodicidad.set(value as Periodicidad);
+        break;
+    }
+
+    if (this.camposTocados()[key] || this.intentoGuardar() || this.fieldErrors()[key]) {
+      this.validarCampoEnVivo(key);
+    } else {
+      this.quitarErrorCampo(key);
+    }
+  }
+
+  seleccionarNivel(nivel: NivelConcepto): void {
+    this.fNivel.set(nivel);
+    if (this.camposTocados()['nivel'] || this.intentoGuardar() || this.fieldErrors()['nivel']) {
+      this.validarCampoEnVivo('nivel');
+    } else {
+      this.quitarErrorCampo('nivel');
+    }
+  }
+
+  private validarCamposMinimosEnVivo(): void {
+    for (const key of ['nombre', 'monto', 'tipo', 'periodicidad']) {
+      this.camposTocados.update((t) => ({ ...t, [key]: true }));
+      this.validarCampoEnVivo(key);
+    }
+  }
+
+  private validarCampoEnVivo(key: string): void {
+    const err = validarCampoConcepto(this.valoresFormulario(), key);
+    if (err) {
+      this.fieldErrors.update((errors) => ({ ...errors, [key]: err }));
+    } else {
+      this.quitarErrorCampo(key);
+    }
+  }
+
+  private quitarErrorCampo(key: string): void {
+    if (!this.fieldErrors()[key]) return;
+    this.fieldErrors.update((errors) => {
+      const next = { ...errors };
+      delete next[key];
+      return next;
+    });
+    if (!Object.keys(this.fieldErrors()).length) this.errorForm.set('');
+  }
+
+  campoError(key: string): string | null {
+    if (!this.camposTocados()[key] && !this.intentoGuardar()) return null;
+    return this.fieldErrors()[key] ?? null;
+  }
+
+  claseCampo(key: string): string {
+    return this.campoError(key) ? 'border-red-400 focus:border-red-500 focus:ring-red-200' : '';
+  }
 
   guardar(): void {
-    if (!this.puedeGuardar() || this.conceptosService.saving()) return;
+    this.intentoGuardar.set(true);
+    if (!this.puedeGuardarForm()) {
+      this.validarCamposMinimosEnVivo();
+      this.errorForm.set('Completa los campos obligatorios del concepto.');
+      return;
+    }
+
+    const errors = validarConceptoForm(this.valoresFormulario());
+    this.fieldErrors.set(errors);
+    if (Object.keys(errors).length) {
+      this.errorForm.set(primerErrorConcepto(errors) ?? 'Revisa los datos del formulario.');
+      return;
+    }
+
+    this.errorForm.set('');
+    if (this.conceptosService.saving()) return;
 
     const payload = {
       nombre: this.fNombre().trim(),

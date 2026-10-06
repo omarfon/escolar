@@ -18,6 +18,8 @@ export interface CargoPago {
   fechaVencimiento: string;
   estado: CargoEstado;
   anioEscolar: number;
+  ultimoPagoId?: number | null;
+  numeroBoleta?: string;
 }
 
 export interface ResumenTesoreria {

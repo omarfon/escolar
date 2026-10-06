@@ -50,6 +50,9 @@ export const ROLES_VALIDOS: RolUsuario[] = [
   'PADRE',
   'ESTUDIANTE',
   'BIBLIOTECARIO',
+  'UGEL',
+  'DRE',
+  'MINEDU',
 ];
 
 export const ESTADOS_VALIDOS: EstadoUsuario[] = ['activo', 'inactivo', 'bloqueado'];

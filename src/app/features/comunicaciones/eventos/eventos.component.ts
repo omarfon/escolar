@@ -17,6 +17,13 @@ import {
   MESES_EVENTOS,
   TIPOS_EVENTO,
 } from './eventos.model';
+import {
+  ErroresCampoEvento,
+  eventoFormularioMinimoListo,
+  primerErrorEvento,
+  validarCampoEvento,
+  validarEventoForm,
+} from './evento-form.validation';
 
 @Component({
   selector: 'app-eventos',
@@ -238,22 +245,39 @@ import {
             <button class="btn-icon text-gray-400" (click)="cerrarModal()"><span class="icon">close</span></button>
           </div>
           <div class="px-6 py-5 space-y-4">
+            @if (errorForm()) {
+              <div class="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                <span class="icon icon-sm text-red-500">error_outline</span> {{ errorForm() }}
+              </div>
+            }
             <div>
-              <label class="form-label">Título *</label>
-              <input class="form-input mt-1" [(ngModel)]="form.titulo">
+              <label class="form-label">Título <span class="text-red-400">*</span></label>
+              <input class="form-input mt-1" [ngClass]="claseCampo('titulo')"
+                     [(ngModel)]="form.titulo"
+                     (ngModelChange)="onCampoFormChange('titulo')"
+                     (blur)="onCampoBlur('titulo')">
+              @if (campoError('titulo'); as err) { <p class="form-error mt-1">{{ err }}</p> }
             </div>
             <div>
-              <label class="form-label">Descripción</label>
-              <textarea class="form-input mt-1 min-h-20 resize-none" [(ngModel)]="form.descripcion"></textarea>
+              <label class="form-label">Descripción <span class="text-gray-400 font-normal">(opcional)</span></label>
+              <textarea class="form-input mt-1 min-h-20 resize-none" [ngClass]="claseCampo('descripcion')"
+                        [(ngModel)]="form.descripcion"
+                        (ngModelChange)="onCampoFormChange('descripcion')"
+                        (blur)="onCampoBlur('descripcion')"></textarea>
+              @if (campoError('descripcion'); as err) { <p class="form-error mt-1">{{ err }}</p> }
             </div>
             <div class="grid grid-cols-2 gap-3">
               <div>
-                <label class="form-label">Tipo *</label>
-                <select class="form-select mt-1" [(ngModel)]="form.tipo">
+                <label class="form-label">Tipo <span class="text-red-400">*</span></label>
+                <select class="form-select mt-1" [ngClass]="claseCampo('tipo')"
+                        [(ngModel)]="form.tipo"
+                        (ngModelChange)="onCampoFormChange('tipo')"
+                        (blur)="onCampoBlur('tipo')">
                   @for (t of tipos.slice(1); track t.value) {
                     <option [value]="t.value">{{ t.label }}</option>
                   }
                 </select>
+                @if (campoError('tipo'); as err) { <p class="form-error mt-1">{{ err }}</p> }
               </div>
               <div>
                 <label class="form-label">Estado</label>
@@ -265,40 +289,65 @@ import {
               </div>
             </div>
             <div>
-              <label class="form-label">Destinatarios *</label>
-              <select class="form-select mt-1" [(ngModel)]="form.destinatarios">
+              <label class="form-label">Destinatarios <span class="text-red-400">*</span></label>
+              <select class="form-select mt-1" [ngClass]="claseCampo('destinatarios')"
+                      [(ngModel)]="form.destinatarios"
+                      (ngModelChange)="onCampoFormChange('destinatarios')"
+                      (blur)="onCampoBlur('destinatarios')">
                 @for (d of destinatarios.slice(1); track d.value) {
                   <option [value]="d.value">{{ d.label }}</option>
                 }
               </select>
+              @if (campoError('destinatarios'); as err) { <p class="form-error mt-1">{{ err }}</p> }
             </div>
             <div class="grid grid-cols-2 gap-3">
               <div>
-                <label class="form-label">Fecha inicio *</label>
-                <input type="date" class="form-input mt-1" [(ngModel)]="form.fechaInicio">
+                <label class="form-label">Fecha inicio <span class="text-red-400">*</span></label>
+                <input type="date" class="form-input mt-1" [ngClass]="claseCampo('fechaInicio')"
+                       [(ngModel)]="form.fechaInicio"
+                       (ngModelChange)="onCampoFormChange('fechaInicio')"
+                       (blur)="onCampoBlur('fechaInicio')">
+                @if (campoError('fechaInicio'); as err) { <p class="form-error mt-1">{{ err }}</p> }
               </div>
               <div>
-                <label class="form-label">Fecha fin</label>
-                <input type="date" class="form-input mt-1" [(ngModel)]="form.fechaFin">
+                <label class="form-label">Fecha fin <span class="text-gray-400 font-normal">(opcional)</span></label>
+                <input type="date" class="form-input mt-1" [ngClass]="claseCampo('fechaFin')"
+                       [(ngModel)]="form.fechaFin"
+                       (ngModelChange)="onCampoFormChange('fechaFin')"
+                       (blur)="onCampoBlur('fechaFin')">
+                @if (campoError('fechaFin'); as err) { <p class="form-error mt-1">{{ err }}</p> }
               </div>
             </div>
             <div class="grid grid-cols-2 gap-3">
               <div>
                 <label class="form-label">Hora inicio</label>
-                <input type="time" class="form-input mt-1" [(ngModel)]="form.horaInicio">
+                <input type="time" class="form-input mt-1" [ngClass]="claseCampo('horaInicio')"
+                       [(ngModel)]="form.horaInicio"
+                       (ngModelChange)="onCampoFormChange('horaInicio')"
+                       (blur)="onCampoBlur('horaInicio')">
+                @if (campoError('horaInicio'); as err) { <p class="form-error mt-1">{{ err }}</p> }
               </div>
               <div>
-                <label class="form-label">Hora fin</label>
-                <input type="time" class="form-input mt-1" [(ngModel)]="form.horaFin">
+                <label class="form-label">Hora fin <span class="text-gray-400 font-normal">(opcional)</span></label>
+                <input type="time" class="form-input mt-1" [ngClass]="claseCampo('horaFin')"
+                       [(ngModel)]="form.horaFin"
+                       (ngModelChange)="onCampoFormChange('horaFin')"
+                       (blur)="onCampoBlur('horaFin')">
+                @if (campoError('horaFin'); as err) { <p class="form-error mt-1">{{ err }}</p> }
               </div>
             </div>
             <div>
-              <label class="form-label">Lugar</label>
-              <input class="form-input mt-1" [(ngModel)]="form.lugar" placeholder="Auditorio, patio...">
+              <label class="form-label">Lugar <span class="text-gray-400 font-normal">(opcional)</span></label>
+              <input class="form-input mt-1" placeholder="Auditorio, patio..."
+                     [ngClass]="claseCampo('lugar')"
+                     [(ngModel)]="form.lugar"
+                     (ngModelChange)="onCampoFormChange('lugar')"
+                     (blur)="onCampoBlur('lugar')">
+              @if (campoError('lugar'); as err) { <p class="form-error mt-1">{{ err }}</p> }
             </div>
             <div class="grid grid-cols-2 gap-3">
               <div>
-                <label class="form-label">Nivel (opcional)</label>
+                <label class="form-label">Nivel <span class="text-gray-400 font-normal">(opcional)</span></label>
                 <select class="form-select mt-1" [(ngModel)]="form.nivel">
                   <option value="">Todos los niveles</option>
                   @for (n of niveles(); track n.id) {
@@ -307,20 +356,23 @@ import {
                 </select>
               </div>
               <div>
-                <label class="form-label">Responsable</label>
-                <input class="form-input mt-1" [(ngModel)]="form.responsable">
+                <label class="form-label">Responsable <span class="text-gray-400 font-normal">(opcional)</span></label>
+                <input class="form-input mt-1" [ngClass]="claseCampo('responsable')"
+                       [(ngModel)]="form.responsable"
+                       (ngModelChange)="onCampoFormChange('responsable')"
+                       (blur)="onCampoBlur('responsable')">
+                @if (campoError('responsable'); as err) { <p class="form-error mt-1">{{ err }}</p> }
               </div>
             </div>
             <label class="flex items-center gap-2 text-sm text-gray-700">
               <input type="checkbox" [(ngModel)]="form.publicado"> Publicado en portales
             </label>
-            @if (errorForm()) {
-              <div class="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{{ errorForm() }}</div>
-            }
           </div>
           <div class="px-6 py-4 border-t bg-gray-50 flex justify-end gap-2 sticky bottom-0">
             <button class="btn btn-secondary" (click)="cerrarModal()">Cancelar</button>
-            <button class="btn btn-primary" (click)="guardar()" [disabled]="svc.saving()">
+            <button class="btn btn-primary" (click)="guardar()"
+                    [disabled]="!puedeGuardarForm() || svc.saving()"
+                    [title]="puedeGuardarForm() ? '' : 'Completa título, tipo, destinatarios y fecha de inicio'">
               {{ svc.saving() ? 'Guardando...' : 'Guardar' }}
             </button>
           </div>
@@ -357,6 +409,15 @@ export class EventosComponent implements OnInit {
   readonly diaSeleccionado = signal('');
   readonly errorForm = signal('');
   readonly notificacion = signal<{ mensaje: string; tipo: 'success' | 'error' } | null>(null);
+  fieldErrors = signal<ErroresCampoEvento>({});
+  camposTocados = signal<Record<string, true>>({});
+  intentoGuardar = signal(false);
+  private readonly formRevision = signal(0);
+
+  readonly puedeGuardarForm = computed(() => {
+    this.formRevision();
+    return eventoFormularioMinimoListo(this.valoresFormulario());
+  });
 
   private readonly _eventos = signal<EventoItem[]>([]);
   private readonly _niveles = signal<Nivel[]>([]);
@@ -479,7 +540,7 @@ export class EventosComponent implements OnInit {
   abrirModal(): void {
     this.editando.set(null);
     this.form = this.formVacio();
-    this.errorForm.set('');
+    this.resetValidacionForm();
     this.modalAbierto.set(true);
   }
 
@@ -500,24 +561,121 @@ export class EventosComponent implements OnInit {
       publicado: e.publicado,
       estado: e.estado,
     };
-    this.errorForm.set('');
+    this.resetValidacionForm();
     this.modalAbierto.set(true);
   }
 
   cerrarModal(): void {
     this.modalAbierto.set(false);
     this.editando.set(null);
+    this.resetValidacionForm();
+  }
+
+  private resetValidacionForm(): void {
+    this.fieldErrors.set({});
+    this.camposTocados.set({});
+    this.intentoGuardar.set(false);
+    this.errorForm.set('');
+  }
+
+  private valoresFormulario() {
+    return {
+      titulo: this.form.titulo,
+      descripcion: this.form.descripcion,
+      tipo: this.form.tipo,
+      fechaInicio: this.form.fechaInicio,
+      fechaFin: this.form.fechaFin,
+      horaInicio: this.form.horaInicio,
+      horaFin: this.form.horaFin,
+      lugar: this.form.lugar,
+      destinatarios: this.form.destinatarios,
+      nivel: this.form.nivel,
+      responsable: this.form.responsable,
+      estado: this.form.estado,
+    };
+  }
+
+  onCampoBlur(key: string): void {
+    this.camposTocados.update((t) => ({ ...t, [key]: true }));
+    this.validarCampoEnVivo(key);
+  }
+
+  onCampoFormChange(key: string): void {
+    this.formRevision.update((n) => n + 1);
+
+    if (this.camposTocados()[key] || this.intentoGuardar() || this.fieldErrors()[key]) {
+      this.validarCampoEnVivo(key);
+    } else {
+      this.quitarErrorCampo(key);
+    }
+
+    if (key === 'fechaInicio') {
+      if (this.camposTocados()['fechaFin']) this.validarCampoEnVivo('fechaFin');
+      if (this.camposTocados()['horaFin'] || this.camposTocados()['horaInicio']) {
+        this.validarCampoEnVivo('horaFin');
+      }
+    }
+
+    if (key === 'fechaFin' && (this.camposTocados()['horaFin'] || this.camposTocados()['horaInicio'])) {
+      this.validarCampoEnVivo('horaFin');
+    }
+
+    if (key === 'horaInicio' && this.camposTocados()['horaFin']) {
+      this.validarCampoEnVivo('horaFin');
+    }
+  }
+
+  private validarCamposMinimosEnVivo(): void {
+    for (const key of ['titulo', 'tipo', 'destinatarios', 'fechaInicio']) {
+      this.camposTocados.update((t) => ({ ...t, [key]: true }));
+      this.validarCampoEnVivo(key);
+    }
+  }
+
+  private validarCampoEnVivo(key: string): void {
+    const err = validarCampoEvento(this.valoresFormulario(), key);
+    if (err) {
+      this.fieldErrors.update((errors) => ({ ...errors, [key]: err }));
+    } else {
+      this.quitarErrorCampo(key);
+    }
+  }
+
+  private quitarErrorCampo(key: string): void {
+    if (!this.fieldErrors()[key]) return;
+    this.fieldErrors.update((errors) => {
+      const next = { ...errors };
+      delete next[key];
+      return next;
+    });
+    if (!Object.keys(this.fieldErrors()).length) this.errorForm.set('');
+  }
+
+  campoError(key: string): string | null {
+    if (!this.camposTocados()[key] && !this.intentoGuardar()) return null;
+    return this.fieldErrors()[key] ?? null;
+  }
+
+  claseCampo(key: string): string {
+    return this.campoError(key) ? 'border-red-400 focus:border-red-500 focus:ring-red-200' : '';
   }
 
   guardar(): void {
-    if (!this.form.titulo.trim()) {
-      this.errorForm.set('El título es obligatorio');
+    this.intentoGuardar.set(true);
+    if (!this.puedeGuardarForm()) {
+      this.validarCamposMinimosEnVivo();
+      this.errorForm.set('Completa los campos obligatorios del evento.');
       return;
     }
-    if (!this.form.fechaInicio) {
-      this.errorForm.set('La fecha de inicio es obligatoria');
+
+    const errors = validarEventoForm(this.valoresFormulario());
+    this.fieldErrors.set(errors);
+    if (Object.keys(errors).length) {
+      this.errorForm.set(primerErrorEvento(errors) ?? 'Revisa los datos del formulario.');
       return;
     }
+
+    this.errorForm.set('');
 
     const payload = {
       titulo: this.form.titulo.trim(),
@@ -535,7 +693,6 @@ export class EventosComponent implements OnInit {
       estado: this.form.estado,
     };
 
-    this.errorForm.set('');
     const req = this.editando()
       ? this.svc.update(this.editando()!.id, payload)
       : this.svc.create(payload);

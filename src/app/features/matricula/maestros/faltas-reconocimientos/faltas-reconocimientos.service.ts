@@ -2,6 +2,8 @@ import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http';
 import { Observable, catchError, finalize, throwError } from 'rxjs';
 import { environment } from '@environments/environment';
+import { TenantContextService } from '../../../../core/tenant/tenant-context.service';
+import { withInstitutionParams } from '../../../../core/tenant/tenant-http.util';
 import {
   CreateMaestroConductaDescripcionPayload,
   CreateMaestroConductaTipoPayload,
@@ -14,6 +16,7 @@ import {
 @Injectable({ providedIn: 'root' })
 export class FaltasReconocimientosService {
   private readonly http = inject(HttpClient);
+  private readonly tenant = inject(TenantContextService);
   private readonly base = `${environment.apiUrl}/maestros/faltas-reconocimientos`;
 
   readonly loading = signal(false);
@@ -21,7 +24,10 @@ export class FaltasReconocimientosService {
 
   list(activo = true): Observable<MaestroConductaTipoItem[]> {
     this.loading.set(true);
-    const params = new HttpParams().set('activo', String(activo));
+    const params = withInstitutionParams(
+      this.tenant,
+      new HttpParams().set('activo', String(activo)),
+    );
     return this.http.get<MaestroConductaTipoItem[]>(this.base, { params }).pipe(
       catchError((err) => throwError(() => new Error(this.extractError(err)))),
       finalize(() => this.loading.set(false)),

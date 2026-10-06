@@ -21,6 +21,7 @@ export interface MaestroSedeItem {
   niveles: string[];
   turnos: string[];
   estado: 'activo' | 'inactivo';
+  institucionNombre?: string;
 }
 
 export interface MaestroSedesCatalog {

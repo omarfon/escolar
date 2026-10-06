@@ -73,47 +73,49 @@ import {
         </div>
 
         <div class="card overflow-hidden">
-          <div class="max-h-[calc(100vh-280px)] overflow-y-auto">
-            @if (!alumnosFiltrados().length && !svc.loading()) {
-              <div class="p-8 text-center text-sm text-gray-400">No se encontraron alumnos</div>
-            } @else {
-              <table class="w-full text-sm">
-                <thead class="bg-gray-50 sticky top-0 z-10">
-                  <tr>
-                    <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">Alumno</th>
-                    <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">Grado</th>
-                    <th class="text-right px-4 py-2 text-xs font-semibold text-gray-500">Prom.</th>
-                  </tr>
-                </thead>
+          @if (!alumnosFiltrados().length && !svc.loading()) {
+            <div class="p-8 text-center text-sm text-gray-400">No se encontraron alumnos</div>
+          } @else {
+            <table class="w-full text-sm table-fixed">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">Alumno</th>
+                  <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">Grado</th>
+                  <th class="text-right px-4 py-2 text-xs font-semibold text-gray-500">Prom.</th>
+                </tr>
+              </thead>
+            </table>
+            <div class="max-h-[calc(100vh-280px)] overflow-y-auto">
+              <table class="w-full text-sm table-fixed">
                 <tbody>
                   @for (a of alumnosFiltrados(); track a.id) {
-                    <tr
-                      class="border-t border-gray-100 cursor-pointer transition-colors"
-                      [ngClass]="selId() === a.id ? 'bg-indigo-50' : 'hover:bg-gray-50'"
-                      (click)="seleccionar(a.id)"
-                    >
-                      <td class="px-4 py-3">
-                        <div class="font-medium text-gray-900">{{ a.apellidos }}, {{ a.nombres }}</div>
-                        <div class="text-xs text-gray-400 mt-0.5">{{ a.codigo || '—' }} · DNI {{ a.dni || '—' }}</div>
-                      </td>
-                      <td class="px-4 py-3 text-gray-600">
-                        <div>{{ a.nivel }} {{ a.gradoActual }}</div>
-                        <div class="text-xs text-gray-400">Secc. {{ a.seccionActual }}</div>
-                      </td>
-                      <td class="px-4 py-3 text-right">
-                        @if (a.promedioUltimo !== null) {
-                          <span class="font-bold" [ngClass]="notaColor(a.promedioUltimo)">{{ a.promedioUltimo }}</span>
-                        } @else {
-                          <span class="text-gray-300">—</span>
-                        }
-                        <div class="text-xs text-gray-400 mt-0.5">{{ a.aniosRegistrados }} año(s)</div>
-                      </td>
-                    </tr>
+                  <tr
+                    class="border-t border-gray-100 cursor-pointer transition-colors h-[72px]"
+                    [ngClass]="selId() === a.id ? 'bg-indigo-50' : 'hover:bg-gray-50'"
+                    (click)="seleccionar(a.id)"
+                  >
+                    <td class="px-4 py-3">
+                      <div class="font-medium text-gray-900">{{ a.apellidos }}, {{ a.nombres }}</div>
+                      <div class="text-xs text-gray-400 mt-0.5">{{ a.codigo || '—' }} · DNI {{ a.dni || '—' }}</div>
+                    </td>
+                    <td class="px-4 py-3 text-gray-600">
+                      <div>{{ a.nivel }} {{ a.gradoActual }}</div>
+                      <div class="text-xs text-gray-400">Secc. {{ a.seccionActual }}</div>
+                    </td>
+                    <td class="px-4 py-3 text-right">
+                      @if (a.promedioUltimo !== null) {
+                        <span class="font-bold" [ngClass]="notaColor(a.promedioUltimo)">{{ a.promedioUltimo }}</span>
+                      } @else {
+                        <span class="text-gray-300">—</span>
+                      }
+                      <div class="text-xs text-gray-400 mt-0.5">{{ a.aniosRegistrados }} año(s)</div>
+                    </td>
+                  </tr>
                   }
                 </tbody>
               </table>
-            }
-          </div>
+            </div>
+          }
         </div>
       </div>
 
@@ -452,13 +454,12 @@ export class HistorialAcademicoComponent implements OnInit {
 
   cargarLista(): void {
     this.errorMsg.set('');
-    this.svc.loadList(this.busqueda).subscribe({
-      next: (rows) => {
-        this._alumnos.set(rows);
+    this.svc.loadList(this.busqueda, 1, 50).subscribe({
+      next: (res) => {
+        this._alumnos.set(res.items);
         const id = this.selId();
-        if (id && !rows.some((r) => r.id === id)) {
-          this.selId.set(null);
-          this.detalle.set(null);
+        if (id && !res.items.some((r) => r.id === id)) {
+          this.seleccionar(id);
         }
       },
       error: (err: Error) => this.errorMsg.set(err.message),
@@ -493,5 +494,9 @@ export class HistorialAcademicoComponent implements OnInit {
     if (next.has(anio)) next.delete(anio);
     else next.add(anio);
     this.aniosExpandidos.set(next);
+  }
+
+  trackAlumno(_index: number, alumno: HistorialAcademicoListItem): number {
+    return alumno.id;
   }
 }

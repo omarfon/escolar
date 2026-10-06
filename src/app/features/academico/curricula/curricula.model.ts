@@ -128,6 +128,7 @@ export interface UpdateAreaPayload {
   nombre?: string;
   orden?: number;
   activo?: boolean;
+  motivo?: string;
 }
 
 export interface CreateCursoPayload {

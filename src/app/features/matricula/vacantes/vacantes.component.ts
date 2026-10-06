@@ -3,6 +3,8 @@ import { FormsModule } from '@angular/forms';
 import { NgClass, TitleCasePipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { LayoutService } from '../../../core/layout/services/layout.service';
+import { TenantContextService } from '../../../core/tenant/tenant-context.service';
+import { markTenantReloadReady, setupTenantReload } from '../../../core/tenant/tenant-reload.util';
 import { OverlayPortalDirective } from '../../../core/overlay/overlay-portal.directive';
 import { SalonesService } from '../maestros/salones/salones.service';
 import { EsperaService } from '../espera/espera.service';
@@ -762,9 +764,14 @@ interface NivelGroup  { nivel: Nivel; icon: string; gradoGroups: GradoGroup[]; t
 })
 export class VacantesComponent implements OnInit {
   private readonly layout = inject(LayoutService);
+  readonly tenant = inject(TenantContextService);
   private readonly salonesSvc = inject(SalonesService);
   readonly esperaSvc = inject(EsperaService);
   readonly Math = Math;
+  private readonly _tenantReloadReady = setupTenantReload(
+    () => this.recargarInstitucion(),
+    { onBeforeReload: () => this.limpiarUiInstitucion() },
+  );
 
   // ── Signals ──────────────────────────────────────────────
   readonly tab          = signal<'general'|'config'|'espera'>('general');
@@ -845,8 +852,29 @@ export class VacantesComponent implements OnInit {
 
   ngOnInit(): void {
     this.layout.setTitle('Gestión de Vacantes');
+    if (this.tenant.requiresSelection()) {
+      this.limpiarUiInstitucion();
+    } else {
+      this.recargarInstitucion();
+    }
+    markTenantReloadReady(this._tenantReloadReady);
+  }
+
+  private limpiarUiInstitucion(): void {
+    this._vacantes.set([]);
+    this._espera.set([]);
+    this.modalAsignar.set(null);
+    this.editandoId.set(null);
+    this.altVistaId.set(null);
+    this.drawerAbierto.set(false);
+    this.toast.set(null);
+  }
+
+  private recargarInstitucion(): void {
     this.cargarVacantes();
-    this.cargarEspera();
+    if (this.tab() === 'espera') {
+      this.cargarEspera();
+    }
   }
 
   setTab(value: 'general' | 'config' | 'espera'): void {

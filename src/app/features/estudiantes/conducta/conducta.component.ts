@@ -2,6 +2,7 @@ import { Component, signal, computed, inject, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { NgClass } from '@angular/common';
 import { LayoutService } from '../../../core/layout/services/layout.service';
+import { markTenantReloadReady, setupTenantReload } from '../../../core/tenant/tenant-reload.util';
 import { ConductaService } from './conducta.service';
 import {
   AlumnoConducta,
@@ -18,6 +19,13 @@ import {
   TIPO_CFG,
   TipoIncidente,
 } from './conducta.model';
+import {
+  ErroresCampoIncidente,
+  incidenteFormularioMinimoListo,
+  primerErrorIncidente,
+  validarCampoIncidente,
+  validarIncidenteForm,
+} from './incidente-form.validation';
 @Component({
   standalone: true,
   imports: [FormsModule, NgClass],
@@ -432,8 +440,8 @@ import {
               <div class="text-xs text-gray-400 font-semibold uppercase tracking-wide mb-2">Historial de incidentes</div>
               <div class="space-y-2">
                 @for (inc of datos.incidentes; track inc.id) {
-                  <div class="flex items-start gap-2.5 p-2.5 rounded-lg border"
-                       [ngClass]="inc.tipo === 'reconocimiento' ? 'bg-emerald-50 border-emerald-100' : inc.tipo === 'falta_muy_grave' ? 'bg-red-50 border-red-100' : inc.tipo === 'falta_grave' ? 'bg-orange-50 border-orange-100' : 'bg-yellow-50 border-yellow-100'">
+                  <div class="flex items-start gap-2.5 p-2.5 rounded-lg border border-l-4"
+                       [ngClass]="inc.tipo === 'reconocimiento' ? 'bg-emerald-50 border-emerald-100 border-l-emerald-500' : inc.tipo === 'falta_muy_grave' ? 'bg-red-100/50 border-red-400 border-l-red-700 ring-1 ring-red-200/80' : inc.tipo === 'falta_grave' ? 'bg-orange-50 border-orange-300 border-l-orange-500' : 'bg-yellow-50 border-yellow-200 border-l-yellow-400'">
                     <span class="icon text-base shrink-0 mt-0.5" [ngClass]="tipoColor(inc.tipo)">{{ tipoIcon(inc.tipo) }}</span>
                     <div class="flex-1 min-w-0">
                       <div class="text-xs font-semibold text-gray-700">{{ tipoLabel(inc.tipo) }}</div>
@@ -470,7 +478,7 @@ import {
     <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between shrink-0">
       <div>
         <h3 class="font-bold text-gray-800 text-lg">Registrar Incidente</h3>
-        <p class="text-xs text-gray-400 mt-0.5">Nuevo registro de conducta o reconocimiento</p>
+        <p class="text-xs text-gray-400 mt-0.5">Campos obligatorios marcados con *</p>
       </div>
       <button class="btn btn-icon shrink-0" (click)="cerrarDrawerRegistro()">
         <span class="icon">close</span>
@@ -481,7 +489,8 @@ import {
       <div class="min-w-0">
         <label class="form-label">Alumno <span class="text-red-400">*</span></label>
         @if (alumnoModalSel(); as sel) {
-          <div class="flex items-center justify-between p-3 rounded-lg border border-indigo-200 bg-indigo-50">
+          <div class="flex items-center justify-between p-3 rounded-lg border border-indigo-200 bg-indigo-50"
+               [ngClass]="claseCampo('alumnoId')">
             <div>
               <div class="font-medium text-gray-800 text-sm">{{ sel.nombre }}</div>
               <div class="text-xs text-gray-500">{{ sel.grado }} "{{ sel.seccion }}"</div>
@@ -498,10 +507,11 @@ import {
               <input class="form-input pl-9 w-full min-w-0 block" type="text"
                      placeholder="Buscar alumno por nombre..."
                      autocomplete="off"
+                     [ngClass]="claseCampo('alumnoId')"
                      [ngModel]="fBusquedaAlumno()"
                      (ngModelChange)="onBusquedaAlumnoChange($event)"
                      (focus)="alumnoDropdownAbierto.set(true)"
-                     (blur)="cerrarDropdownAlumno()">
+                     (blur)="onCampoBlur('alumnoId')">
               @if (alumnoDropdownAbierto()) {
                 <div class="absolute z-20 top-full left-0 right-0 mt-1 border border-gray-200 rounded-lg bg-white shadow-lg overflow-hidden">
                   <div class="max-h-52 overflow-y-auto">
@@ -530,14 +540,19 @@ import {
             </select>
           </div>
         }
+        @if (campoError('alumnoId'); as err) { <p class="form-error mt-1">{{ err }}</p> }
       </div>
       <!-- Tipo y Estado -->
       <div class="grid grid-cols-2 gap-3">
         <div>
           <label class="form-label">Tipo <span class="text-red-400">*</span></label>
-          <select class="form-input" [ngModel]="fTipoModal()" (ngModelChange)="fTipoModal.set($event)">
+          <select class="form-input" [ngClass]="claseCampo('tipo')"
+                  [ngModel]="fTipoModal()"
+                  (ngModelChange)="onCampoFormChange('tipo', $event)"
+                  (blur)="onCampoBlur('tipo')">
             @for (t of tiposOpts; track t.val) { <option [value]="t.val">{{ t.label }}</option> }
           </select>
+          @if (campoError('tipo'); as err) { <p class="form-error mt-1">{{ err }}</p> }
         </div>
         <div>
           <label class="form-label">Estado</label>
@@ -550,27 +565,43 @@ import {
       <div>
         <label class="form-label">Descripci\u00f3n <span class="text-red-400">*</span></label>
         <textarea class="form-input h-24 resize-none" placeholder="Describe el incidente o reconocimiento..."
-                  [ngModel]="fDescripcion()" (ngModelChange)="fDescripcion.set($event)"></textarea>
+                  [ngClass]="claseCampo('descripcion')"
+                  [ngModel]="fDescripcion()"
+                  (ngModelChange)="onCampoFormChange('descripcion', $event)"
+                  (blur)="onCampoBlur('descripcion')"></textarea>
+        @if (campoError('descripcion'); as err) { <p class="form-error mt-1">{{ err }}</p> }
       </div>
       <!-- Fecha y Lugar -->
       <div class="grid grid-cols-2 gap-3">
         <div>
-          <label class="form-label">Fecha</label>
+          <label class="form-label">Fecha <span class="text-red-400">*</span></label>
           <input class="form-input" type="text" placeholder="DD/MM/AAAA"
-                 [ngModel]="fFecha()" (ngModelChange)="fFecha.set($event)">
+                 [ngClass]="claseCampo('fecha')"
+                 [ngModel]="fFecha()"
+                 (ngModelChange)="onCampoFormChange('fecha', $event)"
+                 (blur)="onCampoBlur('fecha')">
+          @if (campoError('fecha'); as err) { <p class="form-error mt-1">{{ err }}</p> }
         </div>
         <div>
           <label class="form-label">Lugar</label>
-          <select class="form-input" [ngModel]="fLugar()" (ngModelChange)="fLugar.set($event)">
+          <select class="form-input" [ngClass]="claseCampo('lugar')"
+                  [ngModel]="fLugar()"
+                  (ngModelChange)="onCampoFormChange('lugar', $event)"
+                  (blur)="onCampoBlur('lugar')">
             @for (l of lugares; track l) { <option [value]="l">{{ l }}</option> }
           </select>
+          @if (campoError('lugar'); as err) { <p class="form-error mt-1">{{ err }}</p> }
         </div>
       </div>
       <!-- Medida y Notificar -->
       <div>
         <label class="form-label">Medida disciplinaria / reconocimiento</label>
         <input class="form-input" type="text" placeholder="Medida adoptada..."
-               [ngModel]="fMedida()" (ngModelChange)="fMedida.set($event)">
+               [ngClass]="claseCampo('medida')"
+               [ngModel]="fMedida()"
+               (ngModelChange)="onCampoFormChange('medida', $event)"
+               (blur)="onCampoBlur('medida')">
+        @if (campoError('medida'); as err) { <p class="form-error mt-1">{{ err }}</p> }
       </div>
       <label class="flex items-center gap-3 cursor-pointer">
         <button type="button" class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors"
@@ -581,10 +612,18 @@ import {
         </button>
         <span class="text-sm text-gray-700">Notificar al padre de familia</span>
       </label>
+      @if (errorForm()) {
+        <div class="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          <span class="icon icon-sm text-red-500">error_outline</span> {{ errorForm() }}
+        </div>
+      }
     </div>
     <div class="flex gap-3 px-5 py-4 border-t border-gray-100 shrink-0">
       <button class="btn btn-ghost flex-1" (click)="cerrarDrawerRegistro()">Cancelar</button>
-      <button class="btn btn-primary flex-1" [disabled]="saving()" (click)="guardar()">
+      <button class="btn btn-primary flex-1"
+              [disabled]="!puedeGuardarForm() || saving()"
+              [title]="puedeGuardarForm() ? '' : 'Completa alumno, tipo, descripción y fecha válida'"
+              (click)="guardar()">
         <span class="icon text-base">save</span> Guardar
       </button>
     </div>
@@ -595,12 +634,14 @@ import {
 export class ConductaComponent implements OnInit {
   private readonly layout = inject(LayoutService);
   private readonly conductaService = inject(ConductaService);
+  private readonly _tenantReloadReady = setupTenantReload(() => this.cargarDatos());
   readonly loading = this.conductaService.loading;
   readonly saving = this.conductaService.saving;
 
   ngOnInit() {
     this.layout.setTitle('Control de Conducta');
     this.cargarDatos();
+    markTenantReloadReady(this._tenantReloadReady);
   }
 
   // ── State ──
@@ -643,6 +684,23 @@ export class ConductaComponent implements OnInit {
   fNotificar  = signal(false);
   alumnoDropdownAbierto = signal(false);
   private alumnoDropdownTimer: ReturnType<typeof setTimeout> | null = null;
+
+  fieldErrors = signal<ErroresCampoIncidente>({});
+  camposTocados = signal<Record<string, true>>({});
+  intentoGuardar = signal(false);
+  errorForm = signal('');
+
+  readonly puedeGuardarForm = computed(() =>
+    incidenteFormularioMinimoListo({
+      alumnoId: this.fAlumnoId(),
+      tipo: this.fTipoModal(),
+      estado: this.fEstadoModal(),
+      descripcion: this.fDescripcion(),
+      fecha: this.fFecha(),
+      lugar: this.fLugar(),
+      medida: this.fMedida(),
+    }),
+  );
 
   readonly lugares = LUGARES;
   readonly tiposOpts = [
@@ -745,7 +803,7 @@ export class ConductaComponent implements OnInit {
     return [
       { val: r.leves,           label: 'Leves',       bg: 'bg-yellow-50 border-yellow-100',  color: 'text-yellow-600'  },
       { val: r.graves,          label: 'Graves',      bg: 'bg-orange-50 border-orange-100',  color: 'text-orange-600'  },
-      { val: r.muyGraves,       label: 'Muy Graves',  bg: 'bg-red-50 border-red-100',        color: 'text-red-600'     },
+      { val: r.muyGraves,       label: 'Muy Graves',  bg: 'bg-red-100/50 border-red-400 ring-1 ring-red-200/80', color: 'text-red-800'     },
       { val: r.reconocimientos, label: 'Reconoc.',    bg: 'bg-emerald-50 border-emerald-100',color: 'text-emerald-600' },
     ];
   }
@@ -944,11 +1002,13 @@ export class ConductaComponent implements OnInit {
     this.fBusquedaAlumno.set('');
     this.fGradoAlumnoModal.set('todos');
     this.alumnoDropdownAbierto.set(false);
+    this.onCampoBlur('alumnoId');
   }
 
   limpiarAlumnoModal() {
     this.fAlumnoId.set(0);
     this.alumnoDropdownAbierto.set(true);
+    this.onCampoFormChange('alumnoId');
   }
 
   onBusquedaAlumnoChange(val: string) {
@@ -978,13 +1038,120 @@ export class ConductaComponent implements OnInit {
     this.fLugar.set('Salón de clase');
     this.fMedida.set('');
     this.fNotificar.set(false);
+    this.resetValidacionForm();
+  }
+
+  private resetValidacionForm(): void {
+    this.fieldErrors.set({});
+    this.camposTocados.set({});
+    this.intentoGuardar.set(false);
+    this.errorForm.set('');
+  }
+
+  private valoresFormIncidente() {
+    return {
+      alumnoId: this.fAlumnoId(),
+      tipo: this.fTipoModal(),
+      estado: this.fEstadoModal(),
+      descripcion: this.fDescripcion(),
+      fecha: this.fFecha(),
+      lugar: this.fLugar(),
+      medida: this.fMedida(),
+    };
+  }
+
+  onCampoBlur(key: string): void {
+    if (key === 'alumnoId') {
+      this.cerrarDropdownAlumno();
+      setTimeout(() => {
+        this.camposTocados.update((t) => ({ ...t, [key]: true }));
+        this.validarCampoEnVivo(key);
+      }, 160);
+      return;
+    }
+    this.camposTocados.update((t) => ({ ...t, [key]: true }));
+    this.validarCampoEnVivo(key);
+  }
+
+  onCampoFormChange(key: string, value?: string | TipoIncidente): void {
+    if (value !== undefined) {
+      switch (key) {
+        case 'tipo':
+          this.fTipoModal.set(value as TipoIncidente);
+          break;
+        case 'descripcion':
+          this.fDescripcion.set(String(value));
+          break;
+        case 'fecha':
+          this.fFecha.set(String(value));
+          break;
+        case 'lugar':
+          this.fLugar.set(String(value));
+          break;
+        case 'medida':
+          this.fMedida.set(String(value));
+          break;
+      }
+    }
+
+    if (this.camposTocados()[key] || this.intentoGuardar() || this.fieldErrors()[key]) {
+      this.validarCampoEnVivo(key);
+    } else {
+      this.quitarErrorCampo(key);
+    }
+  }
+
+  private validarCamposMinimosEnVivo(): void {
+    for (const key of ['alumnoId', 'tipo', 'descripcion', 'fecha']) {
+      this.camposTocados.update((t) => ({ ...t, [key]: true }));
+      this.validarCampoEnVivo(key);
+    }
+  }
+
+  private validarCampoEnVivo(key: string): void {
+    const err = validarCampoIncidente(this.valoresFormIncidente(), key);
+    if (err) {
+      this.fieldErrors.update((errors) => ({ ...errors, [key]: err }));
+    } else {
+      this.quitarErrorCampo(key);
+    }
+  }
+
+  private quitarErrorCampo(key: string): void {
+    if (!this.fieldErrors()[key]) return;
+    this.fieldErrors.update((errors) => {
+      const next = { ...errors };
+      delete next[key];
+      return next;
+    });
+    if (!Object.keys(this.fieldErrors()).length) this.errorForm.set('');
+  }
+
+  campoError(key: string): string | null {
+    if (!this.camposTocados()[key] && !this.intentoGuardar()) return null;
+    return this.fieldErrors()[key] ?? null;
+  }
+
+  claseCampo(key: string): string {
+    return this.campoError(key) ? 'border-red-400 focus:border-red-500 focus:ring-red-200' : '';
   }
 
   guardar() {
-    if (!this.fAlumnoId() || !this.fDescripcion().trim()) {
-      this.mostrarToast('Completa los campos obligatorios.', 'err');
+    this.intentoGuardar.set(true);
+    if (!this.puedeGuardarForm()) {
+      this.validarCamposMinimosEnVivo();
+      this.errorForm.set('Completa los campos obligatorios del incidente.');
       return;
     }
+
+    const errors = validarIncidenteForm(this.valoresFormIncidente());
+    this.fieldErrors.set(errors);
+    if (Object.keys(errors).length) {
+      this.errorForm.set(primerErrorIncidente(errors) ?? 'Revisa los datos del formulario.');
+      return;
+    }
+
+    this.errorForm.set('');
     const tipo = this.fTipoModal();
     this.conductaService
       .create({

@@ -1,4 +1,4 @@
-﻿import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { NgClass } from '@angular/common';
 import { RouterLink } from '@angular/router';
@@ -6,12 +6,15 @@ import { LayoutService } from '../../../core/layout/services/layout.service';
 import { NuevaMatriculaService } from './nueva-matricula.service';
 import {
   buildNuevaMatriculaPayload,
+  ErroresCampoMatricula,
   ExpedienteCreado,
   formatDireccion,
   joinApellidos,
   nivelLabel,
   OcupacionSeccion,
-  validarApoderado,
+  primerErrorMatricula,
+  validarApoderadosCampos,
+  validarEstudianteCampos,
 } from './nueva-matricula.model';
 import { requisitosPorGrado } from '../../estudiantes/shared/documentos-requisitos';
 import {
@@ -20,8 +23,6 @@ import {
   placeholderNumeroDocumento,
   TIPOS_DOCUMENTO_IDENTIDAD,
   TipoDocumentoIdentidad,
-  validarCelular,
-  validarNumeroDocumento,
 } from '../../estudiantes/shared/identidad-documento';
 
 interface Paso { id: number; titulo: string; icon: string; color: string; ring: string; ringColor: string; textColor: string; dot: string; }
@@ -135,22 +136,32 @@ function apoderadoVacio(principal = false): Apoderado {
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div class="form-group sm:col-span-2">
                 <label class="form-label">Nombres <span class="text-red-400">*</span></label>
-                <input type="text" class="form-input" [(ngModel)]="form.nombres" placeholder="Ej: Juan Carlos">
+                <input type="text" class="form-input" [ngClass]="claseCampo('nombres')"
+                       [(ngModel)]="form.nombres" (ngModelChange)="limpiarCampo('nombres')"
+                       placeholder="Ej: Juan Carlos">
+                @if (campoError('nombres'); as err) { <p class="form-error mt-1">{{ err }}</p> }
               </div>
               <div class="form-group">
                 <label class="form-label">Apellido paterno <span class="text-red-400">*</span></label>
-                <input type="text" class="form-input" [(ngModel)]="form.apellidoPaterno" placeholder="Ej: García">
+                <input type="text" class="form-input" [ngClass]="claseCampo('apellidoPaterno')"
+                       [(ngModel)]="form.apellidoPaterno" (ngModelChange)="limpiarCampo('apellidoPaterno')"
+                       placeholder="Ej: García">
+                @if (campoError('apellidoPaterno'); as err) { <p class="form-error mt-1">{{ err }}</p> }
               </div>
               <div class="form-group">
                 <label class="form-label">Apellido materno <span class="text-red-400">*</span></label>
-                <input type="text" class="form-input" [(ngModel)]="form.apellidoMaterno" placeholder="Ej: Pérez">
+                <input type="text" class="form-input" [ngClass]="claseCampo('apellidoMaterno')"
+                       [(ngModel)]="form.apellidoMaterno" (ngModelChange)="limpiarCampo('apellidoMaterno')"
+                       placeholder="Ej: Pérez">
+                @if (campoError('apellidoMaterno'); as err) { <p class="form-error mt-1">{{ err }}</p> }
               </div>
             </div>
             <!-- Documento de identidad -->
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div class="form-group">
                 <label class="form-label">Tipo de documento <span class="text-red-400">*</span></label>
-                <select class="form-input" [(ngModel)]="form.tipoDocumento">
+                <select class="form-input" [(ngModel)]="form.tipoDocumento"
+                        (ngModelChange)="limpiarCampo('dni')">
                   @for (t of tiposDocumento; track t.value) {
                     <option [ngValue]="t.value">{{ t.label }}</option>
                   }
@@ -158,14 +169,18 @@ function apoderadoVacio(principal = false): Apoderado {
               </div>
               <div class="form-group">
                 <label class="form-label">{{ labelDocumento() }} <span class="text-red-400">*</span></label>
-                <input type="text" class="form-input" [(ngModel)]="form.dni"
+                <input type="text" class="form-input" [ngClass]="claseCampo('dni')"
+                       [(ngModel)]="form.dni" (ngModelChange)="limpiarCampo('dni')"
                        [placeholder]="placeholderDocumento()"
                        [maxlength]="maxLengthDocumento()"
                        [attr.inputmode]="form.tipoDocumento === 'DNI' ? 'numeric' : 'text'">
+                @if (campoError('dni'); as err) { <p class="form-error mt-1">{{ err }}</p> }
               </div>
               <div class="form-group sm:col-span-2">
                 <label class="form-label">Fecha de Nacimiento</label>
-                <input type="date" class="form-input" [(ngModel)]="form.fechaNac">
+                <input type="date" class="form-input" [ngClass]="claseCampo('fechaNac')"
+                       [(ngModel)]="form.fechaNac" (ngModelChange)="limpiarCampo('fechaNac')">
+                @if (campoError('fechaNac'); as err) { <p class="form-error mt-1">{{ err }}</p> }
               </div>
             </div>
             <!-- Sexo y teléfono -->
@@ -187,7 +202,10 @@ function apoderadoVacio(principal = false): Apoderado {
               </div>
               <div class="form-group">
                 <label class="form-label">Teléfono de emergencia</label>
-                <input type="tel" class="form-input" [(ngModel)]="form.telEmergencia" placeholder="999 999 999">
+                <input type="tel" class="form-input" [ngClass]="claseCampo('telEmergencia')"
+                       [(ngModel)]="form.telEmergencia" (ngModelChange)="limpiarCampo('telEmergencia')"
+                       placeholder="999 999 999">
+                @if (campoError('telEmergencia'); as err) { <p class="form-error mt-1">{{ err }}</p> }
               </div>
             </div>
             <!-- Dirección -->
@@ -196,8 +214,10 @@ function apoderadoVacio(principal = false): Apoderado {
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div class="form-group sm:col-span-2">
                   <label class="form-label">Dirección <span class="text-red-400">*</span></label>
-                  <input type="text" class="form-input" [(ngModel)]="form.direccion"
+                  <input type="text" class="form-input" [ngClass]="claseCampo('direccion')"
+                         [(ngModel)]="form.direccion" (ngModelChange)="limpiarCampo('direccion')"
                          placeholder="Av. / Jr. / Calle, N° de vivienda">
+                  @if (campoError('direccion'); as err) { <p class="form-error mt-1">{{ err }}</p> }
                 </div>
                 <div class="form-group">
                   <label class="form-label">Distrito</label>
@@ -239,6 +259,12 @@ function apoderadoVacio(principal = false): Apoderado {
           </div>
 
           <!-- Tarjetas de apoderados -->
+          @if (campoError('apoderados'); as errAp) {
+            <div class="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-2xl text-sm text-red-800">
+              <span class="icon text-red-500 shrink-0 mt-0.5">error</span>
+              <span>{{ errAp }}</span>
+            </div>
+          }
           @for (ap of form.apoderados; track $index; let i = $index) {
             <div class="bg-white rounded-2xl shadow-sm border-2 overflow-hidden transition-all"
               [ngClass]="ap.esPrincipal ? 'border-indigo-200 shadow-indigo-50' : 'border-gray-100'">
@@ -282,19 +308,41 @@ function apoderadoVacio(principal = false): Apoderado {
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div class="form-group sm:col-span-2">
                     <label class="form-label">Nombres{{ ap.esPrincipal ? ' *' : '' }}</label>
-                    <input type="text" class="form-input" [(ngModel)]="ap.nombres" placeholder="Ej: Carlos">
+                    <input type="text" class="form-input"
+                           [ngClass]="claseCampo(apoderadoCampoKey(i, 'nombres'))"
+                           [(ngModel)]="ap.nombres"
+                           (ngModelChange)="limpiarCampo(apoderadoCampoKey(i, 'nombres'))"
+                           placeholder="Ej: Carlos">
+                    @if (campoError(apoderadoCampoKey(i, 'nombres')); as err) {
+                      <p class="form-error mt-1">{{ err }}</p>
+                    }
                   </div>
                   <div class="form-group">
                     <label class="form-label">Apellido paterno{{ ap.esPrincipal ? ' *' : '' }}</label>
-                    <input type="text" class="form-input" [(ngModel)]="ap.apellidoPaterno" placeholder="Ej: Vega">
+                    <input type="text" class="form-input"
+                           [ngClass]="claseCampo(apoderadoCampoKey(i, 'apellidoPaterno'))"
+                           [(ngModel)]="ap.apellidoPaterno"
+                           (ngModelChange)="limpiarCampo(apoderadoCampoKey(i, 'apellidoPaterno'))"
+                           placeholder="Ej: Vega">
+                    @if (campoError(apoderadoCampoKey(i, 'apellidoPaterno')); as err) {
+                      <p class="form-error mt-1">{{ err }}</p>
+                    }
                   </div>
                   <div class="form-group">
                     <label class="form-label">Apellido materno{{ ap.esPrincipal ? ' *' : '' }}</label>
-                    <input type="text" class="form-input" [(ngModel)]="ap.apellidoMaterno" placeholder="Ej: Ramos">
+                    <input type="text" class="form-input"
+                           [ngClass]="claseCampo(apoderadoCampoKey(i, 'apellidoMaterno'))"
+                           [(ngModel)]="ap.apellidoMaterno"
+                           (ngModelChange)="limpiarCampo(apoderadoCampoKey(i, 'apellidoMaterno'))"
+                           placeholder="Ej: Ramos">
+                    @if (campoError(apoderadoCampoKey(i, 'apellidoMaterno')); as err) {
+                      <p class="form-error mt-1">{{ err }}</p>
+                    }
                   </div>
                   <div class="form-group">
                     <label class="form-label">Tipo de documento{{ ap.esPrincipal ? ' *' : '' }}</label>
-                    <select class="form-input" [(ngModel)]="ap.tipoDocumento">
+                    <select class="form-input" [(ngModel)]="ap.tipoDocumento"
+                            (ngModelChange)="limpiarCampo(apoderadoCampoKey(i, 'dni'))">
                       @for (t of tiposDocumento; track t.value) {
                         <option [ngValue]="t.value">{{ t.label }}</option>
                       }
@@ -302,10 +350,16 @@ function apoderadoVacio(principal = false): Apoderado {
                   </div>
                   <div class="form-group">
                     <label class="form-label">{{ labelDocumentoApoderado(ap) }}{{ ap.esPrincipal ? ' *' : '' }}</label>
-                    <input type="text" class="form-input" [(ngModel)]="ap.dni"
+                    <input type="text" class="form-input"
+                           [ngClass]="claseCampo(apoderadoCampoKey(i, 'dni'))"
+                           [(ngModel)]="ap.dni"
+                           (ngModelChange)="limpiarCampo(apoderadoCampoKey(i, 'dni'))"
                            [placeholder]="placeholderDocumentoApoderado(ap)"
                            [maxlength]="maxLengthDocumentoApoderado(ap)"
                            [attr.inputmode]="ap.tipoDocumento === 'DNI' ? 'numeric' : 'text'">
+                    @if (campoError(apoderadoCampoKey(i, 'dni')); as err) {
+                      <p class="form-error mt-1">{{ err }}</p>
+                    }
                   </div>
                   <div class="form-group">
                     <label class="form-label">Parentesco</label>
@@ -320,11 +374,25 @@ function apoderadoVacio(principal = false): Apoderado {
                   </div>
                   <div class="form-group">
                     <label class="form-label">Celular{{ ap.esPrincipal ? ' *' : '' }}</label>
-                    <input type="tel" class="form-input" [(ngModel)]="ap.celular" placeholder="999 999 999">
+                    <input type="tel" class="form-input"
+                           [ngClass]="claseCampo(apoderadoCampoKey(i, 'celular'))"
+                           [(ngModel)]="ap.celular"
+                           (ngModelChange)="limpiarCampo(apoderadoCampoKey(i, 'celular'))"
+                           placeholder="999 999 999">
+                    @if (campoError(apoderadoCampoKey(i, 'celular')); as err) {
+                      <p class="form-error mt-1">{{ err }}</p>
+                    }
                   </div>
                   <div class="form-group sm:col-span-2">
                     <label class="form-label">Correo electrónico</label>
-                    <input type="email" class="form-input" [(ngModel)]="ap.email" placeholder="correo@ejemplo.com">
+                    <input type="email" class="form-input"
+                           [ngClass]="claseCampo(apoderadoCampoKey(i, 'email'))"
+                           [(ngModel)]="ap.email"
+                           (ngModelChange)="limpiarCampo(apoderadoCampoKey(i, 'email'))"
+                           placeholder="correo@ejemplo.com">
+                    @if (campoError(apoderadoCampoKey(i, 'email')); as err) {
+                      <p class="form-error mt-1">{{ err }}</p>
+                    }
                   </div>
                 </div>
               </div>
@@ -773,6 +841,7 @@ export class NuevaMatriculaComponent implements OnInit {
   docExtraTipo    = '';
   docExtraObligatorio = false;
   error           = signal<string | null>(null);
+  fieldErrors     = signal<ErroresCampoMatricula>({});
   resultado       = signal<ExpedienteCreado | null>(null);
   ocupacion       = signal<OcupacionSeccion[]>([]);
 
@@ -885,68 +954,64 @@ export class NuevaMatriculaComponent implements OnInit {
         estado: 'pendiente' as const,
       }));
       this.docExtraAbierto.set(false);
+      this.fieldErrors.set({});
       this.paso++;
       return;
     }
 
     if (this.paso === 2) {
       this.cargarOcupacion();
+      this.fieldErrors.set({});
       this.paso++;
       return;
     }
 
+    this.fieldErrors.set({});
     if (this.paso < 5) this.paso++;
   }
 
   validarPaso1(): boolean {
-    if (
-      !this.form.nombres.trim() ||
-      !this.form.apellidoPaterno.trim() ||
-      !this.form.apellidoMaterno.trim() ||
-      !this.form.tipoDocumento ||
-      !this.form.dni.trim() ||
-      !this.form.direccion.trim()
-    ) {
-      this.error.set('Completa nombres, apellidos, documento y dirección del estudiante.');
-      return false;
-    }
-    const docError = validarNumeroDocumento(this.form.tipoDocumento, this.form.dni);
-    if (docError) {
-      this.error.set(docError);
-      return false;
-    }
-    const telError = validarCelular(this.form.telEmergencia, false);
-    if (telError) {
-      this.error.set(telError);
+    const errors = validarEstudianteCampos(this.form);
+    this.fieldErrors.set(errors);
+    if (Object.keys(errors).length) {
+      this.error.set(primerErrorMatricula(errors));
       return false;
     }
     return true;
   }
 
   validarPaso2(): boolean {
-    const principal = this.form.apoderados.find((ap) => ap.esPrincipal);
-    if (!principal) {
-      this.error.set('Debe existir un apoderado principal.');
+    const errors = validarApoderadosCampos(this.form.apoderados);
+    this.fieldErrors.set(errors);
+    if (Object.keys(errors).length) {
+      this.error.set(primerErrorMatricula(errors));
       return false;
     }
-
-    const principalError = validarApoderado(principal, true);
-    if (principalError) {
-      this.error.set(`Apoderado principal: ${principalError}`);
-      return false;
-    }
-
-    for (let i = 0; i < this.form.apoderados.length; i++) {
-      const ap = this.form.apoderados[i];
-      if (ap.esPrincipal) continue;
-      const err = validarApoderado(ap, false);
-      if (err) {
-        this.error.set(`Apoderado ${i + 1}: ${err}`);
-        return false;
-      }
-    }
-
     return true;
+  }
+
+  campoError(key: string): string | null {
+    return this.fieldErrors()[key] ?? null;
+  }
+
+  campoInvalido(key: string): boolean {
+    return !!this.fieldErrors()[key];
+  }
+
+  limpiarCampo(key: string): void {
+    if (!this.fieldErrors()[key]) return;
+    const next = { ...this.fieldErrors() };
+    delete next[key];
+    this.fieldErrors.set(next);
+    if (!Object.keys(next).length) this.error.set(null);
+  }
+
+  claseCampo(key: string): string {
+    return this.campoInvalido(key) ? 'border-red-400 focus:border-red-500 focus:ring-red-200' : '';
+  }
+
+  apoderadoCampoKey(i: number, campo: string): string {
+    return `ap-${i}-${campo}`;
   }
 
   finalizarMatricula(): void {
@@ -997,6 +1062,7 @@ export class NuevaMatriculaComponent implements OnInit {
   reiniciar(): void {
     this.paso = 1;
     this.error.set(null);
+    this.fieldErrors.set({});
     this.resultado.set(null);
     this.ocupacion.set([]);
     this.form = { nombres:'', apellidoPaterno:'', apellidoMaterno:'', tipoDocumento:'DNI', dni:'', fechaNac:'', sexo:'', telEmergencia:'',

@@ -3,6 +3,9 @@ import { FormsModule } from '@angular/forms';
 import { NgClass } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { LayoutService } from '../../../core/layout/services/layout.service';
+import { markTenantReloadReady, setupTenantReload } from '../../../core/tenant/tenant-reload.util';
+import { TenantInstitutionPickerComponent } from '../../../core/tenant/tenant-institution-picker.component';
+import { TenantContextService } from '../../../core/tenant/tenant-context.service';
 import { AuthService } from '../../../core/auth/services/auth.service';
 import { InstitucionalService } from '../../administracion/institucional/institucional.service';
 import { Nivel } from '../../administracion/institucional/institucional.model';
@@ -13,12 +16,15 @@ import {
   AlertSettings,
   AlertasResumen,
   NivelAlerta,
+  RecurrentAlertEstado,
+  RecurrentAlertItem,
+  RecurrentAlertsContext,
 } from './alertas.model';
 
 @Component({
   selector: 'app-alertas',
   standalone: true,
-  imports: [FormsModule, NgClass, RouterLink],
+  imports: [FormsModule, NgClass, RouterLink, TenantInstitutionPickerComponent],
   template: `
     <div class="space-y-5">
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -31,13 +37,33 @@ import {
             }
           </p>
           <p class="text-xs text-gray-400 mt-1">
-            Basado en faltas injustificadas (estado F) del registro diario en base de datos.
+            Indicadores observables de inasistencia (estado F). No constituyen un diagnóstico clínico.
           </p>
         </div>
-        <button class="btn btn-secondary btn-sm" (click)="cargar()">
-          <span class="icon icon-sm">refresh</span> Actualizar
-        </button>
+        <div class="flex flex-wrap gap-2">
+          <button class="btn btn-secondary btn-sm" (click)="cargar()">
+            <span class="icon icon-sm">refresh</span> Actualizar
+          </button>
+          @if (context()?.permisos?.gestionar) {
+            <button class="btn btn-primary btn-sm" (click)="escanearRecurrentes()"
+              [disabled]="svc.scanning() || !puedeOperarInstitucion()">
+              <span class="icon icon-sm">radar</span>
+              {{ svc.scanning() ? 'Detectando...' : 'Detectar recurrentes' }}
+            </button>
+          }
+        </div>
       </div>
+
+      @if (tenant.canSelectInstitution()) {
+        <div class="card p-4 border-l-4 border-violet-400">
+          <app-tenant-institution-picker
+            label="Institución para alertas recurrentes"
+            placeholder="— Seleccione institución —"
+            hint="Las alertas persistentes y la detección aplican a la IE seleccionada."
+            [required]="true"
+            (modoChange)="onConsultaModoChange($event)" />
+        </div>
+      }
 
       <!-- Maestro de configuración -->
       <div class="card p-5 border-l-4 border-indigo-400">
@@ -51,7 +77,7 @@ import {
               Define cuántos días de ausencia injustificada (totales o consecutivos) activan una alerta.
             </p>
           </div>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 lg:w-[420px]">
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 lg:flex-1">
             <div>
               <label class="form-label mb-1 block">Días para alerta temprana</label>
               <input type="number" class="form-input" min="1" max="30"
@@ -63,6 +89,36 @@ import {
               <input type="number" class="form-input" min="2" max="60"
                 [(ngModel)]="settingsForm.diasAlertaCritica">
               <p class="text-[11px] text-gray-400 mt-1">Nivel de riesgo alto</p>
+            </div>
+            <div>
+              <label class="form-label mb-1 block">% inasistencia (periodo)</label>
+              <input type="number" class="form-input" min="1" max="100"
+                [(ngModel)]="settingsForm.porcentajeUmbral">
+            </div>
+            <div>
+              <label class="form-label mb-1 block">Periodo de evaluación</label>
+              <select class="form-select" [(ngModel)]="settingsForm.periodoTipo">
+                <option value="mes">Mes calendario</option>
+                <option value="bimestre">Bimestre</option>
+                <option value="rolling30">Últimos 30 días</option>
+              </select>
+            </div>
+            <div>
+              <label class="form-label mb-1 block">Nivel educativo</label>
+              <select class="form-select" [(ngModel)]="settingsForm.nivelEducativo">
+                <option value="">Todos</option>
+                @for (n of niveles(); track n.id) {
+                  <option [value]="n.nombre">{{ n.nombre }}</option>
+                }
+              </select>
+            </div>
+            <div>
+              <label class="form-label mb-1 block">Modalidad</label>
+              <select class="form-select" [(ngModel)]="settingsForm.modalidad">
+                <option value="todos">Todas</option>
+                <option value="presencial">Presencial</option>
+                <option value="virtual">Virtual</option>
+              </select>
             </div>
           </div>
           <button class="btn btn-primary btn-sm shrink-0" (click)="guardarSettings()"
@@ -142,7 +198,84 @@ import {
         </div>
       </div>
 
+      <div class="card p-4">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
+          <div>
+            <h3 class="font-semibold text-gray-900">Alertas recurrentes persistidas</h3>
+            <p class="text-xs text-gray-500">Casos registrados con workflow: atender, derivar, cerrar o justificar.</p>
+          </div>
+          <select class="form-select sm:w-48" [ngModel]="filtroRecurrente().estado"
+            (ngModelChange)="setFiltroRecurrente('estado', $event)">
+            <option value="">Abiertas (activas)</option>
+            <option value="abierta">Solo nuevas</option>
+            <option value="atendida">Atendidas</option>
+            <option value="derivada">Derivadas</option>
+            <option value="cerrada">Cerradas</option>
+            <option value="todas">Todas</option>
+          </select>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Estado</th>
+                <th>Estudiante</th>
+                <th>Periodo</th>
+                <th class="text-center">Faltas</th>
+                <th class="text-center">%</th>
+                <th>Observación</th>
+                <th class="text-center">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              @if (svc.recurrentLoading()) {
+                <tr><td colspan="7" class="py-8 text-center text-gray-400">Cargando alertas recurrentes...</td></tr>
+              } @else {
+                @for (r of recurrentes(); track r.id) {
+                  <tr>
+                    <td><span class="badge text-[11px]" [ngClass]="estadoBadge(r.estado)">{{ estadoLabel(r.estado) }}</span></td>
+                    <td>
+                      <div class="font-medium text-gray-900">{{ r.estudiante }}</div>
+                      <div class="text-xs text-gray-400">{{ r.nivel }} · {{ r.grado }} {{ r.seccion }}</div>
+                    </td>
+                    <td class="text-sm text-gray-600">{{ r.periodoLabel || r.periodoKey }}</td>
+                    <td class="text-center font-semibold text-red-600">{{ r.faltasInjustificadas }}</td>
+                    <td class="text-center text-sm">{{ r.porcentajeInasistencia }}%</td>
+                    <td class="text-xs text-gray-600 max-w-[200px]">{{ r.motivoObservacion }}</td>
+                    <td>
+                      @if (context()?.permisos?.gestionar && r.estado !== 'cerrada') {
+                        <div class="flex items-center gap-1 justify-center flex-wrap">
+                          <button type="button" class="btn btn-secondary btn-xs" (click)="accionRecurrente(r, 'atender')">Atender</button>
+                          <button type="button" class="btn btn-secondary btn-xs" (click)="accionRecurrente(r, 'derivar')">Derivar</button>
+                          <button type="button" class="btn btn-secondary btn-xs" (click)="accionRecurrente(r, 'cerrar')">Cerrar</button>
+                          <a routerLink="/asistencia/justificaciones" class="btn btn-secondary btn-xs">Justificar</a>
+                        </div>
+                      } @else {
+                        <span class="text-xs text-gray-400">—</span>
+                      }
+                    </td>
+                  </tr>
+                } @empty {
+                  <tr>
+                    <td colspan="7" class="py-8 text-center text-gray-400 text-sm">
+                      No hay alertas recurrentes para los filtros seleccionados.
+                      @if (context()?.permisos?.gestionar) {
+                        Use «Detectar recurrentes» para generar casos a partir de las reglas configuradas.
+                      }
+                    </td>
+                  </tr>
+                }
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <div class="card overflow-hidden">
+        <div class="px-4 pt-4 pb-2 border-b">
+          <h3 class="font-semibold text-gray-900">Vista en tiempo real (mes actual)</h3>
+          <p class="text-xs text-gray-500">Evaluación on-demand según umbrales; no reemplaza el registro persistido arriba.</p>
+        </div>
         <div class="overflow-x-auto">
           <table class="data-table">
             <thead>
@@ -254,6 +387,28 @@ import {
       </div>
     </div>
 
+    @if (accionModal(); as modal) {
+      <div class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" (click)="cerrarAccionModal()">
+        <div class="card p-5 w-full max-w-md" (click)="$event.stopPropagation()">
+          <h3 class="font-semibold text-gray-900 mb-2">{{ modal.titulo }}</h3>
+          <p class="text-xs text-gray-500 mb-3">{{ modal.alerta.estudiante }}</p>
+          @if (modal.tipo === 'derivar') {
+            <label class="form-label mb-1 block">Derivar a rol</label>
+            <input class="form-input mb-2" [(ngModel)]="accionForm.derivadoARol" placeholder="Ej. Orientación">
+            <label class="form-label mb-1 block">Usuario destino</label>
+            <input class="form-input mb-2" [(ngModel)]="accionForm.derivadoAUsuario" placeholder="Opcional">
+          }
+          <label class="form-label mb-1 block">Motivo / observación</label>
+          <textarea class="form-input min-h-[80px]" [(ngModel)]="accionForm.motivo"
+            [placeholder]="modal.tipo === 'cerrar' ? 'Motivo obligatorio para cerrar' : 'Opcional'"></textarea>
+          <div class="flex justify-end gap-2 mt-4">
+            <button type="button" class="btn btn-secondary btn-sm" (click)="cerrarAccionModal()">Cancelar</button>
+            <button type="button" class="btn btn-primary btn-sm" (click)="confirmarAccionRecurrente()">Confirmar</button>
+          </div>
+        </div>
+      </div>
+    }
+
     @if (notificacion(); as n) {
       <div class="fixed bottom-5 right-5 px-5 py-3 rounded-xl shadow-lg flex items-center gap-2 z-50 text-white"
         [ngClass]="n.tipo === 'success' ? 'bg-green-500' : 'bg-red-500'">
@@ -267,20 +422,52 @@ export class AlertasComponent implements OnInit {
   private readonly layout = inject(LayoutService);
   private readonly auth = inject(AuthService);
   readonly svc = inject(AlertasService);
+  readonly tenant = inject(TenantContextService);
   private readonly institucional = inject(InstitucionalService);
+  private readonly _tenantReloadReady = setupTenantReload(() => {
+    this.institucional.loadEducationLevels().subscribe({
+      next: (niveles) => this._niveles.set(niveles),
+    });
+    this.cargar();
+  }, {
+    onBeforeReload: () => {
+      this._alertas.set([]);
+      this.resumen.set(null);
+    },
+  });
 
   readonly mesLabel = signal<string | null>(null);
   readonly resumen = signal<AlertasResumen | null>(null);
+  readonly context = signal<RecurrentAlertsContext | null>(null);
+  readonly consultaModo = signal<'pending' | 'global' | 'institution'>('institution');
 
   readonly settings = signal<AlertSettings | null>(null);
   readonly errorSettings = signal('');
   readonly notificacion = signal<{ mensaje: string; tipo: 'success' | 'error' } | null>(null);
 
   private readonly _alertas = signal<AlertaAusentismo[]>([]);
+  private readonly _recurrentes = signal<RecurrentAlertItem[]>([]);
+  readonly recurrentes = this._recurrentes.asReadonly();
   private readonly _niveles = signal<Nivel[]>([]);
   readonly niveles = this._niveles.asReadonly();
 
-  settingsForm: AlertSettings = { diasAlertaAusentismo: 2, diasAlertaCritica: 5 };
+  settingsForm: AlertSettings = {
+    diasAlertaAusentismo: 2,
+    diasAlertaCritica: 5,
+    porcentajeUmbral: 15,
+    periodoTipo: 'mes',
+    nivelEducativo: '',
+    modalidad: 'todos',
+  };
+
+  readonly filtroRecurrente = signal({ estado: '' });
+
+  accionModal = signal<{
+    tipo: 'atender' | 'derivar' | 'cerrar';
+    titulo: string;
+    alerta: RecurrentAlertItem;
+  } | null>(null);
+  accionForm = { motivo: '', derivadoARol: '', derivadoAUsuario: '' };
 
   readonly filtro = signal({
     nivel: '',
@@ -365,7 +552,118 @@ export class AlertasComponent implements OnInit {
     this.institucional.loadEducationLevels().subscribe({
       next: (niveles) => this._niveles.set(niveles),
     });
+    this.cargarContexto();
     this.cargar();
+    markTenantReloadReady(this._tenantReloadReady);
+  }
+
+  onConsultaModoChange(modo: 'pending' | 'global' | 'institution'): void {
+    this.consultaModo.set(modo);
+    if (modo === 'institution') {
+      this.cargarRecurrentes();
+    } else {
+      this._recurrentes.set([]);
+    }
+  }
+
+  puedeOperarInstitucion(): boolean {
+    if (!this.tenant.canSelectInstitution()) return true;
+    return this.consultaModo() === 'institution';
+  }
+
+  cargarContexto(): void {
+    this.svc.getRecurrentContext().subscribe({
+      next: (ctx) => this.context.set(ctx),
+    });
+  }
+
+  cargarRecurrentes(): void {
+    if (!this.puedeOperarInstitucion()) return;
+    const { mes } = this.filtro();
+    this.svc
+      .loadRecurrentAlerts({
+        mes: mes || undefined,
+        estado: this.filtroRecurrente().estado || undefined,
+        nivel: this.filtro().nivel || undefined,
+        grado: this.filtro().grado || undefined,
+      })
+      .subscribe({
+        next: (res) => this._recurrentes.set(res.items),
+        error: () => this.mostrarNotificacion('No se pudieron cargar alertas recurrentes', 'error'),
+      });
+  }
+
+  escanearRecurrentes(): void {
+    if (!this.puedeOperarInstitucion()) {
+      this.mostrarNotificacion('Seleccione una institución educativa', 'error');
+      return;
+    }
+    const { mes, nivel, grado } = this.filtro();
+    this.svc.scanRecurrentAlerts({ mes, nivel: nivel || undefined, grado: grado || undefined }).subscribe({
+      next: (res) => {
+        this.cargarRecurrentes();
+        this.mostrarNotificacion(
+          `Detección completada: ${res.creadas} nuevas, ${res.actualizadas} actualizadas, ${res.omitidas} omitidas`,
+        );
+      },
+      error: (err) => {
+        const msg = err?.error?.message;
+        this.mostrarNotificacion(
+          Array.isArray(msg) ? msg.join(', ') : msg ?? 'No se pudo ejecutar la detección',
+          'error',
+        );
+      },
+    });
+  }
+
+  setFiltroRecurrente(campo: 'estado', valor: string): void {
+    this.filtroRecurrente.update((f) => ({ ...f, [campo]: valor }));
+    this.cargarRecurrentes();
+  }
+
+  accionRecurrente(alerta: RecurrentAlertItem, tipo: 'atender' | 'derivar' | 'cerrar'): void {
+    const titulos = {
+      atender: 'Atender alerta',
+      derivar: 'Derivar alerta',
+      cerrar: 'Cerrar alerta',
+    };
+    this.accionForm = { motivo: '', derivadoARol: '', derivadoAUsuario: '' };
+    this.accionModal.set({ tipo, titulo: titulos[tipo], alerta });
+  }
+
+  cerrarAccionModal(): void {
+    this.accionModal.set(null);
+  }
+
+  confirmarAccionRecurrente(): void {
+    const modal = this.accionModal();
+    if (!modal) return;
+    if (modal.tipo === 'cerrar' && !this.accionForm.motivo.trim()) {
+      this.mostrarNotificacion('Indique el motivo para cerrar la alerta', 'error');
+      return;
+    }
+
+    const req =
+      modal.tipo === 'atender'
+        ? this.svc.atenderRecurrentAlert(modal.alerta.id, this.accionForm.motivo)
+        : modal.tipo === 'derivar'
+          ? this.svc.derivarRecurrentAlert(modal.alerta.id, this.accionForm)
+          : this.svc.cerrarRecurrentAlert(modal.alerta.id, this.accionForm.motivo);
+
+    req.subscribe({
+      next: () => {
+        this.cerrarAccionModal();
+        this.cargarRecurrentes();
+        this.mostrarNotificacion('Acción registrada correctamente');
+      },
+      error: (err) => {
+        const msg = err?.error?.message;
+        this.mostrarNotificacion(
+          Array.isArray(msg) ? msg.join(', ') : msg ?? 'No se pudo completar la acción',
+          'error',
+        );
+      },
+    });
   }
 
   cargar(): void {
@@ -384,6 +682,7 @@ export class AlertasComponent implements OnInit {
           this.settingsForm = { ...res.settings };
           this.mesLabel.set(res.mesLabel);
           this.resumen.set(res.resumen ?? null);
+          this.cargarRecurrentes();
         },
         error: () => this.mostrarNotificacion('No se pudieron cargar las alertas', 'error'),
       });
@@ -494,6 +793,24 @@ export class AlertasComponent implements OnInit {
     if (n === 'critico') return 'Crítica';
     if (n === 'alerta') return 'Alerta';
     return 'Con falta';
+  }
+
+  estadoBadge(e: RecurrentAlertEstado): string {
+    return {
+      abierta: 'badge-yellow',
+      atendida: 'badge-blue',
+      derivada: 'badge-indigo',
+      cerrada: 'badge-gray',
+    }[e];
+  }
+
+  estadoLabel(e: RecurrentAlertEstado): string {
+    return {
+      abierta: 'Abierta',
+      atendida: 'Atendida',
+      derivada: 'Derivada',
+      cerrada: 'Cerrada',
+    }[e];
   }
 
   nivelBadge(nivel: string): string {

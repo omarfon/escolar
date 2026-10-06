@@ -1,4 +1,4 @@
-﻿import { Component, inject, HostListener, OnInit } from '@angular/core';
+﻿import { Component, effect, inject, HostListener, OnInit } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 import { LayoutService } from '../../services/layout.service';
 import { SidebarComponent } from '../sidebar/sidebar.component';
@@ -6,11 +6,13 @@ import { HeaderComponent } from '../header/header.component';
 import { StudentAppNavComponent } from '../student-app-nav/student-app-nav.component';
 import { AuthService } from '../../../auth/services/auth.service';
 import { GradingConfigService } from '../../../grading/grading-config.service';
+import { TenantScopeBannerComponent } from '../tenant-scope-banner/tenant-scope-banner.component';
+import { TenantContextService } from '../../../tenant/tenant-context.service';
 
 @Component({
   selector: 'app-main-layout',
   standalone: true,
-  imports: [RouterOutlet, SidebarComponent, HeaderComponent, StudentAppNavComponent],
+  imports: [RouterOutlet, SidebarComponent, HeaderComponent, StudentAppNavComponent, TenantScopeBannerComponent],
   template: `
     <div class="flex h-screen bg-gray-50 overflow-hidden">
       @if (layout.isMobile() && layout.mobileOpen() && (!auth.isPortalEstudiante() || !layout.isPhone())) {
@@ -21,6 +23,7 @@ import { GradingConfigService } from '../../../grading/grading-config.service';
       }
       <div class="flex flex-col flex-1 min-w-0 overflow-hidden transition-all duration-300 ease-in-out">
         <app-header />
+        <app-tenant-scope-banner />
         <main
           class="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-4 sm:px-6 pt-4 sm:pt-6"
           [class.pb-24]="auth.isPortalEstudiante() && layout.isPhone()"
@@ -46,7 +49,17 @@ import { GradingConfigService } from '../../../grading/grading-config.service';
 export class MainLayoutComponent implements OnInit {
   readonly layout = inject(LayoutService);
   readonly auth = inject(AuthService);
+  readonly tenant = inject(TenantContextService);
   private readonly gradingConfig = inject(GradingConfigService);
+
+  constructor() {
+    effect(() => {
+      const token = this.tenant.changeToken();
+      if (token === 0 || !this.auth.isAuthenticated()) return;
+      this.gradingConfig.reset();
+      this.gradingConfig.load().subscribe({ error: () => {} });
+    });
+  }
 
   ngOnInit(): void {
     this._checkViewport();

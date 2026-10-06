@@ -6,6 +6,7 @@ import { LayoutService } from '../../../core/layout/services/layout.service';
 import { AuthService } from '../../../core/auth/services/auth.service';
 import { HijoSelectorComponent } from '../shared/hijo-selector.component';
 import { SeguimientoService } from '../seguimiento/seguimiento.service';
+import { HijoResumen } from '../seguimiento/seguimiento.model';
 import { JustificacionesPadreService } from './justificaciones-padre.service';
 import { OverlayPortalDirective } from '../../../core/overlay/overlay-portal.directive';
 import {
@@ -34,7 +35,7 @@ import {
         </button>
       </div>
 
-      <app-hijo-selector (hijoChange)="onHijoChange($event.studentId)" />
+      <app-hijo-selector (hijoChange)="onHijoChange($event)" />
 
       @if (!studentId()) {
         <div class="card p-12 text-center text-gray-400 text-sm">
@@ -303,19 +304,13 @@ export class JustificacionesPadreComponent implements OnInit {
 
   ngOnInit(): void {
     this.layout.setTitle('Justificaciones');
-    this.segSvc.loadHijos().subscribe({
-      next: hijos => {
-        this.segSvc.hijos.set(hijos);
-        const first = hijos[0]?.studentId ?? null;
-        if (first) this.onHijoChange(first);
-      },
-    });
   }
 
-  onHijoChange(studentId: number): void {
-    this.studentId.set(studentId);
+  onHijoChange(hijo: HijoResumen): void {
+    this.studentId.set(hijo.studentId);
+    this.segSvc.seleccionarHijo(hijo);
     const faltaId = Number(this.route.snapshot.queryParamMap.get('faltaId'));
-    this.justSvc.loadPending(studentId).subscribe({
+    this.justSvc.loadPending(hijo.studentId).subscribe({
       next: items => {
         const p = items[0] ?? null;
         this.pendienteActual.set(p);
@@ -325,16 +320,16 @@ export class JustificacionesPadreComponent implements OnInit {
       },
       error: () => this.pendienteActual.set(null),
     });
-    this.justSvc.loadHistorial(studentId).subscribe({
+    this.justSvc.loadHistorial(hijo.studentId).subscribe({
       next: items => this.historialJustificaciones.set(items),
       error: () => this.historialJustificaciones.set([]),
     });
   }
 
   recargar(): void {
-    const id = this.studentId();
-    if (!id) return;
-    this.onHijoChange(id);
+    const hijo = this.segSvc.hijoSeleccionado();
+    if (!hijo) return;
+    this.onHijoChange(hijo);
   }
 
   abrirModalJustificar(p: PendienteJustificacion, ids?: number[]): void {

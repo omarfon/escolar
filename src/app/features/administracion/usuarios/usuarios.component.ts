@@ -1,14 +1,28 @@
-﻿import { Component, inject, OnInit, signal, computed } from '@angular/core';
+import { Component, inject, OnInit, signal, computed } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { NgClass } from '@angular/common';
 import { LayoutService } from '../../../core/layout/services/layout.service';
+import { RolesService } from '../roles/roles.service';
 import { UsuariosService } from './usuarios.service';
-import { EstadoUsuario, RolUsuario, Usuario } from './usuarios.model';
+import {
+  AmbitoTerritorial,
+  EstadoUsuario,
+  RolUsuario,
+  UserRoleAssignment,
+  Usuario,
+} from './usuarios.model';
 import {
   descargarPlantillaUsuarios,
   FilaCargaUsuario,
   parsearArchivoUsuarios,
 } from './usuarios-carga.util';
+import {
+  ErroresCampoUsuario,
+  primerErrorUsuario,
+  usuarioFormularioMinimoListo,
+  validarCampoUsuario,
+  validarUsuarioForm,
+} from './usuario-form.validation';
 
 function initials(n: string, a: string) { return (n[0] ?? '') + (a[0] ?? ''); }
 
@@ -108,7 +122,11 @@ function initials(n: string, a: string) { return (n[0] ?? '') + (a[0] ?? ''); }
                 <td class="hidden md:table-cell text-sm text-gray-600">{{ u.dni }}</td>
                 <td class="hidden lg:table-cell text-sm text-gray-600">{{ u.telefono }}</td>
                 <td>
-                  <span class="badge text-xs" [ngClass]="badgeRol(u.rol)">{{ labelRol(u.rol) }}</span>
+                  <div class="flex flex-wrap gap-1">
+                    @for (r of rolesDeUsuario(u); track r) {
+                      <span class="badge text-xs" [ngClass]="badgeRol(r)">{{ labelRol(r) }}</span>
+                    }
+                  </div>
                 </td>
                 <td class="hidden sm:table-cell text-xs text-gray-500">{{ u.sede }}</td>
                 <td class="text-center">
@@ -190,7 +208,7 @@ function initials(n: string, a: string) { return (n[0] ?? '') + (a[0] ?? ''); }
         <!-- Avatar preview -->
         <div class="flex items-center gap-4 px-6 py-4 bg-gray-50 border-b border-gray-100 shrink-0">
           <div class="w-14 h-14 rounded-full flex items-center justify-center text-white text-xl font-bold shrink-0"
-            [ngClass]="colorAvatar(form.rol)">
+            [ngClass]="colorAvatar(rolPrincipal())">
             {{ initiales(form.nombres, form.apellidos) || '?' }}
           </div>
           <div>
@@ -198,89 +216,182 @@ function initials(n: string, a: string) { return (n[0] ?? '') + (a[0] ?? ''); }
               {{ (form.nombres + ' ' + form.apellidos).trim() || 'Nombre del usuario' }}
             </div>
             <div class="text-xs text-gray-500">{{ form.email || 'email@dominio.com' }}</div>
-            <span class="badge text-xs mt-1 inline-block" [ngClass]="badgeRol(form.rol)">{{ labelRol(form.rol) }}</span>
+            <span class="badge text-xs mt-1 inline-block" [ngClass]="badgeRol(rolPrincipal())">{{ labelRol(rolPrincipal()) }}</span>
           </div>
         </div>
 
         <!-- Cuerpo del formulario -->
         <div class="flex-1 overflow-y-auto px-6 py-5">
           <div class="space-y-4">
+            @if (errorForm()) {
+              <div class="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                <span class="icon icon-sm text-red-500">error_outline</span> {{ errorForm() }}
+              </div>
+            }
             <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Datos personales</p>
             <div class="grid grid-cols-2 gap-3">
               <div class="form-group">
-                <label class="form-label">Nombres *</label>
-                <input class="form-input" type="text" [(ngModel)]="form.nombres" placeholder="Ej: Juan Carlos">
+                <label class="form-label">Nombres <span class="text-red-400">*</span></label>
+                <input class="form-input" type="text" placeholder="Ej: Juan Carlos"
+                       [ngClass]="claseCampo('nombres')"
+                       [(ngModel)]="form.nombres"
+                       (ngModelChange)="onCampoFormChange('nombres')"
+                       (blur)="onCampoBlur('nombres')">
+                @if (campoError('nombres'); as err) { <p class="form-error mt-1">{{ err }}</p> }
               </div>
               <div class="form-group">
-                <label class="form-label">Apellidos *</label>
-                <input class="form-input" type="text" [(ngModel)]="form.apellidos" placeholder="Ej: Perez Torres">
+                <label class="form-label">Apellidos <span class="text-red-400">*</span></label>
+                <input class="form-input" type="text" placeholder="Ej: Perez Torres"
+                       [ngClass]="claseCampo('apellidos')"
+                       [(ngModel)]="form.apellidos"
+                       (ngModelChange)="onCampoFormChange('apellidos')"
+                       (blur)="onCampoBlur('apellidos')">
+                @if (campoError('apellidos'); as err) { <p class="form-error mt-1">{{ err }}</p> }
               </div>
             </div>
             <div class="grid grid-cols-2 gap-3">
               <div class="form-group">
-                <label class="form-label">DNI *</label>
-                <input class="form-input" type="text" [(ngModel)]="form.dni" placeholder="12345678" maxlength="8">
+                <label class="form-label">DNI <span class="text-red-400">*</span></label>
+                <input class="form-input" type="text" placeholder="12345678" maxlength="8" inputmode="numeric"
+                       [ngClass]="claseCampo('dni')"
+                       [(ngModel)]="form.dni"
+                       (ngModelChange)="onCampoFormChange('dni')"
+                       (blur)="onCampoBlur('dni')">
+                @if (campoError('dni'); as err) { <p class="form-error mt-1">{{ err }}</p> }
               </div>
               <div class="form-group">
-                <label class="form-label">Telefono</label>
-                <input class="form-input" type="tel" [(ngModel)]="form.telefono" placeholder="987654321">
+                <label class="form-label">Telefono <span class="text-gray-400 font-normal">(opcional)</span></label>
+                <input class="form-input" type="tel" placeholder="987654321"
+                       [ngClass]="claseCampo('telefono')"
+                       [(ngModel)]="form.telefono"
+                       (ngModelChange)="onCampoFormChange('telefono')"
+                       (blur)="onCampoBlur('telefono')">
+                @if (campoError('telefono'); as err) { <p class="form-error mt-1">{{ err }}</p> }
               </div>
             </div>
 
             <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide pt-2">Cuenta y acceso</p>
             <div class="form-group">
-              <label class="form-label">Correo electronico *</label>
-              <input class="form-input" type="email" [(ngModel)]="form.email" placeholder="usuario@colegio.edu.pe">
+              <label class="form-label">Correo electronico <span class="text-red-400">*</span></label>
+              <input class="form-input" type="email" placeholder="usuario@colegio.edu.pe"
+                     [ngClass]="claseCampo('email')"
+                     [(ngModel)]="form.email"
+                     (ngModelChange)="onCampoFormChange('email')"
+                     (blur)="onCampoBlur('email')">
+              @if (campoError('email'); as err) { <p class="form-error mt-1">{{ err }}</p> }
             </div>
+            <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide pt-2">Roles y ámbito</p>
+            <p class="text-xs text-gray-500 mb-2">Asigne uno o más roles. Marque exactamente uno como principal.</p>
+            <div class="space-y-2 mb-3">
+              @for (asg of roleAssignments(); track $index; let i = $index) {
+                <div class="grid grid-cols-12 gap-2 items-end border border-gray-100 rounded-lg p-2 bg-gray-50/50">
+                  <div class="col-span-12 sm:col-span-3">
+                    <label class="text-[10px] text-gray-500 uppercase">Rol</label>
+                    <select class="form-select text-sm" [(ngModel)]="asg.roleCodigo" [ngModelOptions]="{standalone: true}" (ngModelChange)="onRoleAssignmentChange()">
+                      @for (r of rolesDisponibles(); track r.value) {
+                        <option [value]="r.value">{{ r.label }}</option>
+                      }
+                    </select>
+                  </div>
+                  <div class="col-span-6 sm:col-span-2">
+                    <label class="text-[10px] text-gray-500 uppercase">Ámbito</label>
+                    <select class="form-select text-sm" [(ngModel)]="asg.ambito" [ngModelOptions]="{standalone: true}">
+                      @for (a of ambitos; track a.value) {
+                        <option [value]="a.value">{{ a.label }}</option>
+                      }
+                    </select>
+                  </div>
+                  @if (asg.ambito === 'DRE') {
+                    <div class="col-span-6 sm:col-span-2">
+                      <label class="text-[10px] text-gray-500 uppercase">Cód. DRE</label>
+                      <input class="form-input text-sm" [(ngModel)]="asg.dreCodigo" [ngModelOptions]="{standalone: true}">
+                    </div>
+                  }
+                  @if (asg.ambito === 'UGEL') {
+                    <div class="col-span-6 sm:col-span-2">
+                      <label class="text-[10px] text-gray-500 uppercase">Cód. UGEL</label>
+                      <input class="form-input text-sm" [(ngModel)]="asg.ugelCodigo" [ngModelOptions]="{standalone: true}">
+                    </div>
+                  }
+                  <div class="col-span-6 sm:col-span-2 flex items-center gap-2 pb-1">
+                    <input type="radio" name="rolPrincipal" [checked]="asg.esPrincipal" (change)="marcarPrincipal(i)">
+                    <span class="text-xs text-gray-600">Principal</span>
+                  </div>
+                  <div class="col-span-6 sm:col-span-1 flex justify-end pb-1">
+                    @if (roleAssignments().length > 1) {
+                      <button type="button" class="btn btn-ghost btn-icon text-red-500" (click)="quitarRol(i)" title="Quitar rol">
+                        <span class="icon icon-sm">close</span>
+                      </button>
+                    }
+                  </div>
+                </div>
+              }
+            </div>
+            <button type="button" class="btn btn-secondary btn-sm mb-3" (click)="agregarRol()">
+              <span class="icon icon-sm">add</span> Agregar rol
+            </button>
+            @if (errorRoles()) {
+              <p class="form-error mb-3" role="alert">{{ errorRoles() }}</p>
+            }
+
             <div class="grid grid-cols-2 gap-3">
               <div class="form-group">
-                <label class="form-label">Rol *</label>
-                <select class="form-select" [(ngModel)]="form.rol">
-                  @for (r of roles; track r.value) {
-                    <option [value]="r.value">{{ r.label }}</option>
-                  }
-                </select>
-              </div>
-              <div class="form-group">
                 <label class="form-label">Sede</label>
-                <select class="form-select" [(ngModel)]="form.sede">
+                <select class="form-select" [ngClass]="claseCampo('sede')"
+                        [(ngModel)]="form.sede"
+                        (ngModelChange)="onCampoFormChange('sede')"
+                        (blur)="onCampoBlur('sede')">
                   <option value="Todas las sedes">Todas las sedes</option>
                   @for (sede of sedes(); track sede) {
                     <option [value]="sede">{{ sede }}</option>
                   }
                 </select>
+                @if (campoError('sede'); as err) { <p class="form-error mt-1">{{ err }}</p> }
               </div>
             </div>
             <div class="form-group">
-              <label class="form-label">Cargo / Descripcion</label>
-              <input class="form-input" type="text" [(ngModel)]="form.cargo" placeholder="Ej: Docente de Matematicas">
+              <label class="form-label">Cargo / Descripcion <span class="text-gray-400 font-normal">(opcional)</span></label>
+              <input class="form-input" type="text" placeholder="Ej: Docente de Matematicas"
+                     [ngClass]="claseCampo('cargo')"
+                     [(ngModel)]="form.cargo"
+                     (ngModelChange)="onCampoFormChange('cargo')"
+                     (blur)="onCampoBlur('cargo')">
+              @if (campoError('cargo'); as err) { <p class="form-error mt-1">{{ err }}</p> }
             </div>
             <div class="grid grid-cols-2 gap-3">
               <div class="form-group">
                 <label class="form-label">Estado</label>
-                <select class="form-select" [(ngModel)]="form.estado">
+                <select class="form-select" [ngClass]="claseCampo('estado')"
+                        [(ngModel)]="form.estado"
+                        (ngModelChange)="onCampoFormChange('estado')"
+                        (blur)="onCampoBlur('estado')">
                   <option value="activo">Activo</option>
                   <option value="inactivo">Inactivo</option>
                   <option value="bloqueado">Bloqueado</option>
                 </select>
+                @if (campoError('estado'); as err) { <p class="form-error mt-1">{{ err }}</p> }
               </div>
             </div>
 
             @if (!form.id) {
               <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide pt-2">Contrasena inicial</p>
               <div class="form-group">
-                <label class="form-label">Contrasena *</label>
-                <input class="form-input" type="password" [(ngModel)]="form.password" placeholder="Minimo 8 caracteres">
+                <label class="form-label">Contrasena <span class="text-red-400">*</span></label>
+                <input class="form-input" type="password" placeholder="Minimo 8 caracteres"
+                       [ngClass]="claseCampo('password')"
+                       [(ngModel)]="form.password"
+                       (ngModelChange)="onCampoFormChange('password')"
+                       (blur)="onCampoBlur('password')">
+                @if (campoError('password'); as err) { <p class="form-error mt-1">{{ err }}</p> }
               </div>
               <div class="form-group">
-                <label class="form-label">Confirmar contrasena *</label>
-                <input class="form-input" type="password" [(ngModel)]="form.password2" placeholder="Repite la contrasena">
-              </div>
-            }
-
-            @if (errorForm) {
-              <div class="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-                <span class="icon icon-sm text-red-500">error_outline</span> {{ errorForm }}
+                <label class="form-label">Confirmar contrasena <span class="text-red-400">*</span></label>
+                <input class="form-input" type="password" placeholder="Repite la contrasena"
+                       [ngClass]="claseCampo('password2')"
+                       [(ngModel)]="form.password2"
+                       (ngModelChange)="onCampoFormChange('password2')"
+                       (blur)="onCampoBlur('password2')">
+                @if (campoError('password2'); as err) { <p class="form-error mt-1">{{ err }}</p> }
               </div>
             }
           </div>
@@ -288,7 +399,10 @@ function initials(n: string, a: string) { return (n[0] ?? '') + (a[0] ?? ''); }
 
         <!-- Footer drawer -->
         <div class="flex gap-2 px-6 py-4 border-t border-gray-100 bg-gray-50 shrink-0">
-          <button class="btn btn-primary flex-1" (click)="guardarUsuario()" [disabled]="svc.saving()">
+          <button class="btn btn-primary flex-1"
+                  (click)="guardarUsuario()"
+                  [disabled]="!puedeGuardarForm() || svc.saving()"
+                  [title]="puedeGuardarForm() ? '' : 'Completa los campos obligatorios del usuario'">
             <span class="icon">{{ form.id ? 'save' : 'person_add' }}</span>
             {{ svc.saving() ? 'Guardando...' : (form.id ? 'Guardar cambios' : 'Registrar usuario') }}
           </button>
@@ -484,10 +598,24 @@ export class UsuariosComponent implements OnInit {
   drawerAbierto = signal(false);
   modalCargaAbierto = signal(false);
   paginaActual  = signal(1);
-  errorForm     = '';
+  errorForm = signal('');
   errorCarga    = signal<string | null>(null);
   archivoNombre = signal('');
   notificacion  = signal<{ mensaje: string; tipo: 'success' | 'error' } | null>(null);
+  fieldErrors = signal<ErroresCampoUsuario>({});
+  camposTocados = signal<Record<string, true>>({});
+  intentoGuardar = signal(false);
+  private readonly formRevision = signal(0);
+
+  readonly puedeGuardarForm = computed(() => {
+    this.formRevision();
+    return usuarioFormularioMinimoListo(this.valoresFormulario()) && !this.validarRoleAssignments();
+  });
+
+  readonly rolPrincipal = computed((): RolUsuario => {
+    this.formRevision();
+    return (this.roleAssignments().find(a => a.esPrincipal)?.roleCodigo ?? this.form.rol ?? 'DOCENTE') as RolUsuario;
+  });
 
   private readonly _filasCarga = signal<FilaCargaUsuario[]>([]);
   readonly filasCarga = this._filasCarga.asReadonly();
@@ -501,6 +629,13 @@ export class UsuariosComponent implements OnInit {
 
   readonly filtro = signal({ busqueda: '', rol: '', estado: '' });
 
+  private readonly rolesApi = inject(RolesService);
+  readonly rolesDeSede = signal<{ value: string; label: string }[]>([]);
+  readonly rolesDisponibles = computed(() => {
+    const extra = this.rolesDeSede().filter((rol) => !this.roles.some((base) => base.value === rol.value));
+    return [...extra, ...this.roles];
+  });
+
   roles = [
     { value: 'ADMIN',        label: 'Administrador'   },
     { value: 'DIRECTOR',     label: 'Director'        },
@@ -510,7 +645,20 @@ export class UsuariosComponent implements OnInit {
     { value: 'PADRE',        label: 'Padre/Madre'     },
     { value: 'ESTUDIANTE',   label: 'Estudiante'      },
     { value: 'BIBLIOTECARIO',label: 'Bibliotecario'   },
+    { value: 'UGEL',         label: 'Personal UGEL'   },
+    { value: 'DRE',          label: 'Personal DRE'    },
+    { value: 'MINEDU',       label: 'Personal MINEDU' },
   ];
+
+  ambitos: { value: AmbitoTerritorial; label: string }[] = [
+    { value: 'IE', label: 'IE' },
+    { value: 'UGEL', label: 'UGEL' },
+    { value: 'DRE', label: 'DRE' },
+    { value: 'MINEDU', label: 'MINEDU' },
+  ];
+
+  readonly roleAssignments = signal<UserRoleAssignment[]>([this._rolVacio()]);
+  readonly errorRoles = signal('');
 
   form: Partial<Usuario> & { password?: string; password2?: string } = this._formVacio();
 
@@ -524,7 +672,7 @@ export class UsuariosComponent implements OnInit {
     const q = busqueda.toLowerCase();
     return this._usuarios().filter(u => {
       const matchQ = !q || `${u.nombres} ${u.apellidos} ${u.email} ${u.dni}`.toLowerCase().includes(q);
-      const matchR = !rol    || u.rol === rol;
+      const matchR = !rol || this.rolesDeUsuario(u).includes(rol as RolUsuario);
       const matchE = !estado || u.estado === estado;
       return matchQ && matchR && matchE;
     });
@@ -547,6 +695,14 @@ export class UsuariosComponent implements OnInit {
     this.layout.setTitle('Gestion de Usuarios');
     this.cargarUsuarios();
     this.cargarSedes();
+    this.rolesApi.load().subscribe({
+      next: (data) => this.rolesDeSede.set(
+        data.roles
+          .filter((rol) => rol.institutionId)
+          .map((rol) => ({ value: rol.codigo, label: rol.institucionNombre ? `${rol.label} · ${rol.institucionNombre}` : rol.label })),
+      ),
+      error: () => this.rolesDeSede.set([]),
+    });
   }
 
   actualizarFiltro(campo: 'busqueda' | 'rol' | 'estado', valor: string): void {
@@ -583,6 +739,7 @@ export class UsuariosComponent implements OnInit {
       ADMIN:'bg-indigo-600', DIRECTOR:'bg-blue-600', DOCENTE:'bg-teal-500',
       SECRETARIA:'bg-pink-500', TESORERO:'bg-amber-500', PADRE:'bg-orange-500',
       ESTUDIANTE:'bg-green-500', BIBLIOTECARIO:'bg-purple-500',
+      UGEL:'bg-slate-600', DRE:'bg-slate-700', MINEDU:'bg-slate-800',
     };
     return map[rol ?? ''] ?? 'bg-gray-400';
   }
@@ -592,6 +749,7 @@ export class UsuariosComponent implements OnInit {
       ADMIN:'badge-indigo', DIRECTOR:'badge-blue', DOCENTE:'badge-green',
       SECRETARIA:'badge-purple', TESORERO:'badge-yellow', PADRE:'badge-orange',
       ESTUDIANTE:'badge-gray', BIBLIOTECARIO:'badge-purple',
+      UGEL:'badge-gray', DRE:'badge-gray', MINEDU:'badge-gray',
     };
     return map[rol ?? ''] ?? 'badge-gray';
   }
@@ -600,20 +758,176 @@ export class UsuariosComponent implements OnInit {
     return this.roles.find(r => r.value === rol)?.label ?? rol ?? '';
   }
 
+  rolesDeUsuario(u: Usuario): RolUsuario[] {
+    const activos = (u.roleAssignments ?? []).filter(a => a.activo !== false).map(a => a.roleCodigo);
+    if (activos.length) return [...new Set(activos)];
+    if (u.roles?.length) return u.roles;
+    return u.rol ? [u.rol] : [];
+  }
+
+  onRoleAssignmentChange(): void {
+    this.formRevision.update(n => n + 1);
+    this.errorRoles.set(this.validarRoleAssignments() ?? '');
+  }
+
+  agregarRol(): void {
+    this.roleAssignments.update(list => [...list, { ...this._rolVacio(), esPrincipal: false }]);
+    this.onRoleAssignmentChange();
+  }
+
+  quitarRol(index: number): void {
+    this.roleAssignments.update(list => {
+      const next = list.filter((_, i) => i !== index);
+      if (next.length && !next.some(a => a.esPrincipal)) next[0].esPrincipal = true;
+      return next.length ? next : [this._rolVacio()];
+    });
+    this.onRoleAssignmentChange();
+  }
+
+  marcarPrincipal(index: number): void {
+    this.roleAssignments.update(list =>
+      list.map((a, i) => ({ ...a, esPrincipal: i === index })),
+    );
+    this.onRoleAssignmentChange();
+  }
+
+  private _rolVacio(): UserRoleAssignment {
+    return { roleCodigo: 'DOCENTE', ambito: 'IE', esPrincipal: true };
+  }
+
+  private validarRoleAssignments(): string | null {
+    const list = this.roleAssignments();
+    if (!list.length) return 'Debe asignar al menos un rol';
+    const principals = list.filter(a => a.esPrincipal);
+    if (principals.length !== 1) return 'Debe marcar exactamente un rol como principal';
+    for (const a of list) {
+      if (a.ambito === 'DRE' && !a.dreCodigo?.trim()) return 'Indique código DRE';
+      if (a.ambito === 'UGEL' && !a.ugelCodigo?.trim()) return 'Indique código UGEL';
+    }
+    const keys = new Set(list.map(a => `${a.roleCodigo}|${a.ambito}|${a.dreCodigo ?? ''}|${a.ugelCodigo ?? ''}`));
+    if (keys.size !== list.length) return 'Hay roles duplicados con el mismo ámbito';
+    return null;
+  }
+
   // ── CRUD ──
   abrirDrawer(): void {
     this.form = this._formVacio();
-    this.errorForm = '';
+    this.roleAssignments.set([this._rolVacio()]);
+    this.errorRoles.set('');
+    this.resetValidacionForm();
     this.drawerAbierto.set(true);
   }
 
   editarUsuario(u: Usuario): void {
     this.form = { ...u, password: '', password2: '' };
-    this.errorForm = '';
+    this.errorRoles.set('');
+    this.resetValidacionForm();
     this.drawerAbierto.set(true);
+    this.svc.loadRoleAssignments(u.id).subscribe({
+      next: (assignments) => {
+        const activos = assignments.filter(a => a.activo !== false);
+        this.roleAssignments.set(
+          activos.length
+            ? activos.map(a => ({ ...a }))
+            : [{ roleCodigo: u.rol, ambito: 'IE', esPrincipal: true }],
+        );
+      },
+      error: () => {
+        const activos = (u.roleAssignments ?? []).filter(a => a.activo !== false);
+        this.roleAssignments.set(
+          activos.length
+            ? activos.map(a => ({ ...a }))
+            : [{ roleCodigo: u.rol, ambito: 'IE', esPrincipal: true }],
+        );
+      },
+    });
   }
 
-  cerrarDrawer(): void { this.drawerAbierto.set(false); }
+  cerrarDrawer(): void {
+    this.drawerAbierto.set(false);
+    this.resetValidacionForm();
+  }
+
+  private resetValidacionForm(): void {
+    this.fieldErrors.set({});
+    this.camposTocados.set({});
+    this.intentoGuardar.set(false);
+    this.errorForm.set('');
+  }
+
+  private valoresFormulario() {
+    return {
+      esEdicion: !!this.form.id,
+      nombres: this.form.nombres ?? '',
+      apellidos: this.form.apellidos ?? '',
+      dni: this.form.dni ?? '',
+      email: this.form.email ?? '',
+      telefono: this.form.telefono ?? '',
+      rol: this.rolPrincipal(),
+      sede: this.form.sede ?? 'Sede Central',
+      estado: (this.form.estado ?? 'activo') as EstadoUsuario,
+      cargo: this.form.cargo ?? '',
+      password: this.form.password ?? '',
+      password2: this.form.password2 ?? '',
+    };
+  }
+
+  onCampoBlur(key: string): void {
+    this.camposTocados.update((t) => ({ ...t, [key]: true }));
+    this.validarCampoEnVivo(key);
+  }
+
+  onCampoFormChange(key: string): void {
+    this.formRevision.update((n) => n + 1);
+
+    if (this.camposTocados()[key] || this.intentoGuardar() || this.fieldErrors()[key]) {
+      this.validarCampoEnVivo(key);
+    } else {
+      this.quitarErrorCampo(key);
+    }
+
+    if (key === 'password' && this.camposTocados()['password2']) {
+      this.validarCampoEnVivo('password2');
+    }
+  }
+
+  private validarCamposMinimosEnVivo(): void {
+    const keys = this.form.id
+      ? ['nombres', 'apellidos', 'dni', 'email']
+      : ['nombres', 'apellidos', 'dni', 'email', 'password', 'password2'];
+    for (const key of keys) {
+      this.camposTocados.update((t) => ({ ...t, [key]: true }));
+      this.validarCampoEnVivo(key);
+    }
+  }
+
+  private validarCampoEnVivo(key: string): void {
+    const err = validarCampoUsuario(this.valoresFormulario(), key);
+    if (err) {
+      this.fieldErrors.update((errors) => ({ ...errors, [key]: err }));
+    } else {
+      this.quitarErrorCampo(key);
+    }
+  }
+
+  private quitarErrorCampo(key: string): void {
+    if (!this.fieldErrors()[key]) return;
+    this.fieldErrors.update((errors) => {
+      const next = { ...errors };
+      delete next[key];
+      return next;
+    });
+    if (!Object.keys(this.fieldErrors()).length) this.errorForm.set('');
+  }
+
+  campoError(key: string): string | null {
+    if (!this.camposTocados()[key] && !this.intentoGuardar()) return null;
+    return this.fieldErrors()[key] ?? null;
+  }
+
+  claseCampo(key: string): string {
+    return this.campoError(key) ? 'border-red-400 focus:border-red-500 focus:ring-red-200' : '';
+  }
 
   abrirCargaMasiva(): void {
     this._filasCarga.set([]);
@@ -693,22 +1007,37 @@ export class UsuariosComponent implements OnInit {
   }
 
   guardarUsuario(): void {
-    this.errorForm = '';
-    if (!this.form.nombres?.trim() || !this.form.apellidos?.trim()) {
-      this.errorForm = 'Nombres y apellidos son obligatorios.'; return;
+    this.intentoGuardar.set(true);
+    if (!this.puedeGuardarForm()) {
+      this.validarCamposMinimosEnVivo();
+      this.errorForm.set('Completa los campos obligatorios del usuario.');
+      return;
     }
-    if (!this.form.email?.trim()) {
-      this.errorForm = 'El correo electronico es obligatorio.'; return;
+
+    const errors = validarUsuarioForm(this.valoresFormulario());
+    this.fieldErrors.set(errors);
+    if (Object.keys(errors).length) {
+      this.errorForm.set(primerErrorUsuario(errors) ?? 'Revisa los datos del formulario.');
+      return;
     }
-    if (!this.form.dni?.trim() || this.form.dni.length < 8) {
-      this.errorForm = 'El DNI debe tener 8 digitos.'; return;
+
+    const roleErr = this.validarRoleAssignments();
+    if (roleErr) {
+      this.errorRoles.set(roleErr);
+      this.errorForm.set(roleErr);
+      return;
     }
-    if (!this.form.id && (!this.form.password || this.form.password.length < 8)) {
-      this.errorForm = 'La contrasena debe tener al menos 8 caracteres.'; return;
-    }
-    if (!this.form.id && this.form.password !== this.form.password2) {
-      this.errorForm = 'Las contrasenas no coinciden.'; return;
-    }
+    this.errorRoles.set('');
+    this.errorForm.set('');
+
+    const principal = this.roleAssignments().find(a => a.esPrincipal)!;
+    const assignments = this.roleAssignments().map(a => ({
+      roleCodigo: a.roleCodigo,
+      ambito: a.ambito,
+      dreCodigo: a.dreCodigo?.trim() || undefined,
+      ugelCodigo: a.ugelCodigo?.trim() || undefined,
+      esPrincipal: a.esPrincipal,
+    }));
 
     const payload = {
       nombres: this.form.nombres!.trim(),
@@ -716,29 +1045,54 @@ export class UsuariosComponent implements OnInit {
       dni: this.form.dni!.trim(),
       email: this.form.email!.trim(),
       telefono: this.form.telefono ?? '',
-      rol: (this.form.rol ?? 'DOCENTE') as RolUsuario,
+      rol: principal.roleCodigo,
       sede: this.form.sede ?? 'Sede Central',
       estado: (this.form.estado ?? 'activo') as EstadoUsuario,
       cargo: this.form.cargo ?? '',
     };
 
-    const req = this.form.id
-      ? this.svc.update(this.form.id, payload)
-      : this.svc.create({ ...payload, password: this.form.password! });
+    const motivo = this.form.id
+      ? 'Actualización de roles desde gestión de usuarios'
+      : 'Asignación inicial al crear usuario';
 
-    req.subscribe({
-      next: () => {
-        this.drawerAbierto.set(false);
-        this.cargarUsuarios();
-        this.mostrarNotificacion(
-          this.form.id ? 'Usuario actualizado correctamente' : 'Usuario registrado correctamente',
-        );
-      },
-      error: () => {
-        this.errorForm = 'No se pudo guardar el usuario. Verifica los datos e intenta de nuevo.';
-        this.mostrarNotificacion('Error al guardar el usuario', 'error');
-      },
-    });
+    const persistRoles = (userId: number) =>
+      this.svc.setRoleAssignments(userId, { motivo, assignments });
+
+    if (this.form.id) {
+      this.svc.update(this.form.id, payload).subscribe({
+        next: () => {
+          persistRoles(this.form.id!).subscribe({
+            next: () => this.finalizarGuardado(true),
+            error: () => this.finalizarGuardado(true, 'Usuario guardado, pero falló la asignación de roles'),
+          });
+        },
+        error: () => this.mostrarErrorGuardado(),
+      });
+    } else {
+      this.svc.create({
+        ...payload,
+        password: this.form.password!,
+        roleAssignments: assignments,
+        roleAssignmentsMotivo: motivo,
+      }).subscribe({
+        next: () => this.finalizarGuardado(false),
+        error: () => this.mostrarErrorGuardado(),
+      });
+    }
+  }
+
+  private finalizarGuardado(esEdicion: boolean, msg?: string): void {
+    this.drawerAbierto.set(false);
+    this.cargarUsuarios();
+    this.mostrarNotificacion(
+      msg ?? (esEdicion ? 'Usuario actualizado correctamente' : 'Usuario registrado correctamente'),
+      msg ? 'error' : 'success',
+    );
+  }
+
+  private mostrarErrorGuardado(): void {
+    this.errorForm.set('No se pudo guardar el usuario. Verifica los datos e intenta de nuevo.');
+    this.mostrarNotificacion('Error al guardar el usuario', 'error');
   }
 
   toggleEstado(u: Usuario): void {

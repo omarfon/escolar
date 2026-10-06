@@ -1,6 +1,7 @@
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { NgClass } from '@angular/common';
 import { LayoutService } from '../../../../core/layout/services/layout.service';
+import { markTenantReloadReady, setupTenantReload } from '../../../../core/tenant/tenant-reload.util';
 import { InstitucionalService } from '../../../administracion/institucional/institucional.service';
 import { Nivel } from '../../../administracion/institucional/institucional.model';
 import { MaestrosFormulasEvaluacionService } from './formulas-evaluacion.service';
@@ -224,6 +225,7 @@ import { FormulaEvaluacionDrawerComponent } from './formula-evaluacion-drawer.co
   `,
 })
 export class MaestrosFormulasEvaluacionComponent implements OnInit {
+  private readonly _tenantReloadReady = setupTenantReload(() => this.cargar());
   readonly svc = inject(MaestrosFormulasEvaluacionService);
   private readonly layout = inject(LayoutService);
   private readonly institucional = inject(InstitucionalService);
@@ -252,6 +254,7 @@ export class MaestrosFormulasEvaluacionComponent implements OnInit {
       next: niveles => this.niveles.set(niveles.filter(n => n.activo)),
     });
     this.cargar();
+    markTenantReloadReady(this._tenantReloadReady);
   }
 
   sumaPesosForm(): number {

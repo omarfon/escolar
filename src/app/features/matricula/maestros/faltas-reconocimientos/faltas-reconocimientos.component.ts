@@ -2,6 +2,7 @@ import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { NgClass } from '@angular/common';
 import { LayoutService } from '../../../../core/layout/services/layout.service';
+import { markTenantReloadReady, setupTenantReload } from '../../../../core/tenant/tenant-reload.util';
 import { FaltasReconocimientosService } from './faltas-reconocimientos.service';
 import {
   CATEGORIA_CFG,
@@ -9,6 +10,13 @@ import {
   MaestroConductaDescripcionItem,
   MaestroConductaTipoItem,
 } from './faltas-reconocimientos.model';
+import {
+  ErroresCampoConductaTipo,
+  conductaTipoFormularioMinimoListo,
+  primerErrorConductaTipo,
+  validarCampoConductaTipo,
+  validarConductaTipoForm,
+} from './conducta-tipo-form.validation';
 
 @Component({
   selector: 'app-maestros-faltas-reconocimientos',
@@ -125,28 +133,57 @@ import {
   <div class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" (click)="cerrarModalTipo()">
     <div class="card w-full max-w-md p-6 space-y-4" (click)="$event.stopPropagation()">
       <h2 class="text-lg font-bold text-gray-900">{{ editTipoId() ? 'Editar tipo' : 'Nuevo tipo' }}</h2>
+
+      @if (errorFormTipo()) {
+        <div class="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          <span class="icon icon-sm text-red-500">error_outline</span> {{ errorFormTipo() }}
+        </div>
+      }
+
       <div>
-        <label class="form-label">Nombre</label>
-        <input class="form-input w-full" [(ngModel)]="formTipoNombre" placeholder="Ej. Falta Leve" />
+        <label class="form-label">Nombre <span class="text-red-400">*</span></label>
+        <input class="form-input w-full" placeholder="Ej. Falta Leve"
+               [ngClass]="claseCampoTipo('nombre')"
+               [(ngModel)]="formTipoNombre"
+               (ngModelChange)="onCampoTipoChange('nombre')"
+               (blur)="onCampoTipoBlur('nombre')" />
+        @if (campoErrorTipo('nombre'); as err) { <p class="form-error mt-1">{{ err }}</p> }
       </div>
       <div>
-        <label class="form-label">Categoría</label>
-        <select class="form-input w-full" [(ngModel)]="formTipoCategoria">
+        <label class="form-label">Categoría <span class="text-red-400">*</span></label>
+        <select class="form-input w-full" [ngClass]="claseCampoTipo('categoria')"
+                [(ngModel)]="formTipoCategoria"
+                (ngModelChange)="onCampoTipoChange('categoria')"
+                (blur)="onCampoTipoBlur('categoria')">
           <option value="falta">Falta</option>
           <option value="reconocimiento">Reconocimiento</option>
         </select>
+        @if (campoErrorTipo('categoria'); as err) { <p class="form-error mt-1">{{ err }}</p> }
       </div>
       <div>
-        <label class="form-label">Icono (Material)</label>
-        <input class="form-input w-full" [(ngModel)]="formTipoIcon" placeholder="warning, gavel, emoji_events..." />
+        <label class="form-label">Icono (Material) <span class="text-gray-400 font-normal">(opcional)</span></label>
+        <input class="form-input w-full" placeholder="warning, gavel, emoji_events..."
+               [ngClass]="claseCampoTipo('icon')"
+               [(ngModel)]="formTipoIcon"
+               (ngModelChange)="onCampoTipoChange('icon')"
+               (blur)="onCampoTipoBlur('icon')" />
+        @if (campoErrorTipo('icon'); as err) { <p class="form-error mt-1">{{ err }}</p> }
       </div>
       <div>
         <label class="form-label">Orden</label>
-        <input type="number" min="0" class="form-input w-full" [(ngModel)]="formTipoOrden" />
+        <input type="number" min="0" step="1" class="form-input w-full"
+               [ngClass]="claseCampoTipo('orden')"
+               [(ngModel)]="formTipoOrden"
+               (ngModelChange)="onCampoTipoChange('orden')"
+               (blur)="onCampoTipoBlur('orden')" />
+        @if (campoErrorTipo('orden'); as err) { <p class="form-error mt-1">{{ err }}</p> }
       </div>
       <div class="flex gap-2 justify-end">
         <button class="btn btn-ghost" (click)="cerrarModalTipo()">Cancelar</button>
-        <button class="btn btn-primary" [disabled]="svc.saving()" (click)="guardarTipo()">Guardar</button>
+        <button class="btn btn-primary"
+                [disabled]="!puedeGuardarTipoForm() || svc.saving()"
+                [title]="puedeGuardarTipoForm() ? '' : 'Completa nombre y categoría'"
+                (click)="guardarTipo()">Guardar</button>
       </div>
     </div>
   </div>
@@ -171,6 +208,7 @@ import {
   `,
 })
 export class MaestrosFaltasReconocimientosComponent implements OnInit {
+  private readonly _tenantReloadReady = setupTenantReload(() => this.cargar());
   private readonly layout = inject(LayoutService);
   readonly svc = inject(FaltasReconocimientosService);
 
@@ -181,6 +219,17 @@ export class MaestrosFaltasReconocimientosComponent implements OnInit {
 
   readonly modalTipo = signal(false);
   readonly editTipoId = signal<number | null>(null);
+  errorFormTipo = signal('');
+  fieldErrorsTipo = signal<ErroresCampoConductaTipo>({});
+  camposTocadosTipo = signal<Record<string, true>>({});
+  intentoGuardarTipo = signal(false);
+  private readonly formTipoRevision = signal(0);
+
+  readonly puedeGuardarTipoForm = computed(() => {
+    this.formTipoRevision();
+    return conductaTipoFormularioMinimoListo(this.valoresFormularioTipo());
+  });
+
   formTipoNombre = '';
   formTipoCategoria: MaestroConductaCategoria = 'falta';
   formTipoIcon = 'warning';
@@ -199,6 +248,7 @@ export class MaestrosFaltasReconocimientosComponent implements OnInit {
   ngOnInit(): void {
     this.layout.setTitle('Maestros · Faltas y Reconocimientos');
     this.cargar();
+    markTenantReloadReady(this._tenantReloadReady);
   }
 
   cargar(): void {
@@ -227,28 +277,114 @@ export class MaestrosFaltasReconocimientosComponent implements OnInit {
     this.formTipoCategoria = tipo?.categoria ?? 'falta';
     this.formTipoIcon = tipo?.icon ?? 'warning';
     this.formTipoOrden = tipo?.orden ?? 0;
+    this.resetValidacionFormTipo();
     this.modalTipo.set(true);
   }
 
   cerrarModalTipo(): void {
     this.modalTipo.set(false);
     this.editTipoId.set(null);
+    this.resetValidacionFormTipo();
+  }
+
+  private resetValidacionFormTipo(): void {
+    this.fieldErrorsTipo.set({});
+    this.camposTocadosTipo.set({});
+    this.intentoGuardarTipo.set(false);
+    this.errorFormTipo.set('');
+  }
+
+  private valoresFormularioTipo() {
+    return {
+      nombre: this.formTipoNombre,
+      categoria: this.formTipoCategoria,
+      icon: this.formTipoIcon,
+      orden: Number(this.formTipoOrden),
+    };
+  }
+
+  onCampoTipoBlur(key: string): void {
+    this.camposTocadosTipo.update((t) => ({ ...t, [key]: true }));
+    this.validarCampoTipoEnVivo(key);
+  }
+
+  onCampoTipoChange(key: string): void {
+    this.formTipoRevision.update((n) => n + 1);
+
+    if (key === 'orden') {
+      const n = Number(this.formTipoOrden);
+      this.formTipoOrden = Number.isFinite(n) ? n : 0;
+    }
+
+    if (this.camposTocadosTipo()[key] || this.intentoGuardarTipo() || this.fieldErrorsTipo()[key]) {
+      this.validarCampoTipoEnVivo(key);
+    } else {
+      this.quitarErrorCampoTipo(key);
+    }
+  }
+
+  private validarCamposMinimosTipoEnVivo(): void {
+    for (const key of ['nombre', 'categoria']) {
+      this.camposTocadosTipo.update((t) => ({ ...t, [key]: true }));
+      this.validarCampoTipoEnVivo(key);
+    }
+  }
+
+  private validarCampoTipoEnVivo(key: string): void {
+    const err = validarCampoConductaTipo(this.valoresFormularioTipo(), key);
+    if (err) {
+      this.fieldErrorsTipo.update((errors) => ({ ...errors, [key]: err }));
+    } else {
+      this.quitarErrorCampoTipo(key);
+    }
+  }
+
+  private quitarErrorCampoTipo(key: string): void {
+    if (!this.fieldErrorsTipo()[key]) return;
+    this.fieldErrorsTipo.update((errors) => {
+      const next = { ...errors };
+      delete next[key];
+      return next;
+    });
+    if (!Object.keys(this.fieldErrorsTipo()).length) this.errorFormTipo.set('');
+  }
+
+  campoErrorTipo(key: string): string | null {
+    if (!this.camposTocadosTipo()[key] && !this.intentoGuardarTipo()) return null;
+    return this.fieldErrorsTipo()[key] ?? null;
+  }
+
+  claseCampoTipo(key: string): string {
+    return this.campoErrorTipo(key) ? 'border-red-400 focus:border-red-500 focus:ring-red-200' : '';
   }
 
   guardarTipo(): void {
-    const nombre = this.formTipoNombre.trim();
-    if (!nombre) return;
+    this.intentoGuardarTipo.set(true);
+    if (!this.puedeGuardarTipoForm()) {
+      this.validarCamposMinimosTipoEnVivo();
+      this.errorFormTipo.set('Completa los campos obligatorios del tipo.');
+      return;
+    }
+
+    const errors = validarConductaTipoForm(this.valoresFormularioTipo());
+    this.fieldErrorsTipo.set(errors);
+    if (Object.keys(errors).length) {
+      this.errorFormTipo.set(primerErrorConductaTipo(errors) ?? 'Revisa los datos del formulario.');
+      return;
+    }
+
+    this.errorFormTipo.set('');
 
     const editId = this.editTipoId();
     const req = editId
       ? this.svc.updateTipo(editId, {
-          nombre,
+          nombre: this.formTipoNombre.trim(),
           categoria: this.formTipoCategoria,
           icon: this.formTipoIcon.trim() || 'description',
           orden: this.formTipoOrden,
         })
       : this.svc.createTipo({
-          nombre,
+          nombre: this.formTipoNombre.trim(),
           categoria: this.formTipoCategoria,
           icon: this.formTipoIcon.trim() || 'description',
           orden: this.formTipoOrden,

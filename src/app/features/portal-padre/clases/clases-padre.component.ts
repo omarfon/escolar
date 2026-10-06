@@ -33,7 +33,7 @@ import { HijoResumen } from '../seguimiento/seguimiento.model';
   imports: [NgClass, OverlayPortalDirective, HijoSelectorComponent],
   template: `
     <div class="space-y-5 animate-fade-in">
-      <app-hijo-selector [autoLoad]="false" (hijoChange)="onHijoChange($event)" />
+      <app-hijo-selector (hijoChange)="onHijoChange($event)" />
 
       @if (hijosSvc.hijoSeleccionado(); as hijo) {
         @if (!cursoSeleccionado()) {
@@ -325,10 +325,6 @@ export class ClasesPadreComponent implements OnInit {
 
   ngOnInit(): void {
     this.layout.setTitle('Clases');
-    this.hijosSvc.loadHijos().subscribe(hijos => {
-      const hijo = this.hijosSvc.hijoSeleccionado() ?? hijos[0];
-      if (hijo) this.cargarHijo(hijo);
-    });
   }
 
   onHijoChange(hijo: HijoResumen): void {

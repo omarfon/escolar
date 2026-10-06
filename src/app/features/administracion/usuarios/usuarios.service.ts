@@ -6,7 +6,9 @@ import {
   BulkImportUsuariosPayload,
   BulkImportUsuariosResult,
   CreateUsuarioPayload,
+  SetRoleAssignmentsPayload,
   UpdateUsuarioPayload,
+  UserRoleAssignment,
   Usuario,
 } from './usuarios.model';
 
@@ -65,5 +67,17 @@ export class UsuariosService {
 
   downloadTemplate(): Observable<Blob> {
     return this.http.get(`${this.base}/template`, { responseType: 'blob' });
+  }
+
+  loadRoleAssignments(userId: number): Observable<UserRoleAssignment[]> {
+    return this.http.get<UserRoleAssignment[]>(`${this.base}/${userId}/role-assignments`);
+  }
+
+  setRoleAssignments(userId: number, payload: SetRoleAssignmentsPayload) {
+    this.saving.set(true);
+    return this.http.put<UserRoleAssignment[]>(`${this.base}/${userId}/role-assignments`, payload).pipe(
+      catchError(err => throwError(() => err)),
+      finalize(() => this.saving.set(false)),
+    );
   }
 }

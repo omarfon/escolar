@@ -1,25 +1,10 @@
 import { HttpRequest, HttpHandlerFn, HttpEvent, HttpErrorResponse } from '@angular/common/http';
 import { inject } from '@angular/core';
-import { Router } from '@angular/router';
 import { Observable, throwError, catchError } from 'rxjs';
-import { AuthService } from '../services/auth.service';
 
 export function errorInterceptor(req: HttpRequest<unknown>, next: HttpHandlerFn): Observable<HttpEvent<unknown>> {
-  const router = inject(Router);
-  const auth = inject(AuthService);
-
   return next(req).pipe(
     catchError((err: HttpErrorResponse) => {
-      if (
-        err.status === 401
-        && auth.isAuthenticated()
-        && !req.url.includes('/auth/login')
-        && !req.url.includes('/auth/refresh')
-      ) {
-        auth.logout(false);
-        router.navigate(['/auth/login']);
-      }
-
       const messages: Record<number, string> = {
         400: err.error?.message ?? 'Solicitud inválida.',
         403: err.error?.message ?? 'No tiene permisos para realizar esta acción.',

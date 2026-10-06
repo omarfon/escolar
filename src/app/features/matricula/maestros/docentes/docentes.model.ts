@@ -22,6 +22,8 @@ export interface DocenteSalon {
 
 export interface DocenteItem {
   id: number;
+  institutionId: number;
+  institutionNombre?: string;
   nombres: string;
   apellidos: string;
   nombreCompleto: string;
@@ -58,6 +60,8 @@ export interface DocentesPage {
   pageSize: number;
   totalPages: number;
   meta: DocentesPageMeta;
+  /** true cuando SIAGIE consulta sin IE (todas las instituciones). */
+  vistaGlobal?: boolean;
 }
 
 export interface DocentePayload {

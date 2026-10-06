@@ -98,19 +98,19 @@ type FiltroEntrega = 'todos' | 'pendientes' | 'entregadas' | 'calificadas';
 
     } @else {
 
-      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
 
         @for (s of salones(); track salonKey(s)) {
 
-          <button type="button" class="card p-5 text-left hover:shadow-md border-l-4 border-l-violet-500 transition-shadow"
+          <button type="button" class="card px-3 py-3 text-left hover:shadow-md border-l-4 border-l-violet-500 transition-shadow"
 
             (click)="seleccionarSalon(s)">
 
-            <div class="text-xs font-semibold uppercase tracking-wide text-violet-600">{{ s.nivel }}</div>
+            <div class="text-[10px] font-semibold uppercase tracking-wide text-violet-600">{{ s.nivel }}</div>
 
-            <h3 class="font-bold text-gray-800 text-lg mt-0.5">{{ s.grado }} "{{ s.seccion }}"</h3>
+            <h3 class="font-bold text-gray-800 text-base leading-snug mt-0.5">{{ s.grado }} "{{ s.seccion }}"</h3>
 
-            <p class="text-sm text-gray-500 mt-1">{{ s.totalAlumnos }} alumno(s)</p>
+            <p class="text-xs text-gray-500 mt-0.5">{{ s.totalAlumnos }} alumno(s)</p>
 
           </button>
 
@@ -437,257 +437,188 @@ type FiltroEntrega = 'todos' | 'pendientes' | 'entregadas' | 'calificadas';
 
 
 @if (revisando(); as e) {
+  <div class="fixed inset-0 z-[80] bg-slate-900/50 backdrop-blur-[3px]" (click)="cerrarRevision()"></div>
+  <div class="fixed inset-x-3 sm:inset-x-auto sm:right-0 sm:left-auto top-0 w-auto sm:w-full sm:max-w-5xl lg:max-w-6xl h-[90vh] max-h-[90vh] bg-white shadow-[0_20px_60px_-15px_rgba(79,70,229,0.35)] z-[90] flex flex-col rounded-b-2xl sm:rounded-bl-2xl overflow-hidden animate-slide-in-r border border-gray-200/80 sm:border-r-0"
+    (click)="$event.stopPropagation()">
 
-  <div class="fixed inset-0 z-[80] bg-black/45 backdrop-blur-sm" (click)="cerrarRevision()"></div>
+    <!-- Header -->
+    <div class="relative shrink-0 bg-gradient-to-br from-indigo-600 via-indigo-600 to-violet-700 text-white px-5 py-4 overflow-hidden">
+      <div class="absolute -top-10 -right-10 w-40 h-40 rounded-full bg-white/10 blur-2xl pointer-events-none"></div>
+      <div class="absolute -bottom-8 left-1/3 w-32 h-32 rounded-full bg-violet-400/20 blur-2xl pointer-events-none"></div>
 
-  <div class="fixed inset-y-0 right-0 w-full max-w-6xl bg-white shadow-2xl z-[90] flex flex-col animate-slide-in-r">
-
-    <div class="px-6 py-4 border-b border-gray-200 shrink-0 bg-gradient-to-r from-indigo-50 via-white to-violet-50">
-
-      <div class="flex items-start justify-between gap-4">
-
+      <div class="relative flex items-start justify-between gap-3">
         <div class="flex items-start gap-3 min-w-0">
-
-          <div class="w-12 h-12 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 text-white flex items-center justify-center font-bold shrink-0">
-
+          <div class="w-12 h-12 rounded-2xl bg-white/15 backdrop-blur border border-white/20 flex items-center justify-center text-sm font-bold shrink-0 shadow-lg">
             {{ e.alumnoIniciales }}
-
           </div>
-
           <div class="min-w-0">
-
-            <p class="text-xs font-semibold uppercase tracking-wide text-indigo-600">Revisión de entrega</p>
-
-            <h2 class="text-lg font-bold text-gray-900 truncate">{{ e.alumnoLabel }}</h2>
-
-            <p class="text-sm text-gray-500 mt-0.5">{{ actividadSeleccionada()?.titulo }}</p>
-
+            <p class="text-[10px] uppercase tracking-wider text-indigo-100 font-semibold">Revisión de entrega</p>
+            <h2 class="text-lg font-bold leading-tight truncate mt-0.5">{{ e.alumnoLabel }}</h2>
+            <p class="text-sm text-indigo-100/90 truncate mt-0.5">{{ actividadSeleccionada()?.titulo }}</p>
+            <div class="flex flex-wrap items-center gap-2 mt-2.5">
+              <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium bg-white/15 border border-white/20">
+                <span class="icon icon-sm">school</span> {{ e.studentGrado }} · Sec. {{ e.studentSeccion }}
+              </span>
+              <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium border"
+                [ngClass]="estadoEntregaBadge(e.estado).includes('green') ? 'bg-emerald-400/20 border-emerald-300/40 text-emerald-50' : estadoEntregaBadge(e.estado).includes('amber') ? 'bg-amber-400/20 border-amber-300/40 text-amber-50' : 'bg-white/15 border-white/20'">
+                {{ estadoEntregaLabel(e.estado) }}
+              </span>
+              @if (e.fechaEntregaReal) {
+                <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] bg-white/15 border border-white/20">
+                  <span class="icon icon-sm">schedule</span> {{ e.fechaEntregaReal }}
+                </span>
+              }
+            </div>
           </div>
-
         </div>
-
-        <button type="button" class="btn btn-ghost btn-icon shrink-0" (click)="cerrarRevision()">
-
+        <button type="button" class="w-9 h-9 rounded-xl flex items-center justify-center text-white/80 hover:text-white hover:bg-white/10 transition-colors shrink-0"
+          (click)="cerrarRevision()">
           <span class="icon icon-sm">close</span>
-
         </button>
-
       </div>
-
     </div>
 
+    <div class="flex-1 min-h-0 overflow-hidden flex flex-col lg:flex-row bg-gray-50/80">
 
-
-    <div class="flex-1 overflow-hidden flex flex-col lg:flex-row min-h-0">
-
-      <div class="lg:w-[58%] border-b lg:border-b-0 lg:border-r border-gray-200 flex flex-col min-h-0 bg-slate-50/60">
-
-        <div class="px-5 py-3 border-b border-gray-200 flex items-center justify-between shrink-0 bg-white">
-
-          <h3 class="text-sm font-semibold text-gray-800 flex items-center gap-2">
-
-            <span class="icon icon-sm text-indigo-500">description</span> Documento del alumno
-
+      <!-- Documento -->
+      <div class="lg:w-[55%] border-b lg:border-b-0 lg:border-r border-gray-200/80 flex flex-col flex-[3] lg:flex-none min-h-0">
+        <div class="px-4 py-2.5 border-b border-gray-200/80 flex items-center justify-between shrink-0 bg-white">
+          <h3 class="text-xs font-semibold text-gray-700 flex items-center gap-2">
+            <span class="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
+              <span class="icon icon-sm">description</span>
+            </span>
+            Documento del alumno
           </h3>
-
           @if (e.archivoEntregaNombre) {
-
             <a [href]="archivoUrl(e)" target="_blank" rel="noopener"
-
-              class="btn btn-ghost btn-sm text-indigo-600">
-
-              <span class="icon icon-sm">open_in_new</span> Abrir
-
+              class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 transition-colors">
+              <span class="icon icon-sm">open_in_new</span> Abrir en pestaña
             </a>
-
           }
-
         </div>
 
-
-
-        <div class="flex-1 overflow-auto p-4 min-h-[280px] lg:min-h-0">
-
+        <div class="flex-1 min-h-0 overflow-auto p-4">
           @if (!e.archivoEntregaNombre) {
-
-            <div class="h-full min-h-[240px] flex flex-col items-center justify-center text-center text-gray-400 p-8">
-
-              <span class="icon mb-3" style="font-size:48px">folder_off</span>
-
-              <p class="font-medium text-gray-600">Sin archivo entregado</p>
-
-              <p class="text-sm mt-1">El alumno aún no ha subido su trabajo.</p>
-
-            </div>
-
-          } @else if (previewDe(e) === 'pdf') {
-
-            <div class="h-full min-h-[480px] rounded-xl overflow-hidden border border-gray-200 bg-white shadow-sm">
-
-              <iframe [src]="previewSrc(e)" class="w-full h-full min-h-[480px]" title="Vista previa PDF"></iframe>
-
-            </div>
-
-          } @else if (previewDe(e) === 'image') {
-
-            <div class="flex items-center justify-center min-h-[280px]">
-
-              <img [src]="archivoUrl(e)" [alt]="e.archivoEntregaNombre"
-
-                class="max-w-full max-h-[70vh] rounded-xl border border-gray-200 shadow-md object-contain bg-white">
-
-            </div>
-
-          } @else {
-
-            @let accent = fileAccentForName(e.archivoEntregaNombre);
-
-            <div class="h-full min-h-[240px] flex flex-col items-center justify-center p-8">
-
-              <div class="w-20 h-20 rounded-2xl flex items-center justify-center mb-4"
-
-                [ngClass]="[accent.bg, accent.text]">
-
-                <span class="icon" style="font-size:40px">{{ fileIconForName(e.archivoEntregaNombre) }}</span>
-
+            <div class="h-full min-h-[180px] flex flex-col items-center justify-center text-center rounded-2xl border-2 border-dashed border-gray-200 bg-white p-8">
+              <div class="w-16 h-16 rounded-2xl bg-gray-100 text-gray-400 flex items-center justify-center mb-3">
+                <span class="icon" style="font-size:32px">folder_off</span>
               </div>
-
-              <p class="font-semibold text-gray-900 text-center">{{ e.archivoEntregaNombre }}</p>
-
-              <p class="text-sm text-gray-500 mt-2 text-center max-w-sm">
-
-                Vista previa no disponible para este tipo de archivo. Descárgalo para revisarlo.
-
-              </p>
-
-              <a [href]="archivoUrl(e)" target="_blank" rel="noopener" download
-
-                class="btn btn-primary btn-sm mt-5">
-
-                <span class="icon icon-sm">download</span> Descargar archivo
-
-              </a>
-
+              <p class="font-semibold text-gray-700">Sin archivo entregado</p>
+              <p class="text-sm text-gray-500 mt-1">El alumno aún no ha subido su trabajo.</p>
             </div>
-
+          } @else if (previewDe(e) === 'pdf') {
+            <div class="h-full min-h-[260px] rounded-xl overflow-hidden border border-gray-200 bg-white shadow-sm ring-1 ring-gray-100">
+              <iframe [src]="previewSrc(e)" class="w-full h-full min-h-[260px]" title="Vista previa PDF"></iframe>
+            </div>
+          } @else if (previewDe(e) === 'image') {
+            <div class="flex items-center justify-center h-full min-h-[220px] rounded-xl border border-gray-200 bg-[linear-gradient(45deg,#f8fafc_25%,transparent_25%),linear-gradient(-45deg,#f8fafc_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#f8fafc_75%),linear-gradient(-45deg,transparent_75%,#f8fafc_75%)] bg-[length:16px_16px] bg-[position:0_0,0_8px,8px_-8px,-8px_0px] p-4">
+              <img [src]="archivoUrl(e)" [alt]="e.archivoEntregaNombre"
+                class="max-w-full max-h-full rounded-lg border border-white shadow-lg object-contain bg-white">
+            </div>
+          } @else {
+            @let accent = fileAccentForName(e.archivoEntregaNombre);
+            <div class="min-h-[180px] flex flex-col items-center justify-center rounded-2xl border border-gray-200 bg-white p-8 shadow-sm">
+              <div class="w-16 h-16 rounded-2xl flex items-center justify-center mb-4 shadow-sm"
+                [ngClass]="[accent.bg, accent.text]">
+                <span class="icon" style="font-size:36px">{{ fileIconForName(e.archivoEntregaNombre) }}</span>
+              </div>
+              <p class="font-semibold text-gray-900 text-center">{{ e.archivoEntregaNombre }}</p>
+              <p class="text-sm text-gray-500 mt-2 text-center max-w-sm">
+                Vista previa no disponible para este formato.
+              </p>
+              <a [href]="archivoUrl(e)" target="_blank" rel="noopener" download
+                class="btn btn-primary btn-sm mt-4">
+                <span class="icon icon-sm">download</span> Descargar archivo
+              </a>
+            </div>
           }
-
         </div>
-
-
 
         @if (e.comentarioEntrega) {
-
-          <div class="px-5 py-4 border-t border-gray-200 bg-white shrink-0">
-
-            <p class="text-xs font-semibold uppercase text-gray-400 mb-1">Comentario del alumno</p>
-
-            <p class="text-sm text-gray-700 leading-relaxed">{{ e.comentarioEntrega }}</p>
-
+          <div class="mx-4 mb-4 px-4 py-3 rounded-xl bg-white border border-gray-200 shadow-sm shrink-0">
+            <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-400 mb-1 flex items-center gap-1">
+              <span class="icon icon-sm">chat_bubble_outline</span> Comentario del alumno
+            </p>
+            <p class="text-sm text-gray-700 leading-relaxed italic">"{{ e.comentarioEntrega }}"</p>
           </div>
-
         }
-
       </div>
 
-
-
-      <div class="lg:w-[42%] flex flex-col min-h-0 bg-white">
-
-        <div class="px-5 py-3 border-b border-gray-200 shrink-0">
-
-          <h3 class="text-sm font-semibold text-gray-800 flex items-center gap-2">
-
-            <span class="icon icon-sm text-indigo-500">grading</span> Calificación
-
+      <!-- Calificación -->
+      <div class="lg:w-[45%] flex flex-col flex-[2] lg:flex-none min-h-0 bg-white">
+        <div class="px-4 py-2.5 border-b border-gray-200/80 shrink-0 bg-gradient-to-r from-white to-indigo-50/30">
+          <h3 class="text-xs font-semibold text-gray-700 flex items-center gap-2">
+            <span class="w-7 h-7 rounded-lg bg-violet-50 text-violet-600 flex items-center justify-center">
+              <span class="icon icon-sm">grading</span>
+            </span>
+            Calificación y retroalimentación
           </h3>
-
         </div>
 
-
-
-        <div class="flex-1 overflow-y-auto px-5 py-5 space-y-5">
-
-          <div>
-
-            <label class="form-label">Nota (0 – {{ grading.notaMaxima() }})</label>
-
-            <div class="flex items-center gap-3">
-
-              <input type="range" min="0" [max]="grading.notaMaxima()" step="0.5" class="flex-1 accent-indigo-600"
-
-                [(ngModel)]="formNota" [disabled]="!puedeCalificar(e) || svc.saving()">
-
-              <input type="number" min="0" [max]="grading.notaMaxima()" step="0.5"
-
-                class="form-input w-20 text-center font-bold text-indigo-700"
-
-                [(ngModel)]="formNota" [disabled]="!puedeCalificar(e) || svc.saving()">
-
+        <div class="flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-4">
+          <!-- Nota destacada -->
+          <div class="rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50/80 via-white to-violet-50/50 p-4">
+            <div class="flex items-center justify-between gap-3 mb-3">
+              <label class="text-sm font-semibold text-gray-800">Nota</label>
+              <div class="flex items-baseline gap-1 px-3 py-1.5 rounded-xl bg-white border border-indigo-100 shadow-sm">
+                <span class="text-2xl font-black text-indigo-700 tabular-nums">{{ formNota ?? '—' }}</span>
+                <span class="text-sm font-medium text-gray-400">/ {{ grading.notaMaxima() }}</span>
+              </div>
             </div>
-
+            <input type="range" min="0" [max]="grading.notaMaxima()" step="0.5"
+              class="w-full accent-indigo-600 h-2 cursor-pointer"
+              [(ngModel)]="formNota" [disabled]="!puedeCalificar(e) || svc.saving()">
+            <div class="flex justify-between text-[10px] text-gray-400 mt-1.5 px-0.5">
+              <span>0</span>
+              <span>{{ grading.notaMaxima() / 2 }}</span>
+              <span>{{ grading.notaMaxima() }}</span>
+            </div>
+            <div class="mt-3 flex justify-end">
+              <input type="number" min="0" [max]="grading.notaMaxima()" step="0.5"
+                class="form-input w-24 text-center font-bold text-indigo-700 text-sm"
+                [(ngModel)]="formNota" [disabled]="!puedeCalificar(e) || svc.saving()">
+            </div>
           </div>
-
-
 
           <div>
-
-            <label class="form-label">Retroalimentación</label>
-
-            <textarea class="form-input w-full h-40 resize-none leading-relaxed" [(ngModel)]="formRetroalimentacion"
-
+            <label class="text-sm font-semibold text-gray-800 mb-2 block">Retroalimentación</label>
+            <textarea class="form-input w-full h-36 resize-none text-sm leading-relaxed bg-gray-50/50 focus:bg-white transition-colors"
+              [(ngModel)]="formRetroalimentacion"
               [disabled]="!puedeCalificar(e) || svc.saving()"
-
-              placeholder="Escribe observaciones, aciertos y aspectos a mejorar para el alumno..."></textarea>
-
+              placeholder="Escribe observaciones claras: qué hizo bien el alumno y qué puede mejorar..."></textarea>
+            <p class="text-[11px] text-gray-400 mt-1.5">El alumno verá este comentario junto con su nota.</p>
           </div>
-
-
 
           @if (!puedeCalificar(e)) {
-
-            <div class="rounded-xl bg-amber-50 border border-amber-100 p-3 text-xs text-amber-800">
-
-              Solo puedes calificar cuando el alumno haya subido su entrega.
-
+            <div class="rounded-xl bg-amber-50 border border-amber-200/80 p-3 flex gap-2.5 text-sm text-amber-900">
+              <span class="icon icon-sm text-amber-600 shrink-0 mt-0.5">info</span>
+              <p>Solo puedes calificar cuando el alumno haya subido su entrega.</p>
             </div>
-
+          } @else if (e.estado === 'GRADED') {
+            <div class="rounded-xl bg-emerald-50 border border-emerald-200/80 p-3 flex gap-2.5 text-sm text-emerald-800">
+              <span class="icon icon-sm text-emerald-600 shrink-0">check_circle</span>
+              <p>Esta entrega ya fue calificada. Puedes actualizar la nota y guardar de nuevo.</p>
+            </div>
           }
-
         </div>
 
-
-
-        <div class="px-5 py-4 border-t border-gray-200 flex gap-3 shrink-0 bg-gray-50/80">
-
-          <button type="button" class="btn btn-secondary flex-1" (click)="cerrarRevision()">Cerrar</button>
-
-          <button type="button" class="btn btn-primary flex-1"
-
-            [disabled]="!puedeCalificar(e) || formNota === null || formNota === undefined || svc.saving()"
-
-            (click)="guardarCalificacion()">
-
-            @if (svc.saving()) {
-
-              <span class="icon icon-sm animate-spin">progress_activity</span> Guardando…
-
-            } @else {
-
-              <span class="icon icon-sm">save</span> Guardar calificación
-
-            }
-
+        <div class="px-4 py-3.5 border-t border-gray-200 flex gap-2.5 shrink-0 bg-white shadow-[0_-4px_20px_-4px_rgba(0,0,0,0.06)]">
+          <button type="button" class="btn btn-secondary flex-1" (click)="cerrarRevision()">
+            <span class="icon icon-sm">close</span> Cerrar
           </button>
-
+          <button type="button" class="btn btn-primary flex-1 shadow-md shadow-indigo-200/60"
+            [disabled]="!puedeCalificar(e) || formNota === null || formNota === undefined || svc.saving()"
+            (click)="guardarCalificacion()">
+            @if (svc.saving()) {
+              <span class="icon icon-sm animate-spin">progress_activity</span> Guardando…
+            } @else {
+              <span class="icon icon-sm">save</span> Guardar calificación
+            }
+          </button>
         </div>
-
       </div>
-
     </div>
-
   </div>
-
 }
 
   `,

@@ -27,7 +27,7 @@ const TIPO_COM_CFG: Record<TipoCom, { badge: string; label: string }> = {
         <div>
           <h1 class="text-2xl font-bold text-gray-900">Hola, {{ primerNombre() }} 👋</h1>
           <p class="text-sm text-gray-500 mt-0.5">
-            Tu inicio docente · pendientes, anuncios y eventos
+            Tu inicio docente · anuncios, pendientes y eventos
             @if (miAula(); as d) {
               · {{ d.docente.especialidad }}
             }
@@ -38,7 +38,7 @@ const TIPO_COM_CFG: Record<TipoCom, { badge: string; label: string }> = {
             <span class="badge badge-indigo">A.E. {{ d.anioEscolar }}</span>
           }
           <a routerLink="/portal-docente/mi-aula" class="btn btn-secondary btn-sm">
-            <span class="icon icon-sm">class</span> Mi Aula
+            <span class="icon icon-sm">class</span> Mis Aulas
           </a>
         </div>
       </div>
@@ -69,17 +69,53 @@ const TIPO_COM_CFG: Record<TipoCom, { badge: string; label: string }> = {
         </div>
       }
 
-      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        @for (kpi of kpis(); track kpi.label) {
-          <div class="card p-4">
-            <p class="text-xs text-gray-400">{{ kpi.label }}</p>
-            <p class="text-2xl font-bold mt-1" [ngClass]="kpi.color">{{ kpi.value }}</p>
-          </div>
-        }
-      </div>
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          @for (kpi of kpis(); track kpi.label) {
+            <div class="card px-3 py-2.5">
+              <p class="text-[11px] text-gray-400">{{ kpi.label }}</p>
+              <p class="text-xl font-bold mt-0.5" [ngClass]="kpi.color">{{ kpi.value }}</p>
+            </div>
+          }
+        </div>
 
       <div class="grid grid-cols-1 xl:grid-cols-3 gap-5">
         <div class="xl:col-span-2 space-y-5">
+          <div class="card p-5">
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="font-semibold text-gray-800 flex items-center gap-2">
+                <span class="icon text-indigo-600">campaign</span> Anuncios
+              </h3>
+              <span class="text-xs text-gray-400">{{ anunciosPreview().length }} de {{ comunicadosActivos() }}</span>
+            </div>
+
+            @if (comunicadosSvc.loading()) {
+              <p class="text-sm text-gray-400 py-6 text-center">Cargando anuncios…</p>
+            } @else if (!anunciosPreview().length) {
+              <p class="text-sm text-gray-400 py-6 text-center">No hay anuncios publicados para docentes.</p>
+            } @else {
+              <div class="space-y-3">
+                @for (c of anunciosPreview(); track c.id) {
+                  <div class="p-3 rounded-xl border border-gray-100 hover:bg-gray-50/80 transition-colors">
+                    <div class="flex items-start justify-between gap-2 mb-1">
+                      <p class="text-sm font-medium text-gray-800">{{ c.titulo }}</p>
+                      <span class="badge text-[10px]" [ngClass]="tipoComCfg(c.tipo).badge">
+                        {{ tipoComCfg(c.tipo).label }}
+                      </span>
+                    </div>
+                    <p class="text-xs text-gray-500 line-clamp-2">{{ c.cuerpo }}</p>
+                    <p class="text-[11px] text-gray-400 mt-1">{{ c.fechaPublicacion }}</p>
+                  </div>
+                }
+              </div>
+            }
+
+            <div class="mt-4 pt-4 border-t border-gray-100">
+              <a routerLink="/portal-docente/comunicados" class="text-xs text-indigo-600 hover:underline font-medium">
+                Ver todos los comunicados
+              </a>
+            </div>
+          </div>
+
           <div class="card p-5">
             <div class="flex items-center justify-between mb-4">
               <h3 class="font-semibold text-gray-800 flex items-center gap-2">
@@ -136,42 +172,6 @@ const TIPO_COM_CFG: Record<TipoCom, { badge: string; label: string }> = {
             <div class="mt-4 pt-4 border-t border-gray-100">
               <a routerLink="/portal-docente/tareas" class="text-xs text-indigo-600 hover:underline font-medium">
                 Ir a entregas y tareas
-              </a>
-            </div>
-          </div>
-
-          <div class="card p-5">
-            <div class="flex items-center justify-between mb-4">
-              <h3 class="font-semibold text-gray-800 flex items-center gap-2">
-                <span class="icon text-indigo-600">campaign</span> Anuncios
-              </h3>
-              <span class="text-xs text-gray-400">{{ anunciosPreview().length }} de {{ comunicadosActivos() }}</span>
-            </div>
-
-            @if (comunicadosSvc.loading()) {
-              <p class="text-sm text-gray-400 py-6 text-center">Cargando anuncios…</p>
-            } @else if (!anunciosPreview().length) {
-              <p class="text-sm text-gray-400 py-6 text-center">No hay anuncios publicados para docentes.</p>
-            } @else {
-              <div class="space-y-3">
-                @for (c of anunciosPreview(); track c.id) {
-                  <div class="p-3 rounded-xl border border-gray-100 hover:bg-gray-50/80 transition-colors">
-                    <div class="flex items-start justify-between gap-2 mb-1">
-                      <p class="text-sm font-medium text-gray-800">{{ c.titulo }}</p>
-                      <span class="badge text-[10px]" [ngClass]="tipoComCfg(c.tipo).badge">
-                        {{ tipoComCfg(c.tipo).label }}
-                      </span>
-                    </div>
-                    <p class="text-xs text-gray-500 line-clamp-2">{{ c.cuerpo }}</p>
-                    <p class="text-[11px] text-gray-400 mt-1">{{ c.fechaPublicacion }}</p>
-                  </div>
-                }
-              </div>
-            }
-
-            <div class="mt-4 pt-4 border-t border-gray-100">
-              <a routerLink="/portal-docente/comunicados" class="text-xs text-indigo-600 hover:underline font-medium">
-                Ver todos los comunicados
               </a>
             </div>
           </div>

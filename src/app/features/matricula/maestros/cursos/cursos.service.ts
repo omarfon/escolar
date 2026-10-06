@@ -2,6 +2,8 @@ import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http';
 import { Observable, catchError, finalize, throwError } from 'rxjs';
 import { environment } from '@environments/environment';
+import { TenantContextService } from '../../../../core/tenant/tenant-context.service';
+import { withInstitutionParams } from '../../../../core/tenant/tenant-http.util';
 import {
   CreateMaestroCursoPayload,
   MaestroCursoItem,
@@ -12,6 +14,7 @@ import {
 @Injectable({ providedIn: 'root' })
 export class MaestrosCursosService {
   private readonly http = inject(HttpClient);
+  private readonly tenant = inject(TenantContextService);
   private readonly base = `${environment.apiUrl}/maestros/cursos`;
 
   readonly loading = signal(false);
@@ -31,6 +34,7 @@ export class MaestrosCursosService {
     if (query?.nivel) params = params.set('nivel', query.nivel);
     if (query?.area) params = params.set('area', query.area);
     if (query?.activo !== undefined) params = params.set('activo', query.activo);
+    params = withInstitutionParams(this.tenant, params);
 
     return this.http.get<MaestroCursosPage>(this.base, { params }).pipe(
       catchError((err) => throwError(() => new Error(this.extractError(err)))),

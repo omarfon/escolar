@@ -2,6 +2,7 @@
 import { NgClass } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { LayoutService } from '../../../core/layout/services/layout.service';
+import { markTenantReloadReady, setupTenantReload } from '../../../core/tenant/tenant-reload.util';
 import { InstitucionalService } from '../../administracion/institucional/institucional.service';
 import { Nivel } from '../../administracion/institucional/institucional.model';
 
@@ -370,6 +371,18 @@ export class AsistenciaControlComponent implements OnInit {
   readonly justSvc = inject(JustificacionesService);
   private readonly layout = inject(LayoutService);
   private readonly institucional = inject(InstitucionalService);
+  private readonly _tenantReloadReady = setupTenantReload(() => {
+    this.institucional.loadEducationLevels().subscribe({
+      next: (n) => this._niveles.set(n),
+    });
+    this.cargar();
+  }, {
+    onBeforeReload: () => {
+      this.report.set(null);
+      this.selAlumno.set(null);
+      this.error.set(null);
+    },
+  });
 
   readonly motivos = MOTIVOS_JUSTIFICACION;
   readonly fechaImpresion = new Date().toLocaleString('es-PE');
@@ -447,6 +460,7 @@ export class AsistenciaControlComponent implements OnInit {
       next: (n) => this._niveles.set(n),
     });
     this.cargar();
+    markTenantReloadReady(this._tenantReloadReady);
   }
 
   subtitulo(): string {

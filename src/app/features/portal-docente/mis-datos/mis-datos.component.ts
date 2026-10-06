@@ -41,9 +41,9 @@ import { DocenteDetail } from '../../matricula/maestros/docentes/docentes.model'
       } @else if (docente(); as d) {
         <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
           @for (kpi of kpis(); track kpi.label) {
-            <div class="card p-4">
-              <p class="text-xs text-gray-400">{{ kpi.label }}</p>
-              <p class="text-2xl font-bold text-gray-900 mt-1">{{ kpi.value }}</p>
+            <div class="card px-3 py-2.5">
+              <p class="text-[11px] text-gray-400">{{ kpi.label }}</p>
+              <p class="text-xl font-bold text-gray-900 mt-0.5">{{ kpi.value }}</p>
             </div>
           }
         </div>

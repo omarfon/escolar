@@ -2,6 +2,8 @@ import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http';
 import { Observable, catchError, finalize, throwError } from 'rxjs';
 import { environment } from '@environments/environment';
+import { TenantContextService } from '../../../../core/tenant/tenant-context.service';
+import { withInstitutionParams } from '../../../../core/tenant/tenant-http.util';
 import {
   CreateMaestroFeriadoPayload,
   DiasClaseResumen,
@@ -12,6 +14,7 @@ import {
 @Injectable({ providedIn: 'root' })
 export class MaestrosFeriadosService {
   private readonly http = inject(HttpClient);
+  private readonly tenant = inject(TenantContextService);
   private readonly base = `${environment.apiUrl}/maestros/feriados`;
 
   readonly loading = signal(false);
@@ -29,6 +32,7 @@ export class MaestrosFeriadosService {
     if (query?.activo !== undefined) params = params.set('activo', query.activo);
     if (query?.desde) params = params.set('desde', query.desde);
     if (query?.hasta) params = params.set('hasta', query.hasta);
+    params = withInstitutionParams(this.tenant, params);
 
     return this.http.get<MaestroFeriadoItem[]>(this.base, { params }).pipe(
       catchError((err) => throwError(() => new Error(this.extractError(err)))),
@@ -39,6 +43,7 @@ export class MaestrosFeriadosService {
   verificarFecha(fecha: string, anioEscolar?: number): Observable<MaestroFeriadoItem | null> {
     let params = new HttpParams().set('fecha', fecha);
     if (anioEscolar) params = params.set('anioEscolar', anioEscolar);
+    params = withInstitutionParams(this.tenant, params);
     return this.http.get<MaestroFeriadoItem | null>(`${this.base}/verificar`, { params }).pipe(
       catchError((err) => throwError(() => new Error(this.extractError(err)))),
     );
@@ -51,6 +56,7 @@ export class MaestrosFeriadosService {
   ): Observable<DiasClaseResumen> {
     let params = new HttpParams().set('desde', desde).set('hasta', hasta);
     if (anioEscolar) params = params.set('anioEscolar', anioEscolar);
+    params = withInstitutionParams(this.tenant, params);
     return this.http.get<DiasClaseResumen>(`${this.base}/dias-clase`, { params }).pipe(
       catchError((err) => throwError(() => new Error(this.extractError(err)))),
     );

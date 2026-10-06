@@ -407,6 +407,14 @@ export const routes: Routes = [
               ),
           },
           {
+            path: 'reportes',
+            canActivate: [permisoGuard('evaluacion.reportes', 'admin.reportes')],
+            loadComponent: () =>
+              import('./features/evaluacion/reportes/reportes.component').then(
+                m => m.EvaluacionReportesComponent,
+              ),
+          },
+          {
             path: 'promedios',
             loadComponent: () => import('./features/evaluacion/promedios/promedios.component').then(m => m.PromediosComponent)
           },

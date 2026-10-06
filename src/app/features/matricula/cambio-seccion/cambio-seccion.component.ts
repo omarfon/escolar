@@ -1,4 +1,4 @@
-﻿import { Component, computed, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DatePipe, NgClass } from '@angular/common';
 import { LayoutService } from '../../../core/layout/services/layout.service';
@@ -16,7 +16,14 @@ import {
   MOTIVOS_CAMBIO,
   MotivoCambioSeccion,
   OcupacionSeccion,
+  SolicitudCambioSeccion,
 } from './cambio-seccion.model';
+import {
+  ErroresCampoSolicitudCambio,
+  primerErrorSolicitudCambio,
+  validarCampoSolicitudCambio,
+  validarSolicitudCambioForm,
+} from './cambio-seccion-solicitud.validation';
 
 function gradoKey(value: string): string {
   const t = value
@@ -55,6 +62,9 @@ function gradoApiParam(value: string): string {
           <button class="btn btn-secondary btn-sm" (click)="recargar()">
             <span class="icon icon-sm">refresh</span> Actualizar
           </button>
+          <button class="btn btn-primary btn-sm" (click)="abrirDrawerSolicitud()">
+            <span class="icon icon-sm">note_add</span> Nueva solicitud
+          </button>
         </div>
       </div>
 
@@ -75,6 +85,14 @@ function gradoApiParam(value: string): string {
       <div class="tabs">
         <button class="tab" [class.tab-active]="tab() === 'estudiantes'" (click)="tab.set('estudiantes')">
           <span class="icon icon-sm">groups</span> Estudiantes
+        </button>
+        <button class="tab" [class.tab-active]="tab() === 'solicitudes'" (click)="tab.set('solicitudes')">
+          <span class="icon icon-sm">pending_actions</span> Solicitudes
+          @if (solicitudes().length) {
+            <span class="ml-1 px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[10px] font-bold">
+              {{ solicitudes().length }}
+            </span>
+          }
         </button>
         <button class="tab" [class.tab-active]="tab() === 'historial'" (click)="tab.set('historial')">
           <span class="icon icon-sm">history</span> Historial
@@ -240,6 +258,72 @@ function gradoApiParam(value: string): string {
         </div>
       }
 
+      @if (tab() === 'solicitudes') {
+        <div class="card overflow-hidden">
+          <table class="data-table text-sm">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Estudiante</th>
+                <th>DNI</th>
+                <th>Ubicacion actual</th>
+                <th>Seccion deseada</th>
+                <th>Motivo</th>
+                <th>Autorizado por</th>
+                <th class="text-center">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              @if (cargandoSolicitudes()) {
+                <tr><td colspan="8" class="py-10 text-center text-gray-400">Cargando solicitudes...</td></tr>
+              } @else {
+                @for (s of solicitudesFiltradas(); track s.id) {
+                  <tr>
+                    <td class="text-xs text-gray-500">{{ s.createdAt | date:'dd/MM/yyyy HH:mm' }}</td>
+                    <td class="font-medium text-gray-900">{{ s.estudiante }}</td>
+                    <td class="font-mono text-xs text-gray-600">{{ s.dni || '—' }}</td>
+                    <td>
+                      <div class="text-sm">{{ s.nivel }} · {{ s.grado }}</div>
+                      <span class="badge badge-indigo text-[11px]">Secc. {{ s.seccionActual }}</span>
+                    </td>
+                    <td>
+                      @if (s.seccionDeseada) {
+                        <span class="badge badge-blue text-[11px]">Secc. {{ s.seccionDeseada }}</span>
+                      } @else {
+                        <span class="text-xs text-gray-400">Cualquiera con vacante</span>
+                      }
+                    </td>
+                    <td class="text-xs">{{ labelMotivo(s.motivo) }}</td>
+                    <td class="text-xs text-gray-600">{{ s.autorizadoPor || '—' }}</td>
+                    <td>
+                      <div class="flex items-center gap-1 justify-center">
+                        <button class="btn btn-secondary btn-sm" (click)="procesarSolicitud(s)" [disabled]="svc.saving()">
+                          <span class="icon icon-sm">how_to_reg</span> Procesar
+                        </button>
+                        <button class="btn-icon text-rose-500 hover:bg-rose-50" title="Cancelar solicitud"
+                          (click)="cancelarSolicitud(s.id)" [disabled]="svc.saving()">
+                          <span class="icon icon-sm">close</span>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                } @empty {
+                  <tr>
+                    <td colspan="8" class="py-12 text-center">
+                      <span class="icon icon-2xl text-gray-200 block mb-2">pending_actions</span>
+                      <p class="text-gray-400 text-sm">No hay solicitudes pendientes</p>
+                      <button class="btn btn-primary btn-sm mt-3" (click)="abrirDrawerSolicitud()">
+                        <span class="icon icon-sm">note_add</span> Nueva solicitud
+                      </button>
+                    </td>
+                  </tr>
+                }
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+
       @if (tab() === 'historial') {
         <div class="card overflow-hidden">
           <table class="data-table text-sm">
@@ -310,6 +394,132 @@ function gradoApiParam(value: string): string {
         </div>
       }
     </div>
+
+    @if (drawerSolicitudAbierto()) {
+      <div appOverlayPortal class="fixed inset-0 z-40">
+      <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" (click)="cerrarDrawerSolicitud()"></div>
+      <div class="absolute right-0 top-0 bottom-0 w-full max-w-md bg-white shadow-2xl flex flex-col animate-slide-in-l">
+        <div class="px-6 py-4 border-b flex items-center justify-between shrink-0">
+          <div>
+            <h3 class="font-semibold text-gray-900">Nueva solicitud</h3>
+            <p class="text-xs text-gray-500">Campos obligatorios marcados con *</p>
+          </div>
+          <button class="btn-icon text-gray-400" (click)="cerrarDrawerSolicitud()"><span class="icon">close</span></button>
+        </div>
+
+        <div class="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+          <div class="form-group">
+            <label class="form-label">Alumno *</label>
+            @if (alumnoSolicitudSel(); as sel) {
+              <div class="flex items-center justify-between p-3 rounded-lg border border-indigo-200 bg-indigo-50"
+                   [ngClass]="claseCampoSolicitud('studentId')">
+                <div>
+                  <div class="font-medium text-gray-800 text-sm">{{ sel.apellidos }}, {{ sel.nombres }}</div>
+                  <div class="text-xs text-gray-500">{{ sel.nivel }} · {{ sel.grado }} · Secc. {{ sel.seccion }}</div>
+                </div>
+                <button type="button" class="btn btn-icon text-gray-400" (click)="limpiarAlumnoSolicitud()">
+                  <span class="icon text-sm">close</span>
+                </button>
+              </div>
+            } @else {
+              <div class="relative">
+                <span class="icon absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm pointer-events-none">search</span>
+                <input class="form-input pl-9" type="text" placeholder="Buscar por nombre o DNI..."
+                       [ngClass]="claseCampoSolicitud('studentId')"
+                       [ngModel]="busquedaAlumnoSolicitud()"
+                       (ngModelChange)="onBusquedaAlumnoSolicitud($event)"
+                       (blur)="onCampoBlurSolicitud('studentId')">
+                @if (dropdownAlumnoSolicitud()) {
+                  <div class="absolute z-20 top-full left-0 right-0 mt-1 border rounded-lg bg-white shadow-lg max-h-52 overflow-y-auto">
+                    @for (a of alumnosSolicitudFiltrados(); track a.id) {
+                      <button type="button" class="w-full text-left px-3 py-2.5 hover:bg-indigo-50 border-b last:border-0"
+                              (mousedown)="seleccionarAlumnoSolicitud(a); $event.preventDefault()">
+                        <div class="font-medium text-sm">{{ a.apellidos }}, {{ a.nombres }}</div>
+                        <div class="text-xs text-gray-400">{{ a.nivel }} · {{ a.grado }} · Secc. {{ a.seccion }}</div>
+                      </button>
+                    } @empty {
+                      <div class="px-3 py-6 text-center text-sm text-gray-400">No se encontraron alumnos activos</div>
+                    }
+                  </div>
+                }
+              </div>
+            }
+            @if (campoErrorSolicitud('studentId'); as err) { <p class="form-error mt-1">{{ err }}</p> }
+          </div>
+
+          @if (alumnoSolicitudSel(); as sel) {
+            <div class="form-group">
+              <label class="form-label">Seccion deseada</label>
+              <select class="form-select" [ngClass]="claseCampoSolicitud('seccionDeseada')"
+                      [ngModel]="solicitudForm.seccionDeseada"
+                      (ngModelChange)="onCampoFormChangeSolicitud('seccionDeseada', $event)"
+                      (blur)="onCampoBlurSolicitud('seccionDeseada')">
+                <option value="">Cualquiera con vacante</option>
+                @for (sec of seccionesAlumnoSolicitud(); track sec) {
+                  @if (normSec(sec) !== normSec(sel.seccion)) {
+                    <option [value]="sec">Seccion {{ sec }}</option>
+                  }
+                }
+              </select>
+              @if (campoErrorSolicitud('seccionDeseada'); as err) { <p class="form-error mt-1">{{ err }}</p> }
+            </div>
+          }
+
+          <div class="form-group">
+            <label class="form-label">Motivo del cambio *</label>
+            <select class="form-select" [ngClass]="claseCampoSolicitud('motivo')"
+                    [ngModel]="solicitudForm.motivo"
+                    (ngModelChange)="onCampoFormChangeSolicitud('motivo', $event)"
+                    (blur)="onCampoBlurSolicitud('motivo')">
+              @for (m of motivos; track m.value) {
+                <option [value]="m.value">{{ m.label }}</option>
+              }
+            </select>
+            @if (campoErrorSolicitud('motivo'); as err) { <p class="form-error mt-1">{{ err }}</p> }
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Persona autorizada *</label>
+            <input class="form-input" [ngClass]="claseCampoSolicitud('autorizadoPor')"
+                   [ngModel]="solicitudForm.autorizadoPor" list="autorizadores-solicitud-list"
+                   (ngModelChange)="onCampoFormChangeSolicitud('autorizadoPor', $event)"
+                   (blur)="onCampoBlurSolicitud('autorizadoPor')"
+                   placeholder="Nombre y cargo del funcionario autorizador">
+            <datalist id="autorizadores-solicitud-list">
+              @for (c of cargosAutorizadores; track c) {
+                <option [value]="sugerenciaAutorizador(c)"></option>
+              }
+            </datalist>
+            @if (campoErrorSolicitud('autorizadoPor'); as err) { <p class="form-error mt-1">{{ err }}</p> }
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Observacion {{ solicitudForm.motivo === 'otro' ? '*' : '' }}</label>
+            <textarea class="form-input min-h-20" [ngClass]="claseCampoSolicitud('observacion')"
+                      [ngModel]="solicitudForm.observacion"
+                      (ngModelChange)="onCampoFormChangeSolicitud('observacion', $event)"
+                      (blur)="onCampoBlurSolicitud('observacion')"
+                      [placeholder]="solicitudForm.motivo === 'otro' ? 'Detalle obligatorio del motivo' : 'Detalle adicional (opcional)'"></textarea>
+            @if (campoErrorSolicitud('observacion'); as err) { <p class="form-error mt-1">{{ err }}</p> }
+          </div>
+
+          @if (errorSolicitudForm()) {
+            <div class="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{{ errorSolicitudForm() }}</div>
+          }
+        </div>
+
+        <div class="px-6 py-4 border-t bg-gray-50 flex gap-2 shrink-0">
+          <button class="btn btn-primary flex-1"
+                  (click)="guardarSolicitud()"
+                  [disabled]="!puedeGuardarSolicitud() || svc.saving()"
+                  [title]="puedeGuardarSolicitud() ? '' : 'Selecciona alumno, motivo y persona autorizada'">
+            {{ svc.saving() ? 'Guardando...' : 'Registrar solicitud' }}
+          </button>
+          <button class="btn btn-secondary" (click)="cerrarDrawerSolicitud()">Cancelar</button>
+        </div>
+      </div>
+      </div>
+    }
 
     @if (drawerAbierto()) {
       <div appOverlayPortal class="fixed inset-0 z-40">
@@ -534,26 +744,40 @@ export class CambioSeccionComponent implements OnInit {
   readonly cargosAutorizadores = CARGOS_AUTORIZADORES;
   readonly anioEscolar = 2026;
   readonly POR_PAGINA = 10;
-  readonly tab = signal<'estudiantes' | 'historial'>('estudiantes');
+  readonly tab = signal<'estudiantes' | 'solicitudes' | 'historial'>('estudiantes');
   readonly paginaEstudiantes = signal(1);
   readonly paginaHistorial = signal(1);
   readonly drawerAbierto = signal(false);
+  readonly drawerSolicitudAbierto = signal(false);
   readonly cargandoOcupacion = signal(false);
   readonly cargandoOcupacionLista = signal(false);
   readonly errorForm = signal('');
+  readonly errorSolicitudForm = signal('');
   readonly notificacion = signal<{ mensaje: string; tipo: 'success' | 'error' } | null>(null);
   readonly cargandoHistorial = signal(false);
+  readonly cargandoSolicitudes = signal(false);
+  readonly busquedaAlumnoSolicitud = signal('');
+  readonly dropdownAlumnoSolicitud = signal(false);
+  fieldErrorsSolicitud = signal<ErroresCampoSolicitudCambio>({});
+  camposTocadosSolicitud = signal<Record<string, true>>({});
+  intentoGuardarSolicitud = signal(false);
+  private readonly formRevisionSolicitud = signal(0);
+  private dropdownSolicitudTimer: ReturnType<typeof setTimeout> | null = null;
 
   private readonly _estudiantes = signal<EstudianteMatricula[]>([]);
   private readonly _historial = signal<HistorialCambioSeccion[]>([]);
+  private readonly _solicitudes = signal<SolicitudCambioSeccion[]>([]);
+  private readonly _alumnosSolicitud = signal<EstudianteMatricula[]>([]);
   private readonly _niveles = signal<Nivel[]>([]);
   private readonly _ocupacion = signal<OcupacionSeccion[]>([]);
   readonly ocupacion = this._ocupacion.asReadonly();
   readonly historial = this._historial.asReadonly();
+  readonly solicitudes = this._solicitudes.asReadonly();
   readonly niveles = this._niveles.asReadonly();
 
   readonly filtro = signal({ nivel: '', grado: '', seccion: '', busqueda: '' });
   readonly seleccionado = signal<EstudianteMatricula | null>(null);
+  readonly alumnoSolicitudSel = signal<EstudianteMatricula | null>(null);
 
   form = {
     nuevaSeccion: '',
@@ -561,6 +785,47 @@ export class CambioSeccionComponent implements OnInit {
     autorizadoPor: '',
     observacion: '',
   };
+
+  solicitudForm = {
+    studentId: 0,
+    seccionDeseada: '',
+    motivo: 'equilibrio' as MotivoCambioSeccion,
+    autorizadoPor: '',
+    observacion: '',
+  };
+
+  readonly puedeGuardarSolicitud = computed(() => {
+    this.formRevisionSolicitud();
+    const seccionActual = this.alumnoSolicitudSel()?.seccion ?? '';
+    return Object.keys(validarSolicitudCambioForm(this.solicitudForm, seccionActual)).length === 0;
+  });
+
+  readonly alumnosSolicitudFiltrados = computed(() => {
+    const q = this.busquedaAlumnoSolicitud().trim().toLowerCase();
+    return this._alumnosSolicitud().filter((a) => {
+      if (!a.activo) return false;
+      if (!q) return true;
+      return `${a.nombres} ${a.apellidos} ${a.dni} ${a.codigo}`.toLowerCase().includes(q);
+    }).slice(0, 20);
+  });
+
+  readonly seccionesAlumnoSolicitud = computed(() => {
+    this.formRevisionSolicitud();
+    const sel = this.alumnoSolicitudSel();
+    if (!sel) return [];
+    const nivel = this._niveles().find((n) => n.nombre === sel.nivel);
+    const grado = nivel?.grados.find((g) => gradoKey(g.nombre) === gradoKey(sel.grado));
+    return grado?.secciones.map((s) => s.nombre) ?? [];
+  });
+
+  readonly solicitudesFiltradas = computed(() => {
+    const { nivel, grado } = this.filtro();
+    return this._solicitudes().filter((s) => {
+      if (nivel && s.nivel !== nivel) return false;
+      if (grado && gradoKey(s.grado) !== gradoKey(grado)) return false;
+      return true;
+    });
+  });
 
   readonly gradosDisponibles = computed(() => {
     const nivel = this._niveles().find((n) => n.nombre === this.filtro().nivel);
@@ -676,25 +941,25 @@ export class CambioSeccionComponent implements OnInit {
       color: 'text-indigo-600',
     },
     {
-      label: 'Filtrados',
-      value: this.filtrados().length,
-      icon: 'filter_alt',
-      bg: 'bg-blue-100',
-      color: 'text-blue-600',
+      label: 'Solicitudes',
+      value: this._solicitudes().length,
+      icon: 'pending_actions',
+      bg: 'bg-amber-100',
+      color: 'text-amber-600',
     },
     {
       label: 'Cambios realizados',
       value: this._historial().length,
       icon: 'history',
-      bg: 'bg-amber-100',
-      color: 'text-amber-600',
+      bg: 'bg-green-100',
+      color: 'text-green-600',
     },
     {
       label: 'Secciones activas',
       value: new Set(this._estudiantes().map((e) => e.seccion)).size,
       icon: 'view_column',
-      bg: 'bg-green-100',
-      color: 'text-green-600',
+      bg: 'bg-blue-100',
+      color: 'text-blue-600',
     },
   ]);
 
@@ -709,6 +974,7 @@ export class CambioSeccionComponent implements OnInit {
   recargar(): void {
     this.cargarEstudiantes();
     this.cargarHistorial();
+    this.cargarSolicitudes();
   }
 
   setFiltro(campo: 'nivel' | 'grado' | 'seccion' | 'busqueda', valor: string): void {
@@ -729,7 +995,256 @@ export class CambioSeccionComponent implements OnInit {
       this.cargarOcupacion();
       this.cargarHistorial();
       this.cargarEstudiantes();
+      this.cargarSolicitudes();
     }
+  }
+
+  abrirDrawerSolicitud(): void {
+    const nombre = this.auth.nombreCompleto();
+    this.solicitudForm = {
+      studentId: 0,
+      seccionDeseada: '',
+      motivo: 'equilibrio',
+      autorizadoPor:
+        this.auth.hasRole('DIRECTOR', 'ADMIN') && nombre
+          ? this.sugerenciaAutorizador(
+              this.auth.hasRole('DIRECTOR') ? 'Director(a) de la IE' : 'Administrador(a) del sistema',
+            )
+          : '',
+      observacion: '',
+    };
+    this.alumnoSolicitudSel.set(null);
+    this.busquedaAlumnoSolicitud.set('');
+    this.resetValidacionSolicitud();
+    this.formRevisionSolicitud.update((n) => n + 1);
+    this.drawerSolicitudAbierto.set(true);
+    this.cargarAlumnosSolicitud();
+  }
+
+  cerrarDrawerSolicitud(): void {
+    this.drawerSolicitudAbierto.set(false);
+    this.alumnoSolicitudSel.set(null);
+    this.resetValidacionSolicitud();
+  }
+
+  private resetValidacionSolicitud(): void {
+    this.fieldErrorsSolicitud.set({});
+    this.camposTocadosSolicitud.set({});
+    this.intentoGuardarSolicitud.set(false);
+    this.errorSolicitudForm.set('');
+  }
+
+  private cargarAlumnosSolicitud(): void {
+    this.svc.searchStudents().subscribe({
+      next: (rows) =>
+        this._alumnosSolicitud.set(
+          rows
+            .filter((r) => r.activo && r.estado === 'activo')
+            .map((row) => this.mapEstudiante(row)),
+        ),
+      error: () => this.mostrarNotificacion('No se pudieron cargar los alumnos', 'error'),
+    });
+  }
+
+  onBusquedaAlumnoSolicitud(val: string): void {
+    this.busquedaAlumnoSolicitud.set(val);
+    this.dropdownAlumnoSolicitud.set(true);
+  }
+
+  seleccionarAlumnoSolicitud(est: EstudianteMatricula): void {
+    this.alumnoSolicitudSel.set(est);
+    this.solicitudForm.studentId = est.id;
+    this.solicitudForm.seccionDeseada = '';
+    this.busquedaAlumnoSolicitud.set('');
+    this.dropdownAlumnoSolicitud.set(false);
+    this.formRevisionSolicitud.update((n) => n + 1);
+    this.onCampoBlurSolicitud('studentId');
+  }
+
+  limpiarAlumnoSolicitud(): void {
+    this.alumnoSolicitudSel.set(null);
+    this.solicitudForm.studentId = 0;
+    this.solicitudForm.seccionDeseada = '';
+    this.dropdownAlumnoSolicitud.set(true);
+    this.formRevisionSolicitud.update((n) => n + 1);
+    this.onCampoFormChangeSolicitud('studentId');
+  }
+
+  onCampoBlurSolicitud(key: string): void {
+    if (key === 'studentId') {
+      if (this.dropdownSolicitudTimer) clearTimeout(this.dropdownSolicitudTimer);
+      this.dropdownSolicitudTimer = setTimeout(() => this.dropdownAlumnoSolicitud.set(false), 150);
+      setTimeout(() => {
+        this.camposTocadosSolicitud.update((t) => ({ ...t, [key]: true }));
+        this.validarCampoSolicitudEnVivo(key);
+      }, 160);
+      return;
+    }
+    this.camposTocadosSolicitud.update((t) => ({ ...t, [key]: true }));
+    this.validarCampoSolicitudEnVivo(key);
+  }
+
+  onCampoFormChangeSolicitud(key: string, value?: string): void {
+    if (value !== undefined) {
+      switch (key) {
+        case 'seccionDeseada':
+          this.solicitudForm.seccionDeseada = value;
+          break;
+        case 'motivo':
+          this.solicitudForm.motivo = value as MotivoCambioSeccion;
+          break;
+        case 'autorizadoPor':
+          this.solicitudForm.autorizadoPor = value;
+          break;
+        case 'observacion':
+          this.solicitudForm.observacion = value;
+          break;
+      }
+    }
+    this.formRevisionSolicitud.update((n) => n + 1);
+    if (
+      this.camposTocadosSolicitud()[key] ||
+      this.intentoGuardarSolicitud() ||
+      this.fieldErrorsSolicitud()[key]
+    ) {
+      this.validarCampoSolicitudEnVivo(key);
+    } else {
+      this.quitarErrorCampoSolicitud(key);
+    }
+  }
+
+  private validarCampoSolicitudEnVivo(key: string): void {
+    const seccionActual = this.alumnoSolicitudSel()?.seccion ?? '';
+    const err = validarCampoSolicitudCambio(this.solicitudForm, key, seccionActual);
+    if (err) {
+      this.fieldErrorsSolicitud.update((errors) => ({ ...errors, [key]: err }));
+    } else {
+      this.quitarErrorCampoSolicitud(key);
+    }
+  }
+
+  private quitarErrorCampoSolicitud(key: string): void {
+    if (!this.fieldErrorsSolicitud()[key]) return;
+    this.fieldErrorsSolicitud.update((errors) => {
+      const next = { ...errors };
+      delete next[key];
+      return next;
+    });
+    if (!Object.keys(this.fieldErrorsSolicitud()).length) this.errorSolicitudForm.set('');
+  }
+
+  campoErrorSolicitud(key: string): string | null {
+    if (!this.camposTocadosSolicitud()[key] && !this.intentoGuardarSolicitud()) return null;
+    return this.fieldErrorsSolicitud()[key] ?? null;
+  }
+
+  claseCampoSolicitud(key: string): string {
+    return this.campoErrorSolicitud(key) ? 'border-red-400 focus:border-red-500 focus:ring-red-200' : '';
+  }
+
+  guardarSolicitud(): void {
+    this.intentoGuardarSolicitud.set(true);
+    const seccionActual = this.alumnoSolicitudSel()?.seccion ?? '';
+    if (!this.puedeGuardarSolicitud()) {
+      for (const key of ['studentId', 'motivo', 'autorizadoPor']) {
+        this.camposTocadosSolicitud.update((t) => ({ ...t, [key]: true }));
+        this.validarCampoSolicitudEnVivo(key);
+      }
+      this.errorSolicitudForm.set('Completa los campos obligatorios de la solicitud.');
+      return;
+    }
+
+    const errors = validarSolicitudCambioForm(this.solicitudForm, seccionActual);
+    this.fieldErrorsSolicitud.set(errors);
+    if (Object.keys(errors).length) {
+      this.errorSolicitudForm.set(primerErrorSolicitudCambio(errors) ?? 'Revisa los datos del formulario.');
+      return;
+    }
+
+    this.errorSolicitudForm.set('');
+    this.svc
+      .createRequest({
+        studentId: this.solicitudForm.studentId,
+        seccionDeseada: this.solicitudForm.seccionDeseada.trim() || undefined,
+        motivo: this.solicitudForm.motivo,
+        autorizadoPor: this.solicitudForm.autorizadoPor.trim(),
+        observacion: this.solicitudForm.observacion.trim() || undefined,
+        solicitadoPor: this.auth.nombreCompleto() || 'Usuario del sistema',
+      })
+      .subscribe({
+        next: () => {
+          this.cerrarDrawerSolicitud();
+          this.tab.set('solicitudes');
+          this.recargar();
+          this.mostrarNotificacion('Solicitud registrada correctamente');
+        },
+        error: (err) => {
+          const msg = err?.error?.message;
+          this.errorSolicitudForm.set(Array.isArray(msg) ? msg.join(', ') : msg ?? 'No se pudo registrar la solicitud');
+        },
+      });
+  }
+
+  procesarSolicitud(s: SolicitudCambioSeccion): void {
+    let est =
+      this._estudiantes().find((e) => e.id === s.studentId) ??
+      this._alumnosSolicitud().find((e) => e.id === s.studentId);
+
+    if (!est) {
+      const [apellidos = '', nombres = s.estudiante] = s.estudiante.split(',').map((p) => p.trim());
+      est = {
+        id: s.studentId,
+        nombre: nombres,
+        apellido: apellidos,
+        nombres,
+        apellidos,
+        dni: s.dni,
+        tipoDocumento: s.tipoDocumento,
+        email: '',
+        nivel: s.nivel,
+        grado: s.grado,
+        seccion: this.normSec(s.seccionActual),
+        activo: true,
+        codigo: `2026-${String(s.studentId).padStart(4, '0')}`,
+      };
+    }
+
+    this.solicitudProcesandoId = s.id;
+    this.abrirCambio(est);
+    if (s.seccionDeseada) {
+      this.form.nuevaSeccion = this.normSec(s.seccionDeseada);
+    }
+    this.form.motivo = s.motivo as MotivoCambioSeccion;
+    this.form.autorizadoPor = s.autorizadoPor;
+    this.form.observacion = s.observacion;
+  }
+
+  private solicitudProcesandoId: number | null = null;
+
+  cancelarSolicitud(id: number): void {
+    if (!confirm('¿Cancelar esta solicitud de cambio de seccion?')) return;
+    this.svc.cancelRequest(id).subscribe({
+      next: () => {
+        this.recargar();
+        this.mostrarNotificacion('Solicitud cancelada');
+      },
+      error: () => this.mostrarNotificacion('No se pudo cancelar la solicitud', 'error'),
+    });
+  }
+
+  private cargarSolicitudes(): void {
+    const { nivel, grado } = this.filtro();
+    this.cargandoSolicitudes.set(true);
+    this.svc.loadRequests({ nivel: nivel || undefined, grado: grado || undefined }).subscribe({
+      next: (rows) => {
+        this._solicitudes.set(rows);
+        this.cargandoSolicitudes.set(false);
+      },
+      error: () => {
+        this._solicitudes.set([]);
+        this.cargandoSolicitudes.set(false);
+      },
+    });
   }
 
   abrirCambio(estudiante: EstudianteMatricula): void {
@@ -765,6 +1280,7 @@ export class CambioSeccionComponent implements OnInit {
   cerrarDrawer(): void {
     this.drawerAbierto.set(false);
     this.seleccionado.set(null);
+    this.solicitudProcesandoId = null;
   }
 
   seleccionarDestino(seccion: string): void {
@@ -827,28 +1343,35 @@ export class CambioSeccionComponent implements OnInit {
       return;
     }
 
-    this.svc
-      .changeSection(estudiante.id, {
-        nuevaSeccion: this.normSec(this.form.nuevaSeccion),
-        motivo: this.form.motivo,
-        autorizadoPor: this.form.autorizadoPor.trim(),
-        observacion: this.form.observacion.trim(),
-        realizadoPor: this.auth.nombreCompleto() || 'Usuario del sistema',
-      })
-      .subscribe({
-        next: (res) => {
-          this.cerrarDrawer();
-          this._estudiantes.update((list) => list.filter((e) => e.id !== estudiante.id));
-          this.recargar();
-          this.mostrarNotificacion(
-            `Traslado a seccion ${res.seccionNueva} registrado. El alumno ya no aparecera en la lista de pendientes.`,
-          );
-        },
-        error: (err) => {
-          const msg = err?.error?.message;
-          this.errorForm.set(Array.isArray(msg) ? msg.join(', ') : msg ?? 'No se pudo realizar el cambio');
-        },
-      });
+    const solicitudId = this.solicitudProcesandoId;
+    const req = solicitudId
+      ? this.svc.processRequest(
+          solicitudId,
+          this.normSec(this.form.nuevaSeccion),
+        )
+      : this.svc.changeSection(estudiante.id, {
+          nuevaSeccion: this.normSec(this.form.nuevaSeccion),
+          motivo: this.form.motivo,
+          autorizadoPor: this.form.autorizadoPor.trim(),
+          observacion: this.form.observacion.trim(),
+          realizadoPor: this.auth.nombreCompleto() || 'Usuario del sistema',
+        });
+
+    req.subscribe({
+      next: (res) => {
+        this.solicitudProcesandoId = null;
+        this.cerrarDrawer();
+        this._estudiantes.update((list) => list.filter((e) => e.id !== estudiante.id));
+        this.recargar();
+        this.mostrarNotificacion(
+          `Traslado a seccion ${res.seccionNueva} registrado. El alumno ya no aparecera en la lista de pendientes.`,
+        );
+      },
+      error: (err) => {
+        const msg = err?.error?.message;
+        this.errorForm.set(Array.isArray(msg) ? msg.join(', ') : msg ?? 'No se pudo realizar el cambio');
+      },
+    });
   }
 
   labelMotivo(value: string): string {

@@ -20,6 +20,16 @@ export class AuthService {
   private readonly gradingConfig = inject(GradingConfigService);
   private readonly API        = `${environment.apiUrl}/auth`;
 
+  constructor() {
+    if (!isPlatformBrowser(this.platformId)) return;
+    const token = this._loadToken();
+    if (!token) return;
+    this._scheduleRefreshFromStoredToken(token);
+    if (!this.gradingConfig.loaded()) {
+      this.gradingConfig.load().subscribe();
+    }
+  }
+
   // ── Signals ────────────────────────────────────────────
   private readonly _user    = signal<AuthUser | null>(this._loadUser());
   private readonly _token   = signal<string | null>(this._loadToken());
@@ -33,6 +43,13 @@ export class AuthService {
   readonly isAuthenticated  = computed(() => !!this._user() && !!this._token());
   readonly userRoles        = computed(() => this._user()?.roles.map(r => r.codigo) ?? []);
   readonly permisos         = computed(() => this._user()?.permisos ?? []);
+  readonly institutionId    = computed(() => {
+    const id = this._user()?.institutionId;
+    return id != null && id > 0 ? id : null;
+  });
+  readonly isSiagie         = computed(
+    () => this.hasRole('SIAGIE') || this._user()?.rolPrincipal === 'SIAGIE',
+  );
   readonly nombreCompleto   = computed(() => {
     const u = this._user();
     return u ? `${u.nombre} ${u.apellido}` : '';
@@ -48,7 +65,9 @@ export class AuthService {
       tap(res => {
         this._setSession(res);
         this._scheduleRefresh(res.expiresIn);
-        this.gradingConfig.load().subscribe();
+        if (!this.gradingConfig.loaded()) {
+          this.gradingConfig.load().subscribe();
+        }
         this._loading.set(false);
       }),
       catchError(err => {
@@ -61,6 +80,17 @@ export class AuthService {
   }
 
   logout(redirect = true): void {
+    if (this.isAuthenticated()) {
+      this.http.post<{ message: string }>(`${this.API}/logout`, {}).subscribe({
+        complete: () => this._finishLogout(redirect),
+        error: () => this._finishLogout(redirect),
+      });
+      return;
+    }
+    this._finishLogout(redirect);
+  }
+
+  private _finishLogout(redirect: boolean): void {
     this._clearSession();
     if (redirect) this.router.navigate(['/auth/login']);
   }
@@ -72,7 +102,10 @@ export class AuthService {
       return throwError(() => new Error('No refresh token'));
     }
     return this.http.post<LoginResponse>(`${this.API}/refresh`, { refreshToken: rt } as RefreshTokenRequest).pipe(
-      tap(res => { this._setSession(res); this._scheduleRefresh(res.expiresIn); this.gradingConfig.load().subscribe(); }),
+      tap(res => {
+        this._setSession(res);
+        this._scheduleRefresh(res.expiresIn);
+      }),
       catchError(err => { this.logout(); return throwError(() => err); })
     );
   }
@@ -90,14 +123,20 @@ export class AuthService {
     );
   }
 
-  changePassword(req: ChangePasswordRequest): Observable<void> {
-    return this.http.post<void>(`${this.API}/change-password`, req);
+  changePassword(req: ChangePasswordRequest): Observable<{ message: string }> {
+    return this.http.post<{ message: string }>(`${this.API}/change-password`, req);
   }
-  forgotPassword(req: ForgotPasswordRequest): Observable<void> {
-    return this.http.post<void>(`${this.API}/forgot-password`, req);
+  forgotPassword(req: ForgotPasswordRequest): Observable<{ message: string; accepted: boolean }> {
+    const idempotencyKey = crypto.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
+    return this.http.post<{ message: string; accepted: boolean }>(
+      `${this.API}/forgot-password`,
+      req,
+      { headers: { 'Idempotency-Key': idempotencyKey } },
+    );
   }
-  resetPassword(req: ResetPasswordRequest): Observable<void> {
-    return this.http.post<void>(`${this.API}/reset-password`, req);
+
+  resetPassword(req: ResetPasswordRequest): Observable<{ message: string; success: boolean }> {
+    return this.http.post<{ message: string; success: boolean }>(`${this.API}/reset-password`, req);
   }
 
   // ── Helpers de autorización ────────────────────────────
@@ -105,12 +144,24 @@ export class AuthService {
   hasPermiso(...p: string[]): boolean    { return p.every(x => this.permisos().includes(x)); }
   hasAnyPermiso(...p: string[]): boolean { return p.some(x => this.permisos().includes(x)); }
 
+  /** UGEL/DRE/MINEDU con códigos en la asignación RBAC (no requiere IE de referencia). */
+  hasTerritorialAssignmentScope(): boolean {
+    const user = this._user();
+    const assignments = user?.roleAssignments ?? [];
+    const principal = assignments.find((a) => a.esPrincipal) ?? assignments[0];
+    if (!principal) return false;
+    if (principal.ambito === 'MINEDU') return true;
+    if (principal.ambito === 'UGEL' && !!principal.ugelCodigo?.trim()) return true;
+    if (principal.ambito === 'DRE' && !!principal.dreCodigo?.trim()) return true;
+    return false;
+  }
+
   readonly isAdmin = computed(() =>
     this._user()?.esAdmin === true || this.userRoles().includes('ADMIN'),
   );
   readonly isStaffUser = computed(() =>
     this.userRoles().some(r =>
-      ['ADMIN', 'DIRECTOR', 'SECRETARIA', 'TESORERO', 'BIBLIOTECARIO'].includes(r),
+      ['ADMIN', 'DIRECTOR', 'SECRETARIA', 'TESORERO', 'BIBLIOTECARIO', 'SIAGIE'].includes(r),
     ),
   );
   readonly isPortalDocente = computed(() =>
@@ -183,7 +234,16 @@ export class AuthService {
 
   private _loadUser(): AuthUser | null {
     if (!isPlatformBrowser(this.platformId)) return null;
-    try { return JSON.parse(localStorage.getItem('current_user') ?? 'null'); } catch { return null; }
+    try {
+      const raw = JSON.parse(localStorage.getItem('current_user') ?? 'null') as
+        | (AuthUser & { institucionId?: string })
+        | null;
+      if (!raw) return null;
+      const { institucionId: _legacy, ...user } = raw;
+      return user as AuthUser;
+    } catch {
+      return null;
+    }
   }
   private _loadToken(): string | null {
     return isPlatformBrowser(this.platformId) ? localStorage.getItem('access_token') : null;
@@ -196,5 +256,17 @@ export class AuthService {
     this.refreshTimer?.unsubscribe();
     const ms = (expiresIn - environment.tokenExpirationWarning) * 1000;
     if (ms > 0) this.refreshTimer = timer(ms).subscribe(() => this.refreshToken().subscribe());
+  }
+
+  private _scheduleRefreshFromStoredToken(token: string): void {
+    try {
+      const { exp } = jwtDecode<TokenPayload>(token);
+      const expiresIn = Math.max(0, exp - Math.floor(Date.now() / 1000));
+      if (expiresIn > environment.tokenExpirationWarning) {
+        this._scheduleRefresh(expiresIn);
+      }
+    } catch {
+      /* token inválido; el guard redirigirá al login */
+    }
   }
 }

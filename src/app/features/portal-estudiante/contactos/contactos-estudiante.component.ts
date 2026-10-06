@@ -34,7 +34,7 @@ import { ContactosVista } from './contactos.model';
               <span class="icon text-indigo-600">groups</span>
             </div>
             <div>
-              <p class="text-xs text-gray-400">Compañeros de salón</p>
+              <p class="text-xs text-gray-400">Compañeros</p>
               <p class="text-xl font-bold text-gray-900">{{ svc.totalCompaneros() }}</p>
             </div>
           </div>
@@ -88,7 +88,6 @@ import { ContactosVista } from './contactos.model';
                   </div>
                   <div class="min-w-0 flex-1">
                     <p class="font-semibold text-gray-900 truncate">{{ c.nombreCompleto }}</p>
-                    <p class="text-xs text-gray-400 mt-0.5">Compañero de salón</p>
                     <div class="mt-3 space-y-2">
                       @if (c.email) {
                         <a [href]="'mailto:' + c.email"

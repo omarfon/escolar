@@ -1,11 +1,13 @@
 import { Injectable, inject, signal } from '@angular/core';
-import { catchError, map, tap } from 'rxjs/operators';
-import { Observable, of } from 'rxjs';
+import { TenantReloadService } from '../../../core/tenant/tenant-reload.service';
+import { catchError, debounceTime, finalize, map, switchMap, tap } from 'rxjs/operators';
+import { Observable, Subject, Subscription, forkJoin, of } from 'rxjs';
 import { ApiExpediente, ApiStudentDocumentsResponse, StudentsStats } from '../../../core/api/api.models';
 import {
   DocumentoPayload,
   ExpedientePayload,
   ExpedientesApiService,
+  ExpedientesPageQuery,
 } from '../../../core/api/expedientes-api.service';
 
 export interface Representante {
@@ -70,6 +72,9 @@ export interface Estudiante {
   asistenciaPct: number;
   conductaNota: string;
   documentos: Documento[];
+  estadoDocumento?: string;
+  sinDocumentoMotivo?: string;
+  sinDocumentoSustento?: string;
 }
 
 export function estudianteVacio(id = 0): Estudiante {
@@ -178,6 +183,9 @@ function fromApi(exp: ApiExpediente): Estudiante {
       fechaEntrega: d.fechaEntrega,
       imagenUrl: d.imagenUrl,
     })),
+    estadoDocumento: exp.estadoDocumento ?? 'regular',
+    sinDocumentoMotivo: exp.sinDocumentoMotivo ?? '',
+    sinDocumentoSustento: exp.sinDocumentoSustento ?? '',
   };
 }
 
@@ -223,43 +231,102 @@ function toPayload(e: Estudiante): ExpedientePayload {
   };
 }
 
+type LoadRequest = ExpedientesPageQuery & { withStats?: boolean; immediate?: boolean };
+
 @Injectable({ providedIn: 'root' })
 export class ExpedientesService {
   private readonly api = inject(ExpedientesApiService);
+  private readonly loadRequest$ = new Subject<LoadRequest>();
+  private loadSub?: Subscription;
+  private lastQuery: LoadRequest = { page: 1, pageSize: 20 };
 
   private readonly _estudiantes = signal<Estudiante[]>([]);
   readonly estudiantes = this._estudiantes.asReadonly();
   readonly stats = signal<StudentsStats | null>(null);
+  readonly total = signal(0);
+  readonly page = signal(1);
+  readonly pageSize = signal(20);
   readonly loading = signal(false);
   readonly error = signal('');
 
-  load(q?: string): void {
+  constructor() {
+    inject(TenantReloadService).registerGlobalReset(() => this.reset());
+
+    this.loadSub = this.loadRequest$
+      .pipe(
+        switchMap((query) =>
+          (query.immediate ? of(query) : of(query).pipe(debounceTime(250))).pipe(
+            switchMap((q) => this.fetchPage(q)),
+          ),
+        ),
+      )
+      .subscribe({
+        next: ({ page, stats }) => {
+          this._estudiantes.set(page.items.map(fromApi));
+          this.total.set(page.total);
+          this.page.set(page.page);
+          this.pageSize.set(page.pageSize);
+          if (stats) this.stats.set(stats);
+        },
+        error: () => {
+          this._estudiantes.set([]);
+          this.total.set(0);
+          this.error.set(
+            'No se pudo conectar con la base de datos. Verifique que el servidor esté activo.',
+          );
+        },
+      });
+  }
+
+  load(query: ExpedientesPageQuery & { withStats?: boolean; immediate?: boolean } = {}): void {
+    const normalized: LoadRequest = {
+      page: query.page ?? 1,
+      pageSize: query.pageSize ?? 20,
+      q: query.q,
+      grado: query.grado,
+      estado: query.estado,
+      estadoDocumento: query.estadoDocumento,
+      withStats: query.withStats ?? this.stats() === null,
+      immediate: query.immediate ?? false,
+    };
+    this.lastQuery = normalized;
     this.loading.set(true);
     this.error.set('');
+    this.loadRequest$.next(normalized);
+  }
+
+  private fetchPage(query: LoadRequest) {
+    this.loading.set(true);
+    this.error.set('');
+    const stats$ =
+      query.withStats === false
+        ? of(null)
+        : this.api.getStats().pipe(catchError(() => of(null)));
+    return forkJoin({
+      page: this.api.listPage(query),
+      stats: stats$,
+    }).pipe(finalize(() => this.loading.set(false)));
+  }
+
+  /** Limpia caché al cambiar institución (SIAGIE). */
+  reset(): void {
     this._estudiantes.set([]);
     this.stats.set(null);
+    this.total.set(0);
+    this.page.set(1);
+    this.error.set('');
+  }
 
-    this.api.getStats().pipe(
-      catchError(() => {
-        this.error.set('No se pudo cargar el resumen de estudiantes.');
-        return of(null);
+  loadFull(id: number): Observable<Estudiante> {
+    return this.api.get(id).pipe(
+      tap((item) => {
+        const mapped = fromApi(item);
+        this._estudiantes.update((list) =>
+          list.map((e) => (e.id === id ? mapped : e)),
+        );
       }),
-    ).subscribe((stats) => {
-      if (stats) this.stats.set(stats);
-    });
-
-    this.api.list(q).pipe(
-      tap((items) => {
-        this._estudiantes.set(items.map(fromApi));
-        this.loading.set(false);
-      }),
-      catchError(() => {
-        this._estudiantes.set([]);
-        this.loading.set(false);
-        this.error.set('No se pudo conectar con la base de datos. Verifique que el servidor esté activo.');
-        return of([]);
-      }),
-    ).subscribe();
+      map(fromApi),
+    );
   }
 
   refreshOne(id: number) {
@@ -273,6 +340,59 @@ export class ExpedientesService {
     );
   }
 
+  createSinDocumento(
+    estudiante: Estudiante,
+    motivo: string,
+    sustento: string,
+    confirmarDuplicado = false,
+  ) {
+    return this.api.createSinDocumento({
+      nombres: estudiante.nombres,
+      apellidos: estudiante.apellidos,
+      fechaNac: estudiante.fechaNac,
+      gradoLabel: estudiante.grado,
+      seccion: estudiante.seccion,
+      sexo: estudiante.sexo,
+      email: estudiante.email || undefined,
+      direccion: estudiante.direccion || undefined,
+      padre: estudiante.padre,
+      madre: estudiante.madre,
+      apoderado: estudiante.apoderado,
+      sinDocumentoMotivo: motivo.trim(),
+      sinDocumentoSustento: sustento.trim(),
+      confirmarDuplicado,
+    }).pipe(
+      tap((item) => {
+        this._estudiantes.update((list) => [...list, fromApi(item)]);
+      }),
+      map(fromApi),
+    );
+  }
+
+  checkSinDocumentoDuplicates(estudiante: Estudiante) {
+    return this.api.checkSinDocumentoDuplicates({
+      nombres: estudiante.nombres,
+      apellidos: estudiante.apellidos,
+      fechaNac: estudiante.fechaNac || undefined,
+      sexo: estudiante.sexo,
+      padreDni: estudiante.padre.dni || undefined,
+      madreDni: estudiante.madre.dni || undefined,
+      apoderadoDni: estudiante.apoderado.dni || undefined,
+    });
+  }
+
+  regularizarDocumento(id: number, dni: string, auditMotivo: string, tipoDocumento = 'DNI') {
+    return this.api.regularizarDocumento(id, { dni, tipoDocumento, auditMotivo }).pipe(
+      tap((item) => {
+        const mapped = fromApi(item);
+        this._estudiantes.update((list) =>
+          list.map((e) => (e.id === mapped.id ? mapped : e)),
+        );
+      }),
+      map(fromApi),
+    );
+  }
+
   create(estudiante: Estudiante) {
     return this.api.create(toPayload(estudiante)).pipe(
       tap((item) => {
@@ -282,8 +402,11 @@ export class ExpedientesService {
     );
   }
 
-  update(estudiante: Estudiante) {
-    return this.api.update(estudiante.id, toPayload(estudiante)).pipe(
+  update(estudiante: Estudiante, auditMotivo: string) {
+    return this.api.update(estudiante.id, {
+      ...toPayload(estudiante),
+      auditMotivo: auditMotivo.trim(),
+    }).pipe(
       tap((item) => {
         const mapped = fromApi(item);
         this._estudiantes.update((list) =>
@@ -330,11 +453,33 @@ export class ExpedientesService {
     return this.api.listDocuments(studentId);
   }
 
-  search(q: string) {
-    this.load(q);
+  getDocumentsContext() {
+    return this.api.getDocumentsContext();
   }
 
-  exportCsv(filters?: { q?: string; grado?: string; estado?: string }): Observable<Blob> {
+  uploadDocumentFile(
+    studentId: number,
+    docId: number,
+    file: File,
+    payload: { motivo: string; numero?: string },
+  ) {
+    return this.api.uploadDocumentFile(studentId, docId, file, payload);
+  }
+
+  downloadDocumentBlob(studentId: number, docId: number, versionId: number) {
+    return this.api.downloadDocumentBlob(studentId, docId, versionId);
+  }
+
+  search(q: string) {
+    this.load({ q, page: 1, pageSize: 25 });
+  }
+
+  exportCsv(filters?: {
+    q?: string;
+    grado?: string;
+    estado?: string;
+    estadoDocumento?: string;
+  }): Observable<Blob> {
     return this.api.downloadExport(filters);
   }
 }

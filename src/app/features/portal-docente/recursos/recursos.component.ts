@@ -1,4 +1,4 @@
-﻿import { Component, computed, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { NgClass } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -72,33 +72,29 @@ import {
         <p class="text-sm mt-1">Contacta a coordinación académica para revisar tu asignación.</p>
       </div>
     } @else {
-      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
         @for (s of salones(); track salonKey(s)) {
           <button type="button"
-                  class="card p-5 text-left hover:shadow-md hover:border-violet-200 border border-transparent transition-all border-l-4 border-l-violet-500"
+                  class="card px-3 py-3 text-left hover:shadow-md hover:border-violet-200 border border-transparent transition-all border-l-4 border-l-violet-500"
                   (click)="seleccionarSalon(s)">
-            <div class="flex items-start justify-between gap-3">
+            <div class="flex items-center justify-between gap-2">
               <div class="min-w-0">
-                <div class="text-xs font-semibold uppercase tracking-wide text-violet-600">{{ s.nivel }}</div>
-                <h3 class="font-bold text-gray-800 text-lg mt-0.5">{{ s.grado }} "{{ s.seccion }}"</h3>
-                <p class="text-sm text-gray-500 mt-1">{{ s.totalAlumnos }} alumno(s) · Aforo {{ s.aforo || '—' }}</p>
+                <div class="text-[10px] font-semibold uppercase tracking-wide text-violet-600">{{ s.nivel }}</div>
+                <h3 class="font-bold text-gray-800 text-base leading-snug">{{ s.grado }} "{{ s.seccion }}"</h3>
+                <p class="text-xs text-gray-500 mt-0.5">{{ s.totalAlumnos }} alumno(s)</p>
               </div>
-              <div class="w-11 h-11 rounded-xl bg-violet-100 text-violet-700 flex items-center justify-center text-xl shrink-0">📁</div>
+              <span class="icon text-violet-500 shrink-0">folder</span>
             </div>
             @if (s.cursos.length) {
-              <div class="mt-3 flex flex-wrap gap-1.5">
+              <div class="mt-2 flex flex-wrap gap-1">
                 @for (c of s.cursos.slice(0, 3); track c) {
-                  <span class="badge badge-gray text-xs">{{ c }}</span>
+                  <span class="badge badge-gray text-[10px]">{{ c }}</span>
                 }
                 @if (s.cursos.length > 3) {
-                  <span class="badge badge-gray text-xs">+{{ s.cursos.length - 3 }}</span>
+                  <span class="badge badge-gray text-[10px]">+{{ s.cursos.length - 3 }}</span>
                 }
               </div>
             }
-            <div class="mt-4 text-sm font-medium text-violet-600 flex items-center gap-1">
-              Gestionar recursos
-              <span class="icon text-base">arrow_forward</span>
-            </div>
           </button>
         }
       </div>

@@ -2,6 +2,8 @@ import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http';
 import { Observable, catchError, finalize, throwError } from 'rxjs';
 import { environment } from '@environments/environment';
+import { TenantContextService } from '../../../../core/tenant/tenant-context.service';
+import { withInstitutionParams } from '../../../../core/tenant/tenant-http.util';
 import {
   EventoFilters,
   EventoItem,
@@ -11,6 +13,7 @@ import {
 @Injectable({ providedIn: 'root' })
 export class MaestrosEventosService {
   private readonly http = inject(HttpClient);
+  private readonly tenant = inject(TenantContextService);
   private readonly base = `${environment.apiUrl}/maestros/eventos`;
 
   readonly loading = signal(false);
@@ -24,6 +27,7 @@ export class MaestrosEventosService {
     if (filters?.destinatarios) params = params.set('destinatarios', filters.destinatarios);
     if (filters?.estado) params = params.set('estado', filters.estado);
     if (filters?.busqueda) params = params.set('busqueda', filters.busqueda);
+    params = withInstitutionParams(this.tenant, params);
 
     return this.http.get<EventoItem[]>(this.base, { params }).pipe(
       catchError((err) => throwError(() => new Error(this.extractError(err)))),

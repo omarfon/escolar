@@ -3,6 +3,7 @@ import { NgClass } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { LayoutService } from '../../../core/layout/services/layout.service';
+import { markTenantReloadReady, setupTenantReload } from '../../../core/tenant/tenant-reload.util';
 import { InstitucionalService } from '../../administracion/institucional/institucional.service';
 import { Nivel } from '../../administracion/institucional/institucional.model';
 import { AsistenciaRegistroService } from '../services/asistencia-registro.service';
@@ -320,6 +321,22 @@ export class AsistenciaRegistroComponent implements OnInit {
   readonly svc = inject(AsistenciaRegistroService);
   private readonly institucional = inject(InstitucionalService);
   private readonly asistenciaDocente = inject(AsistenciaDocenteService);
+  private readonly _tenantReloadReady = setupTenantReload(() => {
+    if (this.modoDocente()) return;
+    this.institucional.loadEducationLevels().subscribe({
+      next: (niveles) => {
+        this._niveles.set(niveles);
+        this.cargar();
+      },
+    });
+  }, {
+    onBeforeReload: () => {
+      this._registros.set([]);
+      this.calendario.set(null);
+      this.navegacion.set(null);
+      this.error.set('');
+    },
+  });
 
   readonly modoDocente = input(false);
   readonly salonInicial = input<{ nivel: string; grado: string; seccion: string } | null>(null);
@@ -439,7 +456,7 @@ export class AsistenciaRegistroComponent implements OnInit {
     };
 
     if (this.modoDocente()) {
-      this.asistenciaDocente.loadMisSalones(2026).subscribe({
+      this.asistenciaDocente.loadMisSalones().subscribe({
         next: (res) => {
           this.salonesPermitidos.set(res.salones);
           const salon = this.salonInicial();
@@ -465,6 +482,7 @@ export class AsistenciaRegistroComponent implements OnInit {
         }
       },
     });
+    markTenantReloadReady(this._tenantReloadReady);
   }
 
   setFiltro(campo: 'nivel' | 'grado' | 'seccion' | 'fecha', valor: string): void {

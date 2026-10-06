@@ -23,15 +23,21 @@ export class ConductaService {
   readonly saving = signal(false);
 
   loadStudents(): Observable<AlumnoConducta[]> {
-    return this.http.get<ApiExpediente[]>(this.studentsBase).pipe(
-      map((items) =>
-        items
-          .filter((s) => s.activo)
-          .map(mapAlumnoFromExpediente)
-          .sort((a, b) => a.nombre.localeCompare(b.nombre)),
-      ),
-      catchError((err) => throwError(() => err)),
-    );
+    const params = new HttpParams()
+      .set('page', '1')
+      .set('pageSize', '500')
+      .set('estado', 'activo');
+    return this.http
+      .get<{ items: ApiExpediente[] }>(this.studentsBase, { params })
+      .pipe(
+        map((res) =>
+          (res.items ?? [])
+            .filter((s) => s.activo)
+            .map(mapAlumnoFromExpediente)
+            .sort((a, b) => a.nombre.localeCompare(b.nombre)),
+        ),
+        catchError((err) => throwError(() => err)),
+      );
   }
 
   loadPage(filters: ConductIncidentFilters = {}): Observable<ConductIncidentsPage> {

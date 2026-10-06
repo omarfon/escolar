@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
 import { environment } from '@environments/environment';
 import { ApiStudent } from './api.models';
 
@@ -20,7 +21,11 @@ export class StudentsApiService {
   private readonly base = `${environment.apiUrl}/students`;
 
   list(): Observable<ApiStudent[]> {
-    return this.http.get<ApiStudent[]>(this.base);
+    return this.http
+      .get<{ items: ApiStudent[] }>(this.base, {
+        params: { page: '1', pageSize: '100' },
+      })
+      .pipe(map((res) => res.items ?? []));
   }
 
   get(id: number): Observable<ApiStudent> {

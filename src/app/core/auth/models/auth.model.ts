@@ -24,9 +24,13 @@ export interface AuthUser {
   apellido: string;
   foto?: string;
   roles: UserRole[];
+  roleAssignments?: AuthRoleAssignment[];
+  ambitos?: AmbitoTerritorial[];
+  rolPrincipal?: RolCodigo;
   permisos: string[];
   esAdmin?: boolean;
-  institucionId: string;
+  /** IE asignada al usuario (null para SIAGIE u operadores sin sede fija). */
+  institutionId?: number | null;
   sedeId?: string;
   estado: 'activo' | 'inactivo' | 'bloqueado';
   ultimoAcceso?: Date;
@@ -43,15 +47,30 @@ export interface UserRole {
 export type RolCodigo =
   | 'ADMIN' | 'DIRECTOR' | 'DOCENTE'
   | 'PADRE' | 'ESTUDIANTE' | 'TESORERO'
-  | 'SECRETARIA' | 'BIBLIOTECARIO';
+  | 'SECRETARIA' | 'BIBLIOTECARIO'
+  | 'UGEL' | 'DRE' | 'MINEDU' | 'SIAGIE';
+
+export type AmbitoTerritorial = 'MINEDU' | 'DRE' | 'UGEL' | 'IE';
+
+export interface AuthRoleAssignment {
+  id: number;
+  roleCodigo: string;
+  roleLabel: string;
+  ambito: AmbitoTerritorial;
+  dreCodigo: string | null;
+  ugelCodigo: string | null;
+  esPrincipal: boolean;
+}
 
 export interface TokenPayload {
   sub: string;
   username: string;
-  email: string;
+  email?: string;
+  nombre?: string;
   roles: string[];
-  permisos: string[];
-  institucionId: string;
+  permisos?: string[];
+  institutionId?: number | null;
+  sv?: number;
   iat: number;
   exp: number;
 }

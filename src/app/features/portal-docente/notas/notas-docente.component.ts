@@ -5,6 +5,8 @@ import { LayoutService } from '../../../core/layout/services/layout.service';
 import { GradingConfigService } from '../../../core/grading/grading-config.service';
 import { EvaluacionNotasComponent } from '../../evaluacion/notas/evaluacion-notas.component';
 import { PortalDocenteService } from '../portal-docente.service';
+import { MaestrosPeriodosAcademicosService } from '../../matricula/maestros/periodos-academicos/periodos-academicos.service';
+import { PeriodoAcademicoItem } from '../../matricula/maestros/periodos-academicos/periodos-academicos.model';
 import { PortalDocenteCursoCard } from '../portal-docente.model';
 
 @Component({
@@ -29,7 +31,10 @@ import { PortalDocenteCursoCard } from '../portal-docente.model';
           } @else {
             Selecciona un curso asignado para registrar calificaciones por bimestre
           }
-          @if (anioEscolar()) { · Año {{ anioEscolar() }} }
+          @if (anioEscolar()) {
+            · A.E. {{ anioEscolar() }}
+            @if (periodoActual()) { · {{ periodoActual()!.nombre }} }
+          }
         </p>
       </div>
     </div>
@@ -47,35 +52,35 @@ import { PortalDocenteCursoCard } from '../portal-docente.model';
         <p class="text-sm mt-1">Contacta a coordinación académica para revisar tu asignación.</p>
       </div>
     } @else {
-      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
         @for (c of cursos(); track cursoKey(c)) {
           <button type="button"
-                  class="card p-5 text-left hover:shadow-md hover:border-indigo-200 border border-transparent transition-all border-l-4"
+                  class="card px-3 py-3 text-left hover:shadow-md hover:border-indigo-200 border border-transparent transition-all border-l-4"
                   [ngClass]="estiloCurso(c.cursoNombre).borderColor"
                   (click)="seleccionarCurso(c)">
-            <div class="flex items-start justify-between gap-3">
+            <div class="flex items-start justify-between gap-2">
               <div class="min-w-0">
-                <div class="text-xs font-semibold uppercase tracking-wide text-indigo-600">{{ c.aulaLabel }}</div>
-                <h3 class="font-bold text-gray-800 text-lg mt-0.5">{{ c.cursoNombre }}</h3>
-                <p class="text-sm text-gray-500 mt-1">
+                <div class="text-[10px] font-semibold uppercase tracking-wide text-indigo-600">{{ c.aulaLabel }}</div>
+                <h3 class="font-bold text-gray-800 text-base leading-snug mt-0.5">{{ c.cursoNombre }}</h3>
+                <p class="text-xs text-gray-500 mt-0.5">
                   {{ c.gradoLabel }} · {{ c.alumnosCount }} alumno{{ c.alumnosCount === 1 ? '' : 's' }}
                 </p>
                 @if (c.horario) {
-                  <p class="text-xs text-gray-400 mt-1">{{ c.horario }}</p>
+                  <p class="text-[11px] text-gray-400 mt-0.5">{{ c.horario }}</p>
                 }
               </div>
-              <div class="w-11 h-11 rounded-xl flex items-center justify-center text-xl shrink-0 text-white"
+              <div class="w-8 h-8 rounded-lg flex items-center justify-center text-base shrink-0 text-white"
                    [ngClass]="estiloCurso(c.cursoNombre).iconBg">
                 {{ estiloCurso(c.cursoNombre).emoji }}
               </div>
             </div>
-            <div class="mt-4 text-sm font-medium text-indigo-600 flex items-center gap-1">
+            <div class="mt-2 text-xs font-medium text-indigo-600 flex items-center gap-1">
               @if (modoCompetencias()) {
                 Registrar competencias
               } @else {
                 Registrar notas
               }
-              <span class="icon text-base">arrow_forward</span>
+              <span class="icon icon-sm">arrow_forward</span>
             </div>
           </button>
         }
@@ -108,6 +113,7 @@ export class NotasDocenteComponent implements OnInit {
   private readonly router = inject(Router);
   readonly svc = inject(PortalDocenteService);
   readonly grading = inject(GradingConfigService);
+  private readonly periodosSvc = inject(MaestrosPeriodosAcademicosService);
 
   readonly modoCompetencias = computed(
     () => this.grading.usesCompetencias() && !this.grading.usesNumeric(),
@@ -116,6 +122,7 @@ export class NotasDocenteComponent implements OnInit {
   cursos = signal<PortalDocenteCursoCard[]>([]);
   cursoSeleccionado = signal<PortalDocenteCursoCard | null>(null);
   anioEscolar = signal<number | null>(null);
+  periodoActual = signal<PeriodoAcademicoItem | null>(null);
   error = signal('');
 
   ngOnInit(): void {
@@ -142,7 +149,13 @@ export class NotasDocenteComponent implements OnInit {
 
   cargarCursos(): void {
     this.error.set('');
-    this.svc.loadMiAula(2026).subscribe({
+    this.periodosSvc.resolveContext().subscribe({
+      next: (ctx) => {
+        this.periodoActual.set(ctx.periodoActual);
+        this.anioEscolar.set(ctx.anioEscolar);
+      },
+    });
+    this.svc.loadMiAula().subscribe({
       next: (res) => {
         const vistos = new Set<string>();
         const unicos = res.cursos.filter((c) => {

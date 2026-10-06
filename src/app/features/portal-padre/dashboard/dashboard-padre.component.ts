@@ -9,11 +9,13 @@ import { AuthService } from '../../../core/auth/services/auth.service';
 import { ComunicadosService, TipoCom } from '../../comunicaciones/comunicados/comunicados.service';
 import { HorariosService } from '../../academico/horarios/services/horarios.service';
 import { SeguimientoService } from '../seguimiento/seguimiento.service';
+import { HijoSelectorComponent } from '../shared/hijo-selector.component';
 import { FinanzasPadreService } from '../finanzas/finanzas-padre.service';
 import { HorariosPadreService } from '../horarios/horarios-padre.service';
 import { JustificacionesPadreService } from '../justificaciones/justificaciones-padre.service';
 import { PendienteJustificacion } from '../../asistencia/justificaciones/justificaciones.model';
 import {
+  HijoResumen,
   notaColor,
   parentescoLabel,
   SeguimientoAcademico,
@@ -32,7 +34,7 @@ const TIPO_COM_CFG: Record<TipoCom, { badge: string; label: string }> = {
 
 @Component({
   standalone: true,
-  imports: [RouterLink, NgClass, DecimalPipe],
+  imports: [RouterLink, NgClass, DecimalPipe, HijoSelectorComponent],
   template: `
     <div class="space-y-6 animate-fade-in">
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -77,24 +79,7 @@ const TIPO_COM_CFG: Record<TipoCom, { badge: string; label: string }> = {
           <p class="text-gray-500 text-sm">Contacta con la institución para vincular a tus hijos a tu cuenta.</p>
         </div>
       } @else {
-        @if (segSvc.hijos().length > 1) {
-          <div class="card p-4">
-            <label class="form-label mb-2 block">Seleccionar hijo/a</label>
-            <div class="flex flex-wrap gap-2">
-              @for (h of segSvc.hijos(); track h.studentId) {
-                <button type="button"
-                  class="px-4 py-2.5 rounded-xl border text-sm font-medium transition-all"
-                  [ngClass]="hijoId() === h.studentId
-                    ? 'border-indigo-400 bg-indigo-50 text-indigo-700'
-                    : 'border-gray-200 bg-white text-gray-600 hover:border-indigo-200'"
-                  (click)="seleccionarHijo(h.studentId)">
-                  {{ h.nombreCompleto }}
-                  <span class="text-xs text-gray-400 ml-1">· {{ h.aulaLabel }}</span>
-                </button>
-              }
-            </div>
-          </div>
-        }
+        <app-hijo-selector [autoLoad]="false" (hijoChange)="onHijoChange($event)" />
 
         @if (loading()) {
           <div class="card p-12 flex flex-col items-center text-gray-400">
@@ -285,19 +270,6 @@ const TIPO_COM_CFG: Record<TipoCom, { badge: string; label: string }> = {
               }
             </div>
           </div>
-
-          <div class="card p-5">
-            <h3 class="font-semibold text-gray-800 mb-4">Accesos rápidos</h3>
-            <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
-              @for (link of accesosRapidos; track link.route) {
-                <a [routerLink]="link.route"
-                  class="flex flex-col items-center gap-2 p-3 rounded-xl border border-gray-100 hover:border-indigo-200 hover:bg-indigo-50/40 transition-colors text-center">
-                  <span class="icon text-indigo-600">{{ link.icon }}</span>
-                  <span class="text-xs font-medium text-gray-700">{{ link.label }}</span>
-                </a>
-              }
-            </div>
-          </div>
         }
       }
     </div>
@@ -327,17 +299,6 @@ export class DashboardPadreComponent implements OnInit {
   readonly alertasNoLeidas = computed(() =>
     (this.seguimiento()?.alertasAusentismo ?? []).filter((a) => !a.leidoEnPortal),
   );
-
-  readonly accesosRapidos = [
-    { label: 'Seguimiento', icon: 'insights', route: '/portal-padre/seguimiento' },
-    { label: 'Tareas', icon: 'assignment', route: '/portal-padre/tareas' },
-    { label: 'Clases', icon: 'menu_book', route: '/portal-padre/clases' },
-    { label: 'Horarios', icon: 'schedule', route: '/portal-padre/horarios' },
-    { label: 'Finanzas', icon: 'account_balance_wallet', route: '/portal-padre/finanzas' },
-    { label: 'Comunicados', icon: 'campaign', route: '/portal-padre/comunicacion' },
-    { label: 'Correo', icon: 'mail', route: '/portal-padre/correo-docentes' },
-    { label: 'Ficha', icon: 'badge', route: '/portal-padre/ficha' },
-  ];
 
   readonly perfil = computed(() => this.horariosSvc.getPerfilEstudiante());
   readonly entradas = computed(() => this.horariosSvc.getEntradas(this.perfil()));
@@ -488,12 +449,15 @@ export class DashboardPadreComponent implements OnInit {
 
   cargar(): void {
     this.segSvc.loadHijos().subscribe({
-      next: hijos => {
-        const current = this.hijoId();
-        const target = hijos.find(h => h.studentId === current)?.studentId ?? hijos[0]?.studentId ?? null;
-        if (target) this.seleccionarHijo(target);
+      next: () => {
+        const hijo = this.segSvc.hijoSeleccionado();
+        if (hijo) this.onHijoChange(hijo);
       },
     });
+  }
+
+  onHijoChange(hijo: HijoResumen): void {
+    this.seleccionarHijo(hijo.studentId);
   }
 
   seleccionarHijo(studentId: number): void {

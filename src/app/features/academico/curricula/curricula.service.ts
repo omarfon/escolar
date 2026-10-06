@@ -2,6 +2,8 @@ import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable, catchError, finalize, throwError } from 'rxjs';
 import { environment } from '@environments/environment';
+import { TenantContextService } from '../../../core/tenant/tenant-context.service';
+import { withInstitutionParams } from '../../../core/tenant/tenant-http.util';
 import {
   CreateAreaPayload,
   CreateCurriculaPayload,
@@ -12,6 +14,7 @@ import {
   MallaCurricular,
   Area,
   Curso,
+  NivelCurricula,
   UpdateAreaPayload,
   UpdateCurriculaPayload,
   UpdateCursoPayload,
@@ -20,19 +23,58 @@ import {
 @Injectable({ providedIn: 'root' })
 export class CurriculaService {
   private readonly http = inject(HttpClient);
+  private readonly tenant = inject(TenantContextService);
   private readonly base = `${environment.apiUrl}/curricula`;
+
+  private scopedParams(params: HttpParams = new HttpParams()): HttpParams {
+    return withInstitutionParams(this.tenant, params);
+  }
 
   readonly loading = signal(false);
   readonly mallaLoading = signal(false);
   readonly saving = signal(false);
 
-  loadCatalog(curriculumId?: number): Observable<CurriculaCatalog> {
+  loadCatalog(curriculumId?: number, nivel?: string, anio?: number): Observable<CurriculaCatalog> {
     this.loading.set(true);
     let params = new HttpParams();
     if (curriculumId) params = params.set('curriculumId', curriculumId);
-    return this.http.get<CurriculaCatalog>(`${this.base}/catalog`, { params }).pipe(
+    if (nivel) params = params.set('nivel', nivel);
+    if (anio) params = params.set('anio', anio);
+    return this.http.get<CurriculaCatalog>(`${this.base}/catalog`, { params: this.scopedParams(params) }).pipe(
       catchError((err) => throwError(() => err)),
       finalize(() => this.loading.set(false)),
+    );
+  }
+
+  resolveVigente(nivel: NivelCurricula | string, anio?: number): Observable<Curricula> {
+    let params = new HttpParams().set('nivel', nivel);
+    if (anio) params = params.set('anio', anio);
+    return this.http.get<Curricula>(`${this.base}/vigente`, { params: this.scopedParams(params) });
+  }
+
+  loadVigentes(anio?: number): Observable<Curricula[]> {
+    let params = new HttpParams();
+    if (anio) params = params.set('anio', anio);
+    return this.http.get<Curricula[]>(`${this.base}/vigentes`, { params: this.scopedParams(params) });
+  }
+
+  loadCatalogVigente(nivel: NivelCurricula | string, anio?: number): Observable<CurriculaCatalog> {
+    this.loading.set(true);
+    let params = new HttpParams().set('nivel', nivel);
+    if (anio) params = params.set('anio', anio);
+    return this.http.get<CurriculaCatalog>(`${this.base}/vigente/catalog`, { params: this.scopedParams(params) }).pipe(
+      catchError((err) => throwError(() => err)),
+      finalize(() => this.loading.set(false)),
+    );
+  }
+
+  loadMallaVigente(nivel: NivelCurricula | string, anio?: number): Observable<MallaCurricular> {
+    this.mallaLoading.set(true);
+    let params = new HttpParams().set('nivel', nivel);
+    if (anio) params = params.set('anio', anio);
+    return this.http.get<MallaCurricular>(`${this.base}/vigente/malla`, { params: this.scopedParams(params) }).pipe(
+      catchError((err) => throwError(() => err)),
+      finalize(() => this.mallaLoading.set(false)),
     );
   }
 
@@ -45,7 +87,7 @@ export class CurriculaService {
     if (filters?.anio) params = params.set('anio', filters.anio);
     if (filters?.nivel) params = params.set('nivel', filters.nivel);
     if (filters?.estado) params = params.set('estado', filters.estado);
-    return this.http.get<Curricula[]>(this.base, { params });
+    return this.http.get<Curricula[]>(this.base, { params: this.scopedParams(params) });
   }
 
   createCurricula(payload: CreateCurriculaPayload): Observable<Curricula> {
@@ -65,12 +107,16 @@ export class CurriculaService {
   }
 
   loadCurriculaDetail(id: number): Observable<CurriculaDetail> {
-    return this.http.get<CurriculaDetail>(`${this.base}/${id}/summary`);
+    return this.http.get<CurriculaDetail>(`${this.base}/${id}/summary`, {
+      params: this.scopedParams(),
+    });
   }
 
   loadMalla(curriculumId: number): Observable<MallaCurricular> {
     this.mallaLoading.set(true);
-    return this.http.get<MallaCurricular>(`${this.base}/${curriculumId}/malla`).pipe(
+    return this.http.get<MallaCurricular>(`${this.base}/${curriculumId}/malla`, {
+      params: this.scopedParams(),
+    }).pipe(
       catchError((err) => throwError(() => err)),
       finalize(() => this.mallaLoading.set(false)),
     );

@@ -1,7 +1,8 @@
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { NgClass } from '@angular/common';
 import { LayoutService } from '../../../../core/layout/services/layout.service';
+import { markTenantReloadReady, setupTenantReload } from '../../../../core/tenant/tenant-reload.util';
 import { MaestrosSedesService } from './sedes.service';
 import {
   MaestroInstitucionResumen,
@@ -9,6 +10,13 @@ import {
   NIVELES_SEDE,
   TURNOS_SEDE,
 } from './sedes.model';
+import {
+  ErroresCampoSede,
+  primerErrorSede,
+  sedeFormularioMinimoListo,
+  validarCampoSede,
+  validarSedeForm,
+} from './sede-form.validation';
 
 @Component({
   selector: 'app-maestros-sedes',
@@ -67,6 +75,9 @@ import {
               <tr class="hover:bg-gray-50/80">
                 <td class="px-4 py-3">
                   <div class="font-medium text-gray-900">{{ s.nombre }}</div>
+                  @if (s.institucionNombre) {
+                    <div class="text-xs text-indigo-700">{{ s.institucionNombre }}</div>
+                  }
                   <div class="text-xs text-gray-400 font-mono">{{ s.codigo }}</div>
                 </td>
                 <td class="px-4 py-3 text-gray-600">
@@ -108,49 +119,97 @@ import {
     <div class="card w-full max-w-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto" (click)="$event.stopPropagation()">
       <h2 class="text-lg font-bold text-gray-900">{{ editId() ? 'Editar sede' : 'Nueva sede' }}</h2>
 
+      @if (errorForm()) {
+        <div class="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          <span class="icon icon-sm text-red-500">error_outline</span> {{ errorForm() }}
+        </div>
+      }
+
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div class="sm:col-span-2">
-          <label class="form-label">Nombre</label>
-          <input class="form-input w-full" [(ngModel)]="form.nombre" placeholder="Sede Central" />
+          <label class="form-label">Nombre <span class="text-red-400">*</span></label>
+          <input class="form-input w-full" placeholder="Sede Central"
+                 [ngClass]="claseCampo('nombre')"
+                 [(ngModel)]="form.nombre"
+                 (ngModelChange)="onCampoFormChange('nombre')"
+                 (blur)="onCampoBlur('nombre')" />
+          @if (campoError('nombre'); as err) { <p class="form-error mt-1">{{ err }}</p> }
         </div>
         <div>
-          <label class="form-label">Código</label>
-          <input class="form-input w-full" [(ngModel)]="form.codigo" placeholder="SEDE-01" />
+          <label class="form-label">Código <span class="text-gray-400 font-normal">(opcional)</span></label>
+          <input class="form-input w-full" placeholder="SEDE-01"
+                 [ngClass]="claseCampo('codigo')"
+                 [(ngModel)]="form.codigo"
+                 (ngModelChange)="onCampoFormChange('codigo')"
+                 (blur)="onCampoBlur('codigo')" />
+          @if (campoError('codigo'); as err) { <p class="form-error mt-1">{{ err }}</p> }
         </div>
         <div>
           <label class="form-label">Estado</label>
-          <select class="form-input w-full" [(ngModel)]="form.estado">
+          <select class="form-input w-full" [ngClass]="claseCampo('estado')"
+                  [(ngModel)]="form.estado"
+                  (ngModelChange)="onCampoFormChange('estado')"
+                  (blur)="onCampoBlur('estado')">
             <option value="activo">Activo</option>
             <option value="inactivo">Inactivo</option>
           </select>
+          @if (campoError('estado'); as err) { <p class="form-error mt-1">{{ err }}</p> }
         </div>
         <div class="sm:col-span-2">
-          <label class="form-label">Dirección</label>
-          <input class="form-input w-full" [(ngModel)]="form.direccion" />
+          <label class="form-label">Dirección <span class="text-gray-400 font-normal">(opcional)</span></label>
+          <input class="form-input w-full" [ngClass]="claseCampo('direccion')"
+                 [(ngModel)]="form.direccion"
+                 (ngModelChange)="onCampoFormChange('direccion')"
+                 (blur)="onCampoBlur('direccion')" />
+          @if (campoError('direccion'); as err) { <p class="form-error mt-1">{{ err }}</p> }
         </div>
         <div>
-          <label class="form-label">Distrito</label>
-          <input class="form-input w-full" [(ngModel)]="form.distrito" />
+          <label class="form-label">Distrito <span class="text-gray-400 font-normal">(opcional)</span></label>
+          <input class="form-input w-full" [ngClass]="claseCampo('distrito')"
+                 [(ngModel)]="form.distrito"
+                 (ngModelChange)="onCampoFormChange('distrito')"
+                 (blur)="onCampoBlur('distrito')" />
+          @if (campoError('distrito'); as err) { <p class="form-error mt-1">{{ err }}</p> }
         </div>
         <div>
-          <label class="form-label">Provincia</label>
-          <input class="form-input w-full" [(ngModel)]="form.provincia" />
+          <label class="form-label">Provincia <span class="text-gray-400 font-normal">(opcional)</span></label>
+          <input class="form-input w-full" [ngClass]="claseCampo('provincia')"
+                 [(ngModel)]="form.provincia"
+                 (ngModelChange)="onCampoFormChange('provincia')"
+                 (blur)="onCampoBlur('provincia')" />
+          @if (campoError('provincia'); as err) { <p class="form-error mt-1">{{ err }}</p> }
         </div>
         <div>
-          <label class="form-label">Región</label>
-          <input class="form-input w-full" [(ngModel)]="form.region" />
+          <label class="form-label">Región <span class="text-gray-400 font-normal">(opcional)</span></label>
+          <input class="form-input w-full" [ngClass]="claseCampo('region')"
+                 [(ngModel)]="form.region"
+                 (ngModelChange)="onCampoFormChange('region')"
+                 (blur)="onCampoBlur('region')" />
+          @if (campoError('region'); as err) { <p class="form-error mt-1">{{ err }}</p> }
         </div>
         <div>
-          <label class="form-label">Teléfono</label>
-          <input class="form-input w-full" [(ngModel)]="form.telefono" />
+          <label class="form-label">Teléfono <span class="text-gray-400 font-normal">(opcional)</span></label>
+          <input class="form-input w-full" [ngClass]="claseCampo('telefono')"
+                 [(ngModel)]="form.telefono"
+                 (ngModelChange)="onCampoFormChange('telefono')"
+                 (blur)="onCampoBlur('telefono')" />
+          @if (campoError('telefono'); as err) { <p class="form-error mt-1">{{ err }}</p> }
         </div>
         <div>
-          <label class="form-label">Email</label>
-          <input class="form-input w-full" [(ngModel)]="form.email" />
+          <label class="form-label">Email <span class="text-gray-400 font-normal">(opcional)</span></label>
+          <input class="form-input w-full" [ngClass]="claseCampo('email')"
+                 [(ngModel)]="form.email"
+                 (ngModelChange)="onCampoFormChange('email')"
+                 (blur)="onCampoBlur('email')" />
+          @if (campoError('email'); as err) { <p class="form-error mt-1">{{ err }}</p> }
         </div>
         <div class="sm:col-span-2">
-          <label class="form-label">Director</label>
-          <input class="form-input w-full" [(ngModel)]="form.director" />
+          <label class="form-label">Director <span class="text-gray-400 font-normal">(opcional)</span></label>
+          <input class="form-input w-full" [ngClass]="claseCampo('director')"
+                 [(ngModel)]="form.director"
+                 (ngModelChange)="onCampoFormChange('director')"
+                 (blur)="onCampoBlur('director')" />
+          @if (campoError('director'); as err) { <p class="form-error mt-1">{{ err }}</p> }
         </div>
       </div>
 
@@ -165,6 +224,7 @@ import {
             </label>
           }
         </div>
+        @if (campoError('niveles'); as err) { <p class="form-error mt-1">{{ err }}</p> }
       </div>
 
       <div>
@@ -178,11 +238,15 @@ import {
             </label>
           }
         </div>
+        @if (campoError('turnos'); as err) { <p class="form-error mt-1">{{ err }}</p> }
       </div>
 
       <div class="flex gap-2 justify-end">
         <button class="btn btn-ghost" (click)="cerrarModal()">Cancelar</button>
-        <button class="btn btn-primary" [disabled]="svc.saving()" (click)="guardar()">Guardar</button>
+        <button class="btn btn-primary"
+                [disabled]="!puedeGuardarForm() || svc.saving()"
+                [title]="puedeGuardarForm() ? '' : 'Ingresa el nombre de la sede'"
+                (click)="guardar()">Guardar</button>
       </div>
     </div>
   </div>
@@ -190,6 +254,7 @@ import {
   `,
 })
 export class MaestrosSedesComponent implements OnInit {
+  private readonly _tenantReloadReady = setupTenantReload(() => this.cargar());
   private readonly layout = inject(LayoutService);
   readonly svc = inject(MaestrosSedesService);
 
@@ -200,6 +265,16 @@ export class MaestrosSedesComponent implements OnInit {
 
   readonly modalOpen = signal(false);
   readonly editId = signal<number | null>(null);
+  errorForm = signal('');
+  fieldErrors = signal<ErroresCampoSede>({});
+  camposTocados = signal<Record<string, true>>({});
+  intentoGuardar = signal(false);
+  private readonly formRevision = signal(0);
+
+  readonly puedeGuardarForm = computed(() => {
+    this.formRevision();
+    return sedeFormularioMinimoListo(this.valoresFormulario());
+  });
 
   readonly nivelesOpts = NIVELES_SEDE;
   readonly turnosOpts = TURNOS_SEDE;
@@ -222,6 +297,7 @@ export class MaestrosSedesComponent implements OnInit {
   ngOnInit(): void {
     this.layout.setTitle('Maestros · Sedes');
     this.cargar();
+    markTenantReloadReady(this._tenantReloadReady);
   }
 
   cargar(): void {
@@ -251,12 +327,73 @@ export class MaestrosSedesComponent implements OnInit {
       turnos: [...(sede?.turnos ?? [])],
       estado: sede?.estado ?? 'activo',
     };
+    this.resetValidacionForm();
     this.modalOpen.set(true);
   }
 
   cerrarModal(): void {
     this.modalOpen.set(false);
     this.editId.set(null);
+    this.resetValidacionForm();
+  }
+
+  private resetValidacionForm(): void {
+    this.fieldErrors.set({});
+    this.camposTocados.set({});
+    this.intentoGuardar.set(false);
+    this.errorForm.set('');
+  }
+
+  private valoresFormulario() {
+    return { ...this.form, niveles: [...this.form.niveles], turnos: [...this.form.turnos] };
+  }
+
+  onCampoBlur(key: string): void {
+    this.camposTocados.update((t) => ({ ...t, [key]: true }));
+    this.validarCampoEnVivo(key);
+  }
+
+  onCampoFormChange(key: string): void {
+    this.formRevision.update((n) => n + 1);
+
+    if (this.camposTocados()[key] || this.intentoGuardar() || this.fieldErrors()[key]) {
+      this.validarCampoEnVivo(key);
+    } else {
+      this.quitarErrorCampo(key);
+    }
+  }
+
+  private validarCamposMinimosEnVivo(): void {
+    this.camposTocados.update((t) => ({ ...t, nombre: true }));
+    this.validarCampoEnVivo('nombre');
+  }
+
+  private validarCampoEnVivo(key: string): void {
+    const err = validarCampoSede(this.valoresFormulario(), key);
+    if (err) {
+      this.fieldErrors.update((errors) => ({ ...errors, [key]: err }));
+    } else {
+      this.quitarErrorCampo(key);
+    }
+  }
+
+  private quitarErrorCampo(key: string): void {
+    if (!this.fieldErrors()[key]) return;
+    this.fieldErrors.update((errors) => {
+      const next = { ...errors };
+      delete next[key];
+      return next;
+    });
+    if (!Object.keys(this.fieldErrors()).length) this.errorForm.set('');
+  }
+
+  campoError(key: string): string | null {
+    if (!this.camposTocados()[key] && !this.intentoGuardar()) return null;
+    return this.fieldErrors()[key] ?? null;
+  }
+
+  claseCampo(key: string): string {
+    return this.campoError(key) ? 'border-red-400 focus:border-red-500 focus:ring-red-200' : '';
   }
 
   toggleNivel(nivel: string, event: Event): void {
@@ -264,6 +401,10 @@ export class MaestrosSedesComponent implements OnInit {
     this.form.niveles = checked
       ? [...this.form.niveles, nivel]
       : this.form.niveles.filter((n) => n !== nivel);
+    this.formRevision.update((n) => n + 1);
+    if (this.camposTocados()['niveles'] || this.intentoGuardar() || this.fieldErrors()['niveles']) {
+      this.validarCampoEnVivo('niveles');
+    }
   }
 
   toggleTurno(turno: string, event: Event): void {
@@ -271,32 +412,48 @@ export class MaestrosSedesComponent implements OnInit {
     this.form.turnos = checked
       ? [...this.form.turnos, turno]
       : this.form.turnos.filter((t) => t !== turno);
+    this.formRevision.update((n) => n + 1);
+    if (this.camposTocados()['turnos'] || this.intentoGuardar() || this.fieldErrors()['turnos']) {
+      this.validarCampoEnVivo('turnos');
+    }
   }
 
   guardar(): void {
-    const nombre = this.form.nombre.trim();
-    if (!nombre) return;
+    this.intentoGuardar.set(true);
+    if (!this.puedeGuardarForm()) {
+      this.validarCamposMinimosEnVivo();
+      this.errorForm.set('Completa los campos obligatorios de la sede.');
+      return;
+    }
+
+    const errors = validarSedeForm(this.valoresFormulario());
+    this.fieldErrors.set(errors);
+    if (Object.keys(errors).length) {
+      this.errorForm.set(primerErrorSede(errors) ?? 'Revisa los datos del formulario.');
+      return;
+    }
+
+    this.errorForm.set('');
 
     const payload = {
-      nombre,
+      nombre: this.form.nombre.trim(),
       codigo: this.form.codigo.trim(),
       direccion: this.form.direccion.trim(),
       distrito: this.form.distrito.trim(),
       provincia: this.form.provincia.trim(),
       region: this.form.region.trim(),
       telefono: this.form.telefono.trim(),
-      email: this.form.email.trim(),
+      email: this.form.email.trim() || undefined,
       director: this.form.director.trim(),
       niveles: [...this.form.niveles],
       turnos: [...this.form.turnos],
       estado: this.form.estado,
-      institutionId: this.institucion()?.id,
     };
 
     const editId = this.editId();
     const req = editId
       ? this.svc.update(editId, payload)
-      : this.svc.create(payload);
+      : this.svc.create({ ...payload, institutionId: this.institucion()?.id });
 
     req.subscribe({
       next: () => {

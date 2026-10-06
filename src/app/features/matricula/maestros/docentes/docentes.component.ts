@@ -1,7 +1,22 @@
-import { Component, computed, inject, OnInit, signal } from '@angular/core';
+import {
+  AfterViewInit,
+  Component,
+  computed,
+  inject,
+  OnInit,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { NgClass } from '@angular/common';
 import { LayoutService } from '../../../../core/layout/services/layout.service';
+import { TenantContextService } from '../../../../core/tenant/tenant-context.service';
+import {
+  TenantInstitutionConsultaModo,
+  TenantInstitutionPickerComponent,
+} from '../../../../core/tenant/tenant-institution-picker.component';
+import { markTenantReloadReady, setupTenantReload } from '../../../../core/tenant/tenant-reload.util';
+import { MaestrosPeriodosAcademicosService } from '../periodos-academicos/periodos-academicos.service';
 import { MaestrosDocentesService } from './docentes.service';
 import {
   DocenteDetail,
@@ -10,6 +25,14 @@ import {
   ESPECIALIDADES_DOCENTE,
   ESTADOS_DOCENTE,
 } from './docentes.model';
+import {
+  ErroresCampoDocente,
+  docenteFormularioMinimoListo,
+  primerErrorDocente,
+  resolverEspecialidadDocente,
+  validarCampoDocente,
+  validarDocenteForm,
+} from './docente-form.validation';
 
 interface DocenteFormState {
   nombres: string;
@@ -27,7 +50,7 @@ interface DocenteFormState {
 @Component({
   selector: 'app-maestros-docentes',
   standalone: true,
-  imports: [FormsModule, NgClass],
+  imports: [FormsModule, NgClass, TenantInstitutionPickerComponent],
   template: `
 <div class="space-y-4">
 
@@ -38,11 +61,20 @@ interface DocenteFormState {
         Registro maestro de docentes, especialización, carga horaria y salones asignados
       </p>
     </div>
-    <button class="btn btn-primary btn-sm" (click)="abrirModal()">
-      <span class="icon icon-sm">person_add</span> Nuevo docente
-    </button>
+    @if (puedeGestionar()) {
+      <button class="btn btn-primary btn-sm" (click)="abrirModal()">
+        <span class="icon icon-sm">person_add</span> Nuevo docente
+      </button>
+    }
   </div>
 
+  @if (vistaGlobal()) {
+    <div class="rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-900 px-4 py-3 text-sm">
+      Mostrando docentes de <strong>todas las instituciones</strong>. Elija una IE específica para registrar o editar.
+    </div>
+  }
+
+  @if (!requiereSeleccionInstitucion()) {
   <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
     @for (kpi of kpis(); track kpi.label) {
       <div class="card p-4 flex items-center gap-3" [ngClass]="kpi.border ?? ''">
@@ -56,9 +88,16 @@ interface DocenteFormState {
       </div>
     }
   </div>
+  }
 
   <div class="card p-4 space-y-4">
     <div class="flex flex-wrap items-end gap-4">
+      <app-tenant-institution-picker
+        #instPicker
+        [allowGlobal]="true"
+        hint="Seleccione la IE antes de consultar o gestionar docentes."
+        (modoChange)="onModoInstitucion($event)"
+      />
       <div>
         <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Estado</label>
         <select class="mt-1.5 w-36 rounded-xl border-2 border-gray-100 bg-gray-50/80 px-3 py-2.5 text-sm text-gray-700 focus:border-indigo-300 focus:bg-white focus:outline-none focus:ring-4 focus:ring-indigo-50 transition-all"
@@ -72,8 +111,9 @@ interface DocenteFormState {
         <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Año escolar</label>
         <select class="mt-1.5 w-32 rounded-xl border-2 border-gray-100 bg-gray-50/80 px-3 py-2.5 text-sm text-gray-700 focus:border-indigo-300 focus:bg-white focus:outline-none focus:ring-4 focus:ring-indigo-50 transition-all"
           [(ngModel)]="anioEscolar" (ngModelChange)="onFiltroChange()">
-          <option [value]="2026">2026</option>
-          <option [value]="2025">2025</option>
+          @for (a of aniosDisponibles(); track a) {
+            <option [value]="a">{{ a }}</option>
+          }
         </select>
       </div>
     </div>
@@ -112,6 +152,16 @@ interface DocenteFormState {
     </div>
   </div>
 
+  @if (requiereSeleccionInstitucion()) {
+    <div class="card p-12 text-center space-y-3">
+      <span class="icon text-4xl text-amber-500">school</span>
+      <p class="text-gray-700 font-medium">Seleccione una institución educativa</p>
+      <p class="text-sm text-gray-500 max-w-md mx-auto">
+        Use el selector de institución arriba para ver los docentes de una IE o la vista global SIAGIE.
+      </p>
+    </div>
+  }
+
   @if (error()) {
     <div class="rounded-xl bg-red-50 border border-red-200 text-red-700 px-4 py-3 text-sm">{{ error() }}</div>
   }
@@ -122,6 +172,7 @@ interface DocenteFormState {
     </div>
   }
 
+  @if (!requiereSeleccionInstitucion()) {
   <div class="card overflow-hidden">
     @if (svc.loading()) {
       <div class="p-10 text-center text-gray-400 text-sm">Cargando docentes...</div>
@@ -133,6 +184,9 @@ interface DocenteFormState {
           <thead class="bg-gray-50 text-gray-500 text-xs uppercase">
             <tr>
               <th class="px-4 py-3 text-left">Docente</th>
+              @if (vistaGlobal()) {
+                <th class="px-4 py-3 text-left">Institución</th>
+              }
               <th class="px-4 py-3 text-left">Especialización</th>
               <th class="px-4 py-3 text-center">Horas</th>
               <th class="px-4 py-3 text-center">Salones</th>
@@ -149,6 +203,11 @@ interface DocenteFormState {
                   <div class="text-xs text-gray-500">{{ d.email }} · DNI {{ d.dni }}</div>
                   <span class="badge text-[10px] mt-1" [ngClass]="tipoBadge(d.tipo)">{{ d.tipo }}</span>
                 </td>
+                @if (vistaGlobal()) {
+                  <td class="px-4 py-3 text-gray-700 max-w-[180px]">
+                    <span class="line-clamp-2 text-xs font-medium">{{ d.institutionNombre || ('IE #' + d.institutionId) }}</span>
+                  </td>
+                }
                 <td class="px-4 py-3 text-gray-700 max-w-[200px]">
                   <span class="line-clamp-2">{{ d.especialidad }}</span>
                 </td>
@@ -176,13 +235,15 @@ interface DocenteFormState {
                     <button type="button" class="btn btn-ghost btn-icon text-indigo-600" title="Ver detalle" (click)="verDetalle(d)">
                       <span class="icon icon-sm">visibility</span>
                     </button>
-                    <button type="button" class="btn btn-ghost btn-icon text-gray-600 hover:text-indigo-600" title="Editar" (click)="abrirModal(d)">
-                      <span class="icon icon-sm">edit</span>
-                    </button>
-                    @if (d.estado === 'activo') {
-                      <button type="button" class="btn btn-ghost btn-icon text-red-500" title="Desactivar" (click)="desactivar(d)">
-                        <span class="icon icon-sm">person_off</span>
+                    @if (puedeGestionar()) {
+                      <button type="button" class="btn btn-ghost btn-icon text-gray-600 hover:text-indigo-600" title="Editar" (click)="abrirModal(d)">
+                        <span class="icon icon-sm">edit</span>
                       </button>
+                      @if (d.estado === 'activo') {
+                        <button type="button" class="btn btn-ghost btn-icon text-red-500" title="Desactivar" (click)="desactivar(d)">
+                          <span class="icon icon-sm">person_off</span>
+                        </button>
+                      }
                     }
                   </div>
                 </td>
@@ -212,6 +273,7 @@ interface DocenteFormState {
       }
     }
   </div>
+  }
 </div>
 
 @if (detalle(); as d) {
@@ -226,6 +288,9 @@ interface DocenteFormState {
           </span>
           <h2 class="text-xl font-black text-white mt-3 leading-tight">{{ d.nombreCompleto }}</h2>
           <p class="text-sm text-white/75 mt-1">{{ d.especialidad }}</p>
+          @if (d.institutionNombre) {
+            <p class="text-xs text-white/60 mt-1">{{ d.institutionNombre }}</p>
+          }
         </div>
         <button type="button" class="w-9 h-9 rounded-full bg-white/15 text-white flex items-center justify-center hover:bg-white/25" (click)="cerrarDetalle()">
           <span class="icon icon-sm">close</span>
@@ -324,10 +389,12 @@ interface DocenteFormState {
     </div>
 
     <div class="px-6 py-4 border-t bg-gray-50 flex gap-2 shrink-0">
-      <button class="btn btn-primary flex-1" (click)="abrirModal(d); cerrarDetalle()">
-        <span class="icon icon-sm">edit</span> Editar docente
-      </button>
-      <button class="btn btn-secondary" (click)="cerrarDetalle()">Cerrar</button>
+      @if (puedeGestionar()) {
+        <button class="btn btn-primary flex-1" (click)="abrirModal(d); cerrarDetalle()">
+          <span class="icon icon-sm">edit</span> Editar docente
+        </button>
+      }
+      <button class="btn btn-secondary flex-1" (click)="cerrarDetalle()">Cerrar</button>
     </div>
   </div>
 }
@@ -337,63 +404,117 @@ interface DocenteFormState {
     <div class="card w-full max-w-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto animate-scale-in" (click)="$event.stopPropagation()">
       <h2 class="text-lg font-bold text-gray-900">{{ editId() ? 'Editar docente' : 'Nuevo docente' }}</h2>
 
+      @if (errorForm()) {
+        <div class="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          <span class="icon icon-sm text-red-500">error_outline</span> {{ errorForm() }}
+        </div>
+      }
+
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <label class="form-label">Nombres</label>
-          <input class="form-input w-full" [(ngModel)]="form.nombres" />
+          <label class="form-label">Nombres <span class="text-red-400">*</span></label>
+          <input class="form-input w-full" [ngClass]="claseCampo('nombres')"
+                 [(ngModel)]="form.nombres"
+                 (ngModelChange)="onCampoFormChange('nombres')"
+                 (blur)="onCampoBlur('nombres')" />
+          @if (campoError('nombres'); as err) { <p class="form-error mt-1">{{ err }}</p> }
         </div>
         <div>
-          <label class="form-label">Apellidos</label>
-          <input class="form-input w-full" [(ngModel)]="form.apellidos" />
+          <label class="form-label">Apellidos <span class="text-red-400">*</span></label>
+          <input class="form-input w-full" [ngClass]="claseCampo('apellidos')"
+                 [(ngModel)]="form.apellidos"
+                 (ngModelChange)="onCampoFormChange('apellidos')"
+                 (blur)="onCampoBlur('apellidos')" />
+          @if (campoError('apellidos'); as err) { <p class="form-error mt-1">{{ err }}</p> }
         </div>
         <div>
-          <label class="form-label">DNI</label>
-          <input class="form-input w-full" maxlength="8" [(ngModel)]="form.dni" />
+          <label class="form-label">DNI <span class="text-red-400">*</span></label>
+          <input class="form-input w-full" maxlength="8" inputmode="numeric"
+                 [ngClass]="claseCampo('dni')"
+                 [(ngModel)]="form.dni"
+                 (ngModelChange)="onCampoFormChange('dni')"
+                 (blur)="onCampoBlur('dni')" />
+          @if (campoError('dni'); as err) { <p class="form-error mt-1">{{ err }}</p> }
         </div>
         <div>
-          <label class="form-label">Email</label>
-          <input type="email" class="form-input w-full" [(ngModel)]="form.email" />
+          <label class="form-label">Email <span class="text-red-400">*</span></label>
+          <input type="email" class="form-input w-full" [ngClass]="claseCampo('email')"
+                 [(ngModel)]="form.email"
+                 (ngModelChange)="onCampoFormChange('email')"
+                 (blur)="onCampoBlur('email')" />
+          @if (campoError('email'); as err) { <p class="form-error mt-1">{{ err }}</p> }
         </div>
         <div>
-          <label class="form-label">Teléfono</label>
-          <input class="form-input w-full" [(ngModel)]="form.telefono" />
+          <label class="form-label">Teléfono <span class="text-gray-400 font-normal">(opcional)</span></label>
+          <input class="form-input w-full" [ngClass]="claseCampo('telefono')"
+                 [(ngModel)]="form.telefono"
+                 (ngModelChange)="onCampoFormChange('telefono')"
+                 (blur)="onCampoBlur('telefono')" />
+          @if (campoError('telefono'); as err) { <p class="form-error mt-1">{{ err }}</p> }
         </div>
         <div>
           <label class="form-label">Sede</label>
-          <input class="form-input w-full" [(ngModel)]="form.sede" placeholder="Sede Central" />
+          <input class="form-input w-full" placeholder="Sede Central" [ngClass]="claseCampo('sede')"
+                 [(ngModel)]="form.sede"
+                 (ngModelChange)="onCampoFormChange('sede')"
+                 (blur)="onCampoBlur('sede')" />
+          @if (campoError('sede'); as err) { <p class="form-error mt-1">{{ err }}</p> }
         </div>
       </div>
 
       <div>
-        <label class="form-label">Especialización</label>
-        <select class="form-input w-full" [(ngModel)]="form.especialidad">
+        <label class="form-label">Especialización <span class="text-red-400">*</span></label>
+        <select class="form-input w-full" [ngClass]="claseCampo('especialidad')"
+                [(ngModel)]="form.especialidad"
+                (ngModelChange)="onCampoFormChange('especialidad')"
+                (blur)="onCampoBlur('especialidad')">
           @for (esp of especialidades; track esp) {
             <option [value]="esp">{{ esp }}</option>
           }
         </select>
+        @if (campoError('especialidad'); as err) { <p class="form-error mt-1">{{ err }}</p> }
         @if (form.especialidad === 'Otra especialidad') {
-          <input class="form-input w-full mt-2" [(ngModel)]="form.especialidadCustom" placeholder="Describe la especialidad..." />
+          <input class="form-input w-full mt-2" placeholder="Describe la especialidad..."
+                 [ngClass]="claseCampo('especialidadCustom')"
+                 [(ngModel)]="form.especialidadCustom"
+                 (ngModelChange)="onCampoFormChange('especialidadCustom')"
+                 (blur)="onCampoBlur('especialidadCustom')" />
+          @if (campoError('especialidadCustom'); as err) { <p class="form-error mt-1">{{ err }}</p> }
         }
       </div>
 
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label class="form-label">Estado</label>
-          <select class="form-input w-full" [(ngModel)]="form.estado">
+          <select class="form-input w-full" [ngClass]="claseCampo('estado')"
+                  [(ngModel)]="form.estado"
+                  (ngModelChange)="onCampoFormChange('estado')"
+                  (blur)="onCampoBlur('estado')">
             <option value="activo">Activo</option>
             <option value="inactivo">Inactivo</option>
             <option value="bloqueado">Bloqueado</option>
           </select>
+          @if (campoError('estado'); as err) { <p class="form-error mt-1">{{ err }}</p> }
         </div>
         <div>
-          <label class="form-label">{{ editId() ? 'Nueva contraseña (opcional)' : 'Contraseña' }}</label>
-          <input type="password" class="form-input w-full" [(ngModel)]="form.password" />
+          <label class="form-label">
+            {{ editId() ? 'Nueva contraseña (opcional)' : 'Contraseña' }}
+            @if (!editId()) { <span class="text-red-400">*</span> }
+          </label>
+          <input type="password" class="form-input w-full" [ngClass]="claseCampo('password')"
+                 [(ngModel)]="form.password"
+                 (ngModelChange)="onCampoFormChange('password')"
+                 (blur)="onCampoBlur('password')" />
+          @if (campoError('password'); as err) { <p class="form-error mt-1">{{ err }}</p> }
         </div>
       </div>
 
       <div class="flex gap-2 justify-end pt-2">
         <button class="btn btn-ghost" (click)="cerrarModal()">Cancelar</button>
-        <button class="btn btn-primary" [disabled]="svc.saving()" (click)="guardar()">
+        <button class="btn btn-primary"
+                [disabled]="!puedeGuardarForm() || svc.saving()"
+                [title]="puedeGuardarForm() ? '' : 'Completa los campos obligatorios del docente'"
+                (click)="guardar()">
           {{ svc.saving() ? 'Guardando...' : 'Guardar' }}
         </button>
       </div>
@@ -402,8 +523,18 @@ interface DocenteFormState {
 }
   `,
 })
-export class MaestrosDocentesComponent implements OnInit {
+export class MaestrosDocentesComponent implements OnInit, AfterViewInit {
+  private readonly instPicker = viewChild(TenantInstitutionPickerComponent);
+  private readonly _tenantReloadReady = setupTenantReload(() => {
+    this.syncPickerDesdeTenant();
+    this.cargarAniosEscolares();
+    this.cargar();
+  }, {
+    skipWhenRequiresSelection: false,
+  });
   private readonly layout = inject(LayoutService);
+  private readonly periodosSvc = inject(MaestrosPeriodosAcademicosService);
+  readonly tenant = inject(TenantContextService);
   readonly svc = inject(MaestrosDocentesService);
   readonly Math = Math;
 
@@ -413,10 +544,38 @@ export class MaestrosDocentesComponent implements OnInit {
   readonly toast = signal<{ msg: string; type: 'ok' | 'error' } | null>(null);
   readonly modalOpen = signal(false);
   readonly editId = signal<number | null>(null);
+  errorForm = signal('');
+  fieldErrors = signal<ErroresCampoDocente>({});
+  camposTocados = signal<Record<string, true>>({});
+  intentoGuardar = signal(false);
+  private readonly formRevision = signal(0);
+
+  readonly puedeGuardarForm = computed(() => {
+    this.formRevision();
+    return docenteFormularioMinimoListo(this.valoresFormulario());
+  });
+
   readonly paginaActual = signal(1);
   readonly totalPaginas = signal(1);
   readonly total = signal(0);
   readonly meta = signal({ activos: 0, horasAsignadas: 0, sobreCarga: 0 });
+  readonly vistaGlobal = signal(false);
+  readonly modoConsulta = signal<TenantInstitutionConsultaModo>(
+    'institution',
+  );
+  readonly requiereSeleccionInstitucion = computed(
+    () =>
+      this.tenant.canSelectInstitution() &&
+      this.modoConsulta() === 'pending',
+  );
+  readonly aniosDisponibles = signal<number[]>([
+    new Date().getFullYear(),
+    new Date().getFullYear() - 1,
+  ]);
+
+  readonly puedeGestionar = computed(
+    () => this.tenant.effectiveInstitutionId() != null,
+  );
 
   readonly POR_PAGINA = 10;
 
@@ -456,11 +615,92 @@ export class MaestrosDocentesComponent implements OnInit {
 
   ngOnInit(): void {
     this.layout.setTitle('Maestros · Docentes');
-    this.cargar();
+    this.inicializarModoConsulta();
+    if (!this.requiereSeleccionInstitucion()) {
+      this.cargarAniosEscolares();
+      this.cargar();
+    }
+    markTenantReloadReady(this._tenantReloadReady);
+  }
+
+  ngAfterViewInit(): void {
+    if (
+      this.tenant.canSelectInstitution() &&
+      this.tenant.activeInstitutionId() != null
+    ) {
+      this.instPicker()?.syncFromTenant();
+    }
+  }
+
+  onModoInstitucion(modo: TenantInstitutionConsultaModo): void {
+    this.modoConsulta.set(modo);
+    this.vistaGlobal.set(modo === 'global');
+    this.paginaActual.set(1);
+    if (modo === 'pending') {
+      this.limpiarListado();
+      return;
+    }
+    this.cargarAniosEscolares();
+    this.cargar(1);
+  }
+
+  private inicializarModoConsulta(): void {
+    if (!this.tenant.canSelectInstitution()) {
+      this.modoConsulta.set('institution');
+      return;
+    }
+    const id = this.tenant.activeInstitutionId();
+    if (id != null) {
+      this.modoConsulta.set('institution');
+      return;
+    }
+    this.modoConsulta.set('pending');
+  }
+
+  private syncPickerDesdeTenant(): void {
+    if (!this.tenant.canSelectInstitution()) return;
+    this.instPicker()?.syncFromTenant();
+    const id = this.tenant.activeInstitutionId();
+    if (id != null) {
+      this.modoConsulta.set('institution');
+      this.vistaGlobal.set(false);
+    } else if (this.modoConsulta() !== 'global') {
+      this.modoConsulta.set('pending');
+      this.vistaGlobal.set(false);
+    }
+  }
+
+  private limpiarListado(): void {
+    this.docentes.set([]);
+    this.total.set(0);
+    this.totalPaginas.set(1);
+    this.meta.set({ activos: 0, horasAsignadas: 0, sobreCarga: 0 });
+    this.vistaGlobal.set(false);
+    this.detalle.set(null);
+  }
+
+  private cargarAniosEscolares(): void {
+    if (this.tenant.requiresSelection()) return;
+    this.periodosSvc.listCatalogoAnios().subscribe({
+      next: (rows) => {
+        const anios = [...new Set(rows.map((r) => r.anio))].sort((a, b) => b - a);
+        if (anios.length) {
+          this.aniosDisponibles.set(anios);
+          if (!anios.includes(this.anioEscolar)) {
+            this.anioEscolar = anios[0];
+          }
+        }
+      },
+      error: () => { /* mantiene años por defecto */ },
+    });
   }
 
   cargar(page = this.paginaActual()): void {
     this.error.set('');
+    if (this.requiereSeleccionInstitucion()) {
+      this.limpiarListado();
+      return;
+    }
     const busqueda = this.filtroBusqueda().trim();
     this.svc.list({
       estado: this.filtroEstado || undefined,
@@ -475,6 +715,7 @@ export class MaestrosDocentesComponent implements OnInit {
         this.totalPaginas.set(data.totalPages);
         this.paginaActual.set(data.page);
         this.meta.set(data.meta);
+        this.vistaGlobal.set(!!data.vistaGlobal);
       },
       error: (err) => this.error.set(err.message),
     });
@@ -539,45 +780,134 @@ export class MaestrosDocentesComponent implements OnInit {
       especialidadCustom: esCustom ? esp : '',
       password: '',
     };
+    this.resetValidacionForm();
     this.modalOpen.set(true);
   }
 
   cerrarModal(): void {
     this.modalOpen.set(false);
     this.editId.set(null);
+    this.resetValidacionForm();
+  }
+
+  private resetValidacionForm(): void {
+    this.fieldErrors.set({});
+    this.camposTocados.set({});
+    this.intentoGuardar.set(false);
+    this.errorForm.set('');
+  }
+
+  private valoresFormulario() {
+    return {
+      esEdicion: !!this.editId(),
+      nombres: this.form.nombres,
+      apellidos: this.form.apellidos,
+      dni: this.form.dni,
+      email: this.form.email,
+      telefono: this.form.telefono,
+      sede: this.form.sede,
+      estado: this.form.estado,
+      especialidad: this.form.especialidad,
+      especialidadCustom: this.form.especialidadCustom,
+      password: this.form.password,
+    };
+  }
+
+  onCampoBlur(key: string): void {
+    this.camposTocados.update((t) => ({ ...t, [key]: true }));
+    this.validarCampoEnVivo(key);
+  }
+
+  onCampoFormChange(key: string): void {
+    this.formRevision.update((n) => n + 1);
+
+    if (this.camposTocados()[key] || this.intentoGuardar() || this.fieldErrors()[key]) {
+      this.validarCampoEnVivo(key);
+    } else {
+      this.quitarErrorCampo(key);
+    }
+
+    if (key === 'especialidad') {
+      if (this.camposTocados()['especialidadCustom']) {
+        this.validarCampoEnVivo('especialidadCustom');
+      }
+      this.quitarErrorCampo(
+        this.form.especialidad === 'Otra especialidad' ? 'especialidad' : 'especialidadCustom',
+      );
+    }
+  }
+
+  private validarCamposMinimosEnVivo(): void {
+    const keys = this.editId()
+      ? ['nombres', 'apellidos', 'dni', 'email', 'especialidad']
+      : ['nombres', 'apellidos', 'dni', 'email', 'especialidad', 'password'];
+    for (const key of keys) {
+      this.camposTocados.update((t) => ({ ...t, [key]: true }));
+      this.validarCampoEnVivo(key);
+    }
+    if (this.form.especialidad === 'Otra especialidad') {
+      this.camposTocados.update((t) => ({ ...t, especialidadCustom: true }));
+      this.validarCampoEnVivo('especialidadCustom');
+    }
+  }
+
+  private validarCampoEnVivo(key: string): void {
+    const err = validarCampoDocente(this.valoresFormulario(), key);
+    if (err) {
+      this.fieldErrors.update((errors) => ({ ...errors, [key]: err }));
+    } else {
+      this.quitarErrorCampo(key);
+    }
+  }
+
+  private quitarErrorCampo(key: string): void {
+    if (!this.fieldErrors()[key]) return;
+    this.fieldErrors.update((errors) => {
+      const next = { ...errors };
+      delete next[key];
+      return next;
+    });
+    if (!Object.keys(this.fieldErrors()).length) this.errorForm.set('');
+  }
+
+  campoError(key: string): string | null {
+    if (!this.camposTocados()[key] && !this.intentoGuardar()) return null;
+    return this.fieldErrors()[key] ?? null;
+  }
+
+  claseCampo(key: string): string {
+    return this.campoError(key) ? 'border-red-400 focus:border-red-500 focus:ring-red-200' : '';
   }
 
   guardar(): void {
-    const nombres = this.form.nombres.trim();
-    const apellidos = this.form.apellidos.trim();
-    const dni = this.form.dni.trim();
-    const email = this.form.email.trim();
-    const especialidad =
-      this.form.especialidad === 'Otra especialidad'
-        ? this.form.especialidadCustom.trim()
-        : this.form.especialidad.trim();
-
-    if (!nombres || !apellidos || !dni || !email || !especialidad) {
-      this.mostrarToast('Complete los campos obligatorios', 'error');
+    this.intentoGuardar.set(true);
+    if (!this.puedeGuardarForm()) {
+      this.validarCamposMinimosEnVivo();
+      this.errorForm.set('Completa los campos obligatorios del docente.');
       return;
     }
 
+    const errors = validarDocenteForm(this.valoresFormulario());
+    this.fieldErrors.set(errors);
+    if (Object.keys(errors).length) {
+      this.errorForm.set(primerErrorDocente(errors) ?? 'Revisa los datos del formulario.');
+      return;
+    }
+
+    this.errorForm.set('');
+
+    const especialidad = resolverEspecialidadDocente(this.valoresFormulario());
     const editId = this.editId();
     const payload = {
-      nombres,
-      apellidos,
-      dni,
-      email,
+      nombres: this.form.nombres.trim(),
+      apellidos: this.form.apellidos.trim(),
+      dni: this.form.dni.trim(),
+      email: this.form.email.trim(),
       telefono: this.form.telefono.trim(),
       sede: this.form.sede.trim() || 'Sede Central',
       estado: this.form.estado,
       especialidad,
     };
-
-    if (!editId && !this.form.password.trim()) {
-      this.mostrarToast('La contraseña es obligatoria para nuevos docentes', 'error');
-      return;
-    }
 
     const req = editId
       ? this.svc.update(editId, {

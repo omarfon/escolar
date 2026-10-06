@@ -3,15 +3,20 @@ import { FormsModule } from '@angular/forms';
 import { NgClass } from '@angular/common';
 import { LayoutService } from '../../../core/layout/services/layout.service';
 import { AuthService } from '../../../core/auth/services/auth.service';
+import { RbacService } from '../rbac/rbac.service';
+import { RbacAuditItem, RbacContext } from '../rbac/rbac.model';
 import { RolesService } from './roles.service';
-import { RolCodigo, RolDto, SeccionPermisos } from './roles.model';
+import { RolDto, SeccionPermisos } from './roles.model';
 
 interface Rol {
-  codigo: RolCodigo;
+  codigo: string;
   label: string;
   descripcion: string;
   color: string;
   esAdmin: boolean;
+  esSistema: boolean;
+  institutionId: number | null;
+  institucionNombre: string | null;
   permisos: Set<string>;
   usuariosCount: number;
 }
@@ -23,6 +28,9 @@ function mapRol(dto: RolDto): Rol {
     descripcion: dto.descripcion,
     color: dto.color,
     esAdmin: dto.esAdmin,
+    esSistema: !!dto.esSistema,
+    institutionId: dto.institutionId ?? null,
+    institucionNombre: dto.institucionNombre ?? null,
     permisos: new Set(dto.permisos),
     usuariosCount: dto.usuariosCount,
   };
@@ -33,11 +41,75 @@ function mapRol(dto: RolDto): Rol {
   standalone: true,
   imports: [FormsModule, NgClass],
   template: `
-    <div class="flex gap-5 h-full">
-      <div class="w-72 shrink-0 space-y-3">
-        <div class="flex items-center justify-between">
-          <h2 class="text-xl font-bold text-gray-800">Roles</h2>
+    <div class="space-y-4">
+      @if (rbacContext(); as ctx) {
+        <div class="card p-4 text-sm text-gray-600">
+          <p class="font-semibold text-gray-800">{{ ctx.institucion.nombre }} · RBAC multi-rol</p>
+          <p class="mt-1">{{ ctx.reglaResolucion }}</p>
+          <p class="text-xs text-gray-400 mt-1">Ámbitos: {{ ambitosLabel(ctx) }}</p>
         </div>
+      }
+
+      <div class="flex gap-2">
+        <button class="btn btn-sm" [class.btn-primary]="vistaActiva() === 'permisos'" [class.btn-secondary]="vistaActiva() !== 'permisos'"
+          (click)="vistaActiva.set('permisos')">Permisos por rol</button>
+        <button class="btn btn-sm" [class.btn-primary]="vistaActiva() === 'auditoria'" [class.btn-secondary]="vistaActiva() !== 'auditoria'"
+          (click)="mostrarAuditoria()">Auditoría RBAC</button>
+      </div>
+    </div>
+
+    @if (vistaActiva() === 'auditoria') {
+      <div class="card mt-4 divide-y divide-gray-100">
+        @if (rbacSvc.loadingAudit()) {
+          <div class="p-8 text-center text-gray-400">Cargando auditoría…</div>
+        } @else if (!auditItems().length) {
+          <div class="p-12 text-center text-gray-500">Sin eventos RBAC registrados.</div>
+        } @else {
+          @for (item of auditItems(); track item.id) {
+            <div class="px-4 py-3 text-sm">
+              <div class="flex flex-wrap gap-2 mb-1">
+                <span class="font-medium">{{ item.descripcion }}</span>
+                <span class="badge badge-gray text-[10px]">{{ entidadLabel(item.entidad) }}</span>
+              </div>
+              <p class="text-xs text-gray-500">{{ item.actorNombre }} · {{ item.fechaDisplay }} {{ item.horaDisplay }}</p>
+            </div>
+          }
+        }
+      </div>
+    } @else {
+    <div class="flex gap-5 h-full mt-4">
+      <div class="w-72 shrink-0 space-y-3">
+        <div class="flex items-center justify-between gap-2">
+          <h2 class="text-xl font-bold text-gray-800">Roles</h2>
+          <button type="button" class="btn btn-primary btn-sm" (click)="abrirCrear()">Nuevo rol</button>
+        </div>
+        @if (creando()) {
+          <div class="card p-4 space-y-3">
+            <p class="text-sm font-semibold text-gray-800">Rol de esta sede</p>
+            <input class="form-input" placeholder="Nombre, ej. Secretaría" [(ngModel)]="nuevoLabel" name="nuevoLabel" />
+            <input class="form-input" placeholder="Descripción" [(ngModel)]="nuevoDescripcion" name="nuevoDescripcion" />
+            <select class="form-select" [(ngModel)]="nuevoBasadoEn" name="nuevoBasadoEn">
+              <option value="">Seleccione una plantilla</option>
+              <option value="DIRECTOR">Partir de Director</option>
+              <option value="SECRETARIA">Partir de Secretaría</option>
+              <option value="DOCENTE">Partir de Docente</option>
+              <option value="TESORERO">Partir de Tesorero</option>
+              <option value="BIBLIOTECARIO">Partir de Bibliotecario</option>
+            </select>
+            @if (puedeElegirInstitucion()) {
+              <select class="form-select" [(ngModel)]="nuevoInstitucionId" name="nuevoInstitucionId">
+                <option [ngValue]="null">Institución</option>
+                @for (ie of instituciones(); track ie.id) {
+                  <option [ngValue]="ie.id">{{ ie.nombre }}</option>
+                }
+              </select>
+            }
+            <div class="flex gap-2">
+              <button type="button" class="btn btn-primary btn-sm" [disabled]="guardando()" (click)="crearRol()">Crear</button>
+              <button type="button" class="btn btn-secondary btn-sm" (click)="creando.set(false)">Cancelar</button>
+            </div>
+          </div>
+        }
 
         @if (cargando()) {
           <div class="card p-6 text-center text-sm text-gray-500">Cargando roles...</div>
@@ -55,6 +127,9 @@ function mapRol(dto: RolDto): Rol {
                     <span class="icon text-base">shield</span>
                   </div>
                   <span class="font-semibold text-gray-800 text-sm">{{ rol.label }}</span>
+                  @if (rol.institucionNombre) {
+                    <span class="text-[10px] text-gray-400">{{ rol.institucionNombre }}</span>
+                  }
                 </div>
                 @if (rol.esAdmin) {
                   <span class="badge badge-indigo text-xs">Admin</span>
@@ -96,7 +171,7 @@ function mapRol(dto: RolDto): Rol {
                   </div>
                 </div>
                 <div class="flex items-center gap-2">
-                  @if (!rolActivo()!.esAdmin) {
+                  @if (!rolFijo()) {
                     <button class="btn btn-secondary btn-sm" (click)="desmarcarTodos()">
                       <span class="icon">remove_done</span> Quitar todos
                     </button>
@@ -104,17 +179,23 @@ function mapRol(dto: RolDto): Rol {
                       <span class="icon">done_all</span> Marcar todos
                     </button>
                   }
+                  @if (!rolFijo()) {
                   <button class="btn btn-primary btn-sm" (click)="guardarPermisos()"
                     [disabled]="!cambiosPendientes() || guardando()">
                     <span class="icon">save</span> {{ guardando() ? 'Guardando...' : 'Guardar' }}
                   </button>
+                  }
                 </div>
               </div>
 
-              @if (rolActivo()!.esAdmin) {
+              @if (rolFijo()) {
                 <div class="mt-3 flex items-center gap-2 p-3 bg-indigo-50 border border-indigo-200 rounded-lg text-sm text-indigo-700">
                   <span class="icon icon-sm">info</span>
-                  El rol Administrador tiene acceso total al sistema y no puede ser modificado.
+                  @if (rolActivo()!.esSistema) {
+                    Este rol administra la sede: configura la institución y crea los demás roles. Sus permisos se conservan.
+                  } @else {
+                    El rol Administrador tiene acceso total al sistema y no puede ser modificado.
+                  }
                 </div>
               }
 
@@ -142,7 +223,7 @@ function mapRol(dto: RolDto): Rol {
                       <span class="text-xs text-gray-400">
                         {{ permisosSeccion(sec) }}/{{ sec.permisos.length }}
                       </span>
-                      @if (!rolActivo()!.esAdmin) {
+                      @if (!rolFijo()) {
                         <button class="text-xs text-indigo-500 hover:underline"
                           (click)="toggleSeccion(sec)">
                           {{ todaSeccionActiva(sec) ? 'Quitar' : 'Todos' }}
@@ -158,11 +239,11 @@ function mapRol(dto: RolDto): Rol {
                   <div class="space-y-1.5">
                     @for (permiso of sec.permisos; track permiso.codigo) {
                       <label class="flex items-center gap-2.5 cursor-pointer group"
-                        [class.opacity-60]="rolActivo()!.esAdmin">
+                        [class.opacity-60]="rolFijo()">
                         <input type="checkbox"
                           class="w-4 h-4 rounded border-gray-300 text-indigo-600 accent-indigo-600 shrink-0"
                           [checked]="tienePermiso(permiso.codigo)"
-                          [disabled]="rolActivo()!.esAdmin"
+                          [disabled]="rolFijo()"
                           (change)="togglePermiso(permiso.codigo, $event)">
                         <span class="text-xs text-gray-600 group-hover:text-gray-900 transition-colors leading-tight">
                           {{ permiso.label }}
@@ -180,6 +261,7 @@ function mapRol(dto: RolDto): Rol {
         }
       </div>
     </div>
+    }
 
     @if (notificacion(); as n) {
       <div class="fixed bottom-5 right-5 px-5 py-3 rounded-xl shadow-lg flex items-center gap-2 animate-fade-in z-50"
@@ -193,7 +275,12 @@ function mapRol(dto: RolDto): Rol {
 export class RolesComponent implements OnInit {
   private readonly layout = inject(LayoutService);
   private readonly rolesService = inject(RolesService);
+  readonly rbacSvc = inject(RbacService);
   private readonly auth = inject(AuthService);
+
+  readonly vistaActiva = signal<'permisos' | 'auditoria'>('permisos');
+  readonly rbacContext = signal<RbacContext | null>(null);
+  readonly auditItems = signal<RbacAuditItem[]>([]);
 
   readonly secciones = signal<SeccionPermisos[]>([]);
   readonly totalPermisos = computed(() =>
@@ -204,6 +291,13 @@ export class RolesComponent implements OnInit {
   readonly guardando = this.rolesService.saving;
   readonly error = signal<string | null>(null);
   readonly notificacion = signal<{ mensaje: string; tipo: 'success' | 'error' } | null>(null);
+  readonly creando = signal(false);
+  readonly instituciones = signal<{ id: number; nombre: string }[]>([]);
+  readonly puedeElegirInstitucion = computed(() => this.auth.hasRole('SIAGIE'));
+  nuevoLabel = '';
+  nuevoDescripcion = '';
+  nuevoBasadoEn = '';
+  nuevoInstitucionId: number | null = null;
 
   private readonly _roles = signal<Rol[]>([]);
   readonly roles = this._roles.asReadonly();
@@ -226,6 +320,26 @@ export class RolesComponent implements OnInit {
   ngOnInit(): void {
     this.layout.setTitle('Roles y Permisos');
     this.cargarRoles();
+    this.rbacSvc.loadContext().subscribe({
+      next: ctx => this.rbacContext.set(ctx),
+      error: () => this.rbacContext.set(null),
+    });
+  }
+
+  mostrarAuditoria(): void {
+    this.vistaActiva.set('auditoria');
+    this.rbacSvc.loadAudit({ page: 1, pageSize: 50 }).subscribe({
+      next: res => this.auditItems.set(res.items),
+      error: () => this.auditItems.set([]),
+    });
+  }
+
+  entidadLabel(entidad: string): string {
+    return entidad === 'user_role_assignment' ? 'Asignación usuario' : 'Permisos de rol';
+  }
+
+  ambitosLabel(ctx: RbacContext): string {
+    return ctx.ambitos.map(a => a.label).join(' · ');
   }
 
   private cargarRoles(): void {
@@ -237,6 +351,55 @@ export class RolesComponent implements OnInit {
       },
       error: () => {
         this.error.set('No se pudieron cargar los roles. Verifica que el backend este activo.');
+      },
+    });
+  }
+
+  rolFijo(): boolean {
+    const rol = this.rolActivo();
+    return !!rol && (rol.esAdmin || rol.esSistema);
+  }
+
+  abrirCrear(): void {
+    this.creando.set(true);
+    this.nuevoLabel = '';
+    this.nuevoDescripcion = '';
+    this.nuevoBasadoEn = '';
+    this.nuevoInstitucionId = null;
+    if (this.puedeElegirInstitucion() && !this.instituciones().length) {
+      this.rolesService.instituciones().subscribe({
+        next: (rows) => this.instituciones.set(rows),
+        error: () => this.instituciones.set([]),
+      });
+    }
+  }
+
+  crearRol(): void {
+    const label = this.nuevoLabel.trim();
+    if (!label) {
+      this.mostrarNotificacion('Indique el nombre del rol', 'error');
+      return;
+    }
+    if (!this.nuevoBasadoEn) {
+      this.mostrarNotificacion('Elija una plantilla de permisos para el rol', 'error');
+      return;
+    }
+    this.rolesService.crear({
+      label,
+      descripcion: this.nuevoDescripcion.trim(),
+      basadoEn: this.nuevoBasadoEn,
+      institutionId: this.puedeElegirInstitucion() ? this.nuevoInstitucionId ?? undefined : undefined,
+    }).subscribe({
+      next: (creado) => {
+        const rol = mapRol(creado);
+        this._roles.update((list) => [...list, rol]);
+        this.seleccionarRol(rol);
+        this.creando.set(false);
+        this.mostrarNotificacion(`Rol ${rol.label} creado para la sede`, 'success');
+      },
+      error: (err) => {
+        const message = err?.error?.message;
+        this.mostrarNotificacion(Array.isArray(message) ? message[0] : message || 'No se pudo crear el rol', 'error');
       },
     });
   }
@@ -296,10 +459,13 @@ export class RolesComponent implements OnInit {
 
   guardarPermisos(): void {
     const rol = this._rolActivo();
-    if (!rol || rol.esAdmin) return;
+    if (!rol || rol.esAdmin || rol.esSistema) return;
 
     const permisos = [...this._permisosEditando()];
-    this.rolesService.updatePermissions(rol.codigo, { permisos }).subscribe({
+    this.rolesService.updatePermissions(rol.codigo, {
+      permisos,
+      motivo: `Actualización de permisos del rol ${rol.label}`,
+    }).subscribe({
       next: (actualizado) => {
         const actualizadoRol = mapRol(actualizado);
         this._roles.update((list) =>
@@ -308,12 +474,12 @@ export class RolesComponent implements OnInit {
         this._rolActivo.set(actualizadoRol);
         this._permisosEditando.set(new Set(actualizadoRol.permisos));
         this.mostrarNotificacion(
-          this.auth.userRoles().includes(rol.codigo)
+          this.auth.userRoles().some((codigo) => codigo === rol.codigo)
             ? `Permisos guardados para ${actualizadoRol.label}. Tu sesión se actualizó.`
             : `Permisos guardados para ${actualizadoRol.label}. Los usuarios con ese rol deben refrescar la página o volver a iniciar sesión.`,
           'success',
         );
-        if (this.auth.userRoles().includes(rol.codigo)) {
+        if (this.auth.userRoles().some((codigo) => codigo === rol.codigo)) {
           this.auth.syncSessionFromServer().subscribe({ error: () => {} });
         }
       },

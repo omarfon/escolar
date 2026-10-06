@@ -15,12 +15,17 @@ export class HistorialAcademicoService {
   readonly loading = signal(false);
   readonly loadingDetalle = signal(false);
 
-  loadList(q?: string): Observable<HistorialAcademicoListItem[]> {
+  loadList(q?: string, page = 1, pageSize = 20): Observable<{ items: HistorialAcademicoListItem[]; total: number }> {
     this.loading.set(true);
-    let params = new HttpParams();
+    let params = new HttpParams()
+      .set('page', String(page))
+      .set('pageSize', String(pageSize));
     if (q?.trim()) params = params.set('q', q.trim());
     return this.http
-      .get<HistorialAcademicoListItem[]>(`${this.base}/historial-academico`, { params })
+      .get<{ items: HistorialAcademicoListItem[]; total: number; page: number; pageSize: number }>(
+        `${this.base}/historial-academico`,
+        { params },
+      )
       .pipe(
         catchError((err) => throwError(() => new Error(this.extractError(err)))),
         finalize(() => this.loading.set(false)),

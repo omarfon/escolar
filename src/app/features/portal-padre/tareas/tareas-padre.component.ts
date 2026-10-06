@@ -35,7 +35,7 @@ import { HijoResumen } from '../seguimiento/seguimiento.model';
         </p>
       </div>
 
-      <app-hijo-selector [autoLoad]="false" (hijoChange)="onHijoChange($event)" />
+      <app-hijo-selector (hijoChange)="onHijoChange($event)" />
 
       @if (hijosSvc.hijoSeleccionado(); as hijo) {
         <div class="flex justify-end">
@@ -198,10 +198,6 @@ export class TareasPadreComponent implements OnInit {
 
   ngOnInit(): void {
     this.layout.setTitle('Tareas');
-    this.hijosSvc.loadHijos().subscribe(hijos => {
-      const hijo = this.hijosSvc.hijoSeleccionado() ?? hijos[0];
-      if (hijo) this.cargarHijo(hijo);
-    });
   }
 
   onHijoChange(hijo: HijoResumen): void {

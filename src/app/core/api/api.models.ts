@@ -87,6 +87,19 @@ export interface ApiExpedienteDocumento {
   imagenUrl?: string;
 }
 
+export interface ApiDocumentoArchivo {
+  versionId: number;
+  version: number;
+  nombreArchivo: string;
+  mimeType: string;
+  tamanoBytes: number;
+  sha256: string;
+  url: string;
+  vigenciaHasta: string | null;
+  uploadedAt: string;
+  uploadedByNombre: string;
+}
+
 export interface ApiDocumentoMatricula {
   id?: number;
   tipo: string;
@@ -96,6 +109,25 @@ export interface ApiDocumentoMatricula {
   fechaEntrega: string;
   imagenUrl?: string;
   registrado: boolean;
+  archivo?: ApiDocumentoArchivo | null;
+}
+
+export interface StudentDocumentsContext {
+  institucion: {
+    nombre: string;
+    siglas: string;
+    anioEscolar: number;
+    ugel: string;
+    dre: string;
+  };
+  permisoConsulta: string;
+  permisoCarga: string;
+  permisoDescarga: string;
+  maxBytes: number;
+  maxMb: number;
+  formatosPermitidos: string[];
+  mimeTypes: string[];
+  storageDriver?: 'local' | 'minio';
 }
 
 export interface ApiStudentDocumentsResponse {
@@ -157,6 +189,13 @@ export interface ApiExpediente {
   asistenciaPct: number;
   conductaNota: string;
   documentos: ApiExpedienteDocumento[];
+  estadoDocumento?: string;
+  sinDocumentoMotivo?: string;
+  sinDocumentoSustento?: string;
+  matriculaExcepcional?: boolean;
+  excepcionalMotivo?: string;
+  excepcionalSustento?: string;
+  edadNormativaAlRegistro?: number | null;
 }
 
 export interface ApiCourse {

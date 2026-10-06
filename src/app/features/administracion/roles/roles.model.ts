@@ -20,13 +20,23 @@ export interface SeccionPermisos {
 }
 
 export interface RolDto {
-  codigo: RolCodigo;
+  codigo: string;
   label: string;
   descripcion: string;
   color: string;
   esAdmin: boolean;
   usuariosCount: number;
   permisos: string[];
+  institutionId?: number | null;
+  institucionNombre?: string | null;
+  esSistema?: boolean;
+}
+
+export interface CreateRolePayload {
+  label: string;
+  descripcion?: string;
+  basadoEn?: string;
+  institutionId?: number;
 }
 
 export interface RolesResponse {
@@ -36,4 +46,5 @@ export interface RolesResponse {
 
 export interface UpdateRolePermissionsPayload {
   permisos: string[];
+  motivo?: string;
 }

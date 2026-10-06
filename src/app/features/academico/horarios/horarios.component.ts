@@ -1,8 +1,10 @@
-﻿import { Component, inject, OnDestroy, OnInit, signal, computed } from '@angular/core';
+﻿import { Component, computed, inject, OnDestroy, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { NgClass } from '@angular/common';
 import { Subscription } from 'rxjs';
 import { LayoutService } from '../../../core/layout/services/layout.service';
+import { TenantContextService } from '../../../core/tenant/tenant-context.service';
+import { markTenantReloadReady, setupTenantReload } from '../../../core/tenant/tenant-reload.util';
 import { OverlayPortalDirective } from '../../../core/overlay/overlay-portal.directive';
 import {
   escapeHtml,
@@ -61,7 +63,7 @@ const PRINT_PREVIEW_FRAME_ID = 'horarios-print-preview-frame';
           </svg>
           Imprimir
         </button>
-        @if (tab() === 'horario') {
+        @if (tab() === 'horario' && puedeGestionar()) {
           <button class="btn text-sm gap-1.5" (click)="editMode.set(!editMode())"
             [ngClass]="editMode() ? 'btn-danger' : 'btn-primary'">
             @if (editMode()) {
@@ -101,6 +103,16 @@ const PRINT_PREVIEW_FRAME_ID = 'horarios-print-preview-frame';
   </div>
 
   <div class="p-6 max-w-[1400px] mx-auto">
+
+    @if (tenant.requiresSelection()) {
+      <div class="mb-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 text-sm">
+        Seleccione una institución educativa en la barra superior para gestionar horarios.
+      </div>
+    } @else if (tenant.activeInstitutionLabel(); as ie) {
+      <p class="mb-4 text-xs text-gray-500">
+        Institución: <span class="font-semibold text-gray-700">{{ ie }}</span>
+      </p>
+    }
 
     @if (loadError()) {
       <div class="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
@@ -724,10 +736,18 @@ const PRINT_PREVIEW_FRAME_ID = 'horarios-print-preview-frame';
   `
 })
 export class HorariosComponent implements OnInit, OnDestroy {
+  private readonly _tenantReloadReady = setupTenantReload(() => this.cargarDatos(), {
+    onBeforeReload: () => this.limpiarDatos(),
+  });
   readonly svc = inject(HorariosAdminService);
   private readonly layout = inject(LayoutService);
+  readonly tenant = inject(TenantContextService);
   private cargarSub?: Subscription;
   private saveSub?: Subscription;
+
+  readonly puedeGestionar = computed(
+    () => !this.tenant.requiresSelection(),
+  );
 
   readonly Math = Math;
   readonly NIVELES: Nivel[] = ['Inicial', 'Primaria', 'Secundaria'];
@@ -844,6 +864,7 @@ export class HorariosComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.layout.setTitle('Horarios');
     this.cargarDatos();
+    markTenantReloadReady(this._tenantReloadReady);
   }
 
   ngOnDestroy(): void {
@@ -851,9 +872,25 @@ export class HorariosComponent implements OnInit, OnDestroy {
     this.saveSub?.unsubscribe();
   }
 
+  private limpiarDatos(): void {
+    this._periodos.set([]);
+    this._cursos.set([]);
+    this._docentes.set([]);
+    this._entradas.set([]);
+    this._salones.set([]);
+    this._conflictos.set([]);
+    this._gestion.set({ conHorario: 0, enProgreso: 0, sinHorario: 0, clases: [] });
+    this.editMode.set(false);
+    this.loadError.set('');
+  }
+
   cargarDatos(): void {
     this.loadError.set('');
     this.cargarSub?.unsubscribe();
+    if (this.tenant.requiresSelection()) {
+      this.limpiarDatos();
+      return;
+    }
     this.cargarSub = this.svc.loadContext(this.anioEscolar()).subscribe({
       next: (ctx) => {
         this.anioEscolar.set(ctx.anioEscolar);
