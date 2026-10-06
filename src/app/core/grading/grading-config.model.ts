@@ -69,3 +69,54 @@ export function matchesEvalNav(mode: EvalNavMode | undefined, cfg: GradingConfig
   if (mode === 'numerico') return cfg.usesNumeric;
   return cfg.usesCompetencias;
 }
+
+export type TipoEscalaCurriculum = 'numerica' | 'literal' | 'competencia';
+
+export interface GradingScaleNivelItem {
+  curriculumId: number;
+  nivel: string;
+  anio: number;
+  estado: string;
+  version: string;
+  tipoEscala: TipoEscalaCurriculum;
+  tipoEscalaLabel: string;
+  modalidad: string;
+  editable: boolean;
+}
+
+export interface ValidacionRangosConfig {
+  min: number;
+  max: number;
+  notaMinimaAprobatoria: number;
+  escalaLogro: EscalaLogroConfig;
+  mensaje: string;
+  mensajeAprobacion: string;
+}
+
+export interface GradingScaleContext {
+  institucion: {
+    id: number;
+    nombre: string;
+    siglas: string;
+    anioEscolar: number;
+    ugel: string;
+    dre: string;
+  } | null;
+  config: GradingConfig & { modalidad: string; modalidadLabel: string };
+  escalasPorNivel: GradingScaleNivelItem[];
+  permisos: { consultar: boolean; configurar: boolean };
+  validacionRangos: ValidacionRangosConfig;
+  alcance: string;
+}
+
+export interface GradingScaleHistoryItem {
+  id: number;
+  alcance: string;
+  nivel: string;
+  motivo: string;
+  actorNombre: string;
+  actorRol: string;
+  valorAnterior: Record<string, unknown> | null;
+  valorNuevo: Record<string, unknown>;
+  createdAt: string;
+}

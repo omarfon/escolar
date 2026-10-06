@@ -1,15 +1,20 @@
-﻿import { Component, computed, inject, input, OnInit, signal } from '@angular/core';
+import { Component, computed, inject, input, OnInit, signal } from '@angular/core';
 import { NgClass } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
+import { AuthService } from '../../../core/auth/services/auth.service';
 import { LayoutService } from '../../../core/layout/services/layout.service';
 import { GradingConfigService } from '../../../core/grading/grading-config.service';
 import { PortalDocenteCursoCard } from '../../portal-docente/portal-docente.model';
 import { InstitucionalService } from '../../administracion/institucional/institucional.service';
+import { MaestrosPeriodosAcademicosService } from '../../matricula/maestros/periodos-academicos/periodos-academicos.service';
 import {
   AlumnoCompetencia,
   AreaCompetencia,
   buildGradoOptions,
   calcPromedio,
+  CompetencyMatrixValidation,
+  CompetencyRegistryContextItem,
   eKey,
   GradoFiltroOption,
   NCFG,
@@ -25,7 +30,7 @@ type IdMap = Map<string, number>;
 @Component({
   selector: 'app-competencias',
   standalone: true,
-  imports: [NgClass, FormsModule],
+  imports: [NgClass, FormsModule, RouterLink],
   template: `
 @if (!grading.usesCompetencias()) {
   <div class="card p-8 text-center space-y-3 animate-fade-in">
@@ -70,6 +75,13 @@ type IdMap = Map<string, number>;
       }
     </div>
     <div class="flex gap-2">
+      @if (puedeVerAuditoria()) {
+        <a class="btn btn-secondary text-sm gap-1.5"
+           [routerLink]="['/evaluacion/auditoria-competencias']"
+           [queryParams]="{ bimestre: selBimestre() }">
+          <span class="icon icon-sm">history_edu</span> Ver historial
+        </a>
+      }
       <button class="btn btn-secondary text-sm gap-1.5" (click)="cargar()" [disabled]="loading()">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
@@ -77,8 +89,8 @@ type IdMap = Map<string, number>;
         Actualizar
       </button>
       <button class="btn btn-primary text-sm gap-2" (click)="guardar()"
-        [disabled]="!hasChanges() || saving() || loading() || !bimestreHabilitado()"
-        [ngClass]="!hasChanges() || saving() || !bimestreHabilitado() ? 'opacity-50 cursor-not-allowed' : ''">
+        [disabled]="!hasChanges() || saving() || loading() || !edicionPermitida()"
+        [ngClass]="!hasChanges() || saving() || !edicionPermitida() ? 'opacity-50 cursor-not-allowed' : ''">
         @if (hasChanges()) {
           <span class="w-2 h-2 rounded-full bg-amber-300 shrink-0"></span>
         }
@@ -90,31 +102,23 @@ type IdMap = Map<string, number>;
     </div>
   </div>
   } @else {
-  <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-    <div>
-      <p class="text-sm text-gray-500">
-        Niveles de logro · {{ selNivel() }} {{ selGrado() }} {{ selSeccion() }}
-        @if (cursoInicial()?.cursoNombre) { · {{ cursoInicial()!.cursoNombre }} }
-        @if (anioEscolar()) { · {{ anioEscolar() }} }
-      </p>
-      @if (bimestreActual()) {
-        <p class="text-xs text-amber-600 mt-1">
-          Periodo actual: {{ bimestreActual() }}° bimestre — solo B1 a B{{ bimestreActual() }} habilitados
-        </p>
-      }
-    </div>
-    <div class="flex gap-2 shrink-0">
-      <button class="btn btn-secondary btn-sm" (click)="cargar()" [disabled]="loading()">Actualizar</button>
-      <button class="btn btn-primary btn-sm" (click)="guardar()"
-        [disabled]="!hasChanges() || saving() || loading() || !bimestreHabilitado()">
-        {{ saving() ? 'Guardando…' : 'Guardar cambios' }}
-      </button>
-    </div>
+  <div class="flex justify-end gap-2 shrink-0">
+    <button class="btn btn-secondary btn-sm" (click)="cargar()" [disabled]="loading()">Actualizar</button>
+    <button class="btn btn-primary btn-sm" (click)="guardar()"
+      [disabled]="!hasChanges() || saving() || loading() || !edicionPermitida()">
+      {{ saving() ? 'Guardando…' : 'Guardar cambios' }}
+    </button>
   </div>
   }
 
   @if (error()) {
     <div class="card p-4 border-red-200 bg-red-50 text-red-700 text-sm">{{ error() }}</div>
+  }
+
+  @if (validacion()?.actaCerrada) {
+    <div class="card p-4 border-amber-200 bg-amber-50 text-amber-900 text-sm">
+      El acta de este salón y bimestre está cerrada. Puede consultar las calificaciones pero no modificarlas.
+    </div>
   }
 
   <!-- Filtros -->
@@ -124,6 +128,35 @@ type IdMap = Map<string, number>;
         <span class="badge badge-indigo">{{ selNivel() }}</span>
         <span class="font-semibold text-gray-800">{{ selGrado() }} — Sección {{ selSeccion() }}</span>
       </div>
+    } @else if (service.loadingContexts()) {
+      <p class="text-sm text-gray-400">Cargando aulas disponibles…</p>
+    } @else if (contextos().length) {
+      <div class="flex items-center gap-2 flex-1 min-w-[200px]">
+        <label class="text-xs text-gray-500 font-medium uppercase tracking-wide">Aula</label>
+        <select class="form-input text-sm flex-1 min-w-[220px]" [ngModel]="contextoId()"
+          (ngModelChange)="seleccionarContexto($event)">
+          @for (ctx of contextos(); track ctx.id) {
+            <option [value]="ctx.id">
+              {{ ctx.nivel }} {{ ctx.grado }} {{ ctx.seccion }} — {{ ctx.totalAlumnos }} alumno(s)
+            </option>
+          }
+        </select>
+      </div>
+      @if (contextoActivo(); as ctx) {
+        <div class="flex flex-wrap gap-2 items-center">
+          <span class="text-xs text-gray-500 font-medium uppercase tracking-wide">Curso</span>
+          @for (c of ctx.cursos; track c.cursoId) {
+            <button type="button"
+              class="px-3 py-1 rounded-full text-sm border transition-colors"
+              [ngClass]="selCursoId() === c.cursoId
+                ? 'bg-indigo-50 text-indigo-700 border-indigo-300 font-medium'
+                : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-200'"
+              (click)="seleccionarCurso(c.cursoId)">
+              {{ c.nombre }}
+            </button>
+          }
+        </div>
+      }
     } @else {
     <div class="flex items-center gap-2">
       <label class="text-xs text-gray-500 font-medium uppercase tracking-wide">Nivel académico</label>
@@ -172,15 +205,38 @@ type IdMap = Map<string, number>;
 
   @if (loading()) {
     <div class="card p-8 text-center text-gray-500">Cargando evaluaciones…</div>
+  } @else if (validacion()?.codigo !== 'ok' && validacion()?.codigo !== 'acta_cerrada' && validacion()?.mensaje) {
+    <div class="card p-8 text-center space-y-3">
+      <div class="text-4xl">📋</div>
+      <p class="text-sm text-gray-700 font-medium">{{ validacion()!.mensaje }}</p>
+      <p class="text-xs text-gray-400">
+        Periodo en curso: {{ validacion()!.bimestreActual }}° bimestre · A.E. {{ validacion()!.anioEscolar }}
+        @if (validacion()!.periodosConfigurados) {
+          · {{ validacion()!.periodosConfigurados }} bimestre(s) configurados
+        }
+      </p>
+      @if (validacion()!.codigo === 'sin_competencias') {
+        <p class="text-xs text-indigo-600">
+          @if (validacion()!.enMallaPorAsignacion) {
+            La malla confirma el curso ({{ validacion()!.mallaHoras }}h · {{ validacion()!.mallaDocente }}).
+            Falta cargar las competencias en Currículas → Competencias.
+          } @else {
+            Vaya a Currículas → Competencias y cargue las competencias del curso.
+          }
+        </p>
+      } @else if (validacion()!.codigo === 'grado_no_malla' || validacion()!.codigo === 'curso_no_malla') {
+        <p class="text-xs text-indigo-600">Revise Currículas → Malla curricular y confirme que el curso figure en el grado {{ selGrado() }}.</p>
+      }
+    </div>
   } @else if (!areas().length) {
     <div class="card p-8 text-center text-gray-500">
       @if (modoEmbeddido() && cursoInicial()?.cursoNombre) {
-        No hay competencias configuradas para <strong>{{ cursoInicial()!.cursoNombre }}</strong>
-        en {{ selNivel() }} {{ selGrado() }} {{ selSeccion() }}.
+        No hay competencias disponibles para <strong>{{ cursoInicial()!.cursoNombre }}</strong>
+        en el {{ selBimestre() }}° bimestre ({{ selNivel() }} {{ selGrado() }} {{ selSeccion() }}).
       } @else {
-        No hay competencias configuradas para {{ selNivel() }} {{ selGrado() }} {{ selSeccion() }}.
+        No hay competencias disponibles para el {{ selBimestre() }}° bimestre en {{ selNivel() }} {{ selGrado() }} {{ selSeccion() }}.
       }
-      <p class="text-xs mt-2 text-gray-400">Verifica la malla curricular del curso asignado.</p>
+      <p class="text-xs mt-2 text-gray-400">Verifique la malla curricular del curso asignado.</p>
     </div>
   } @else {
 
@@ -393,8 +449,10 @@ type IdMap = Map<string, number>;
 })
 export class CompetenciasComponent implements OnInit {
   private readonly layout = inject(LayoutService);
-  private readonly service = inject(CompetenciasService);
+  readonly service = inject(CompetenciasService);
+  private readonly auth = inject(AuthService);
   private readonly institucional = inject(InstitucionalService);
+  private readonly periodosSvc = inject(MaestrosPeriodosAcademicosService);
   readonly grading = inject(GradingConfigService);
 
   readonly cursoInicial = input<PortalDocenteCursoCard | null>(null);
@@ -418,12 +476,14 @@ export class CompetenciasComponent implements OnInit {
   selNivel = signal('Primaria');
   selGrado = signal('4°');
   selSeccion = signal('A');
-  selBimestre = signal(2);
+  selBimestre = signal(1);
   selAlumno = signal<AlumnoCompetencia | null>(null);
   activePicker = signal<string | null>(null);
   hasChanges = signal(false);
   bimestreActual = signal(1);
   bimestreHabilitado = signal(true);
+  validacion = signal<CompetencyMatrixValidation | null>(null);
+  private anioEscolarConsulta: number | null = null;
   periodoResuelto = signal(false);
   toast = signal<{ msg: string; tipo: 'ok' | 'err' } | null>(null);
   error = signal<string | null>(null);
@@ -436,6 +496,10 @@ export class CompetenciasComponent implements OnInit {
   nivelesInst = signal<string[]>(['Inicial', 'Primaria', 'Secundaria']);
   gradosPorNivel = signal<Record<string, GradoFiltroOption[]>>({});
   seccionesPorGrado = signal<Record<string, string[]>>({});
+  contextos = signal<CompetencyRegistryContextItem[]>([]);
+  contextoId = signal('');
+  selCursoId = signal<number | null>(null);
+  permisos = signal({ consultar: true, registrar: false });
 
   private toastTimer?: ReturnType<typeof setTimeout>;
 
@@ -449,6 +513,14 @@ export class CompetenciasComponent implements OnInit {
     const key = `${this.selNivel()}|${this.selGrado()}`;
     return this.seccionesPorGrado()[key] ?? ['A', 'B', 'C'];
   });
+
+  contextoActivo = computed(() =>
+    this.contextos().find((c) => c.id === this.contextoId()) ?? null,
+  );
+
+  edicionPermitida = computed(
+    () => this.bimestreHabilitado() && !this.validacion()?.edicionBloqueada,
+  );
 
   stats = computed((): Record<NivelLogro, number> & { total: number } => {
     const area = this.areaActual();
@@ -479,15 +551,26 @@ export class CompetenciasComponent implements OnInit {
       this.modoEmbeddido() ? 'Competencias — Curso asignado' : 'Evaluación por Competencias',
     );
     this.aplicarFiltroCursoInicial();
-    this.service.loadPeriodMeta().subscribe({
-      next: (meta) => {
-        this.aplicarPeriodoActual(meta.bimestreActual);
+    this.periodosSvc.resolveContext().subscribe({
+      next: (ctx) => {
+        const bimestre = ctx.periodoActual?.numero ?? 1;
+        this.anioEscolarConsulta = ctx.anioEscolar;
+        this.aplicarPeriodoActual(bimestre, true);
         this.periodoResuelto.set(true);
         this.iniciarDatos();
       },
       error: () => {
-        this.periodoResuelto.set(true);
-        this.iniciarDatos();
+        this.service.loadPeriodMeta().subscribe({
+          next: (meta) => {
+            this.aplicarPeriodoActual(meta.bimestreActual, true);
+            this.periodoResuelto.set(true);
+            this.iniciarDatos();
+          },
+          error: () => {
+            this.periodoResuelto.set(true);
+            this.iniciarDatos();
+          },
+        });
       },
     });
   }
@@ -496,9 +579,13 @@ export class CompetenciasComponent implements OnInit {
     return bimestre <= this.bimestreActual();
   }
 
-  private aplicarPeriodoActual(actual: number): void {
+  puedeVerAuditoria(): boolean {
+    return this.auth.hasAnyPermiso('evaluacion.reportes', 'admin.reportes');
+  }
+
+  private aplicarPeriodoActual(actual: number, forzarSeleccion = false): void {
     this.bimestreActual.set(actual);
-    if (this.selBimestre() > actual) {
+    if (forzarSeleccion || this.selBimestre() > actual) {
       this.selBimestre.set(actual);
     }
     this.bimestreHabilitado.set(this.selBimestre() <= actual);
@@ -510,6 +597,26 @@ export class CompetenciasComponent implements OnInit {
       return;
     }
 
+    this.service.loadRegistryContext(this.selBimestre()).subscribe({
+      next: (res) => {
+        this.bimestreActual.set(res.bimestreActual);
+        this.anioEscolarConsulta = res.anioEscolar;
+        this.permisos.set(res.permisos);
+        this.contextos.set(res.contexts);
+        if (res.contexts.length) {
+          const first = res.contexts[0];
+          this.contextoId.set(first.id);
+          this.aplicarContexto(first);
+          this.cargar();
+          return;
+        }
+        this.cargarDesdeInstitucional();
+      },
+      error: () => this.cargarDesdeInstitucional(),
+    });
+  }
+
+  private cargarDesdeInstitucional(): void {
     this.institucional.loadEducationLevels().subscribe({
       next: (niveles) => {
         const activos = niveles.filter((n) => n.activo !== false);
@@ -523,6 +630,34 @@ export class CompetenciasComponent implements OnInit {
       },
       error: () => this.cargar(),
     });
+  }
+
+  seleccionarContexto(id: string): void {
+    const ctx = this.contextos().find((c) => c.id === id);
+    if (!ctx) return;
+    this.contextoId.set(id);
+    this.aplicarContexto(ctx);
+    this.cargar();
+  }
+
+  seleccionarCurso(cursoId: number): void {
+    if (this.selCursoId() === cursoId) return;
+    this.selCursoId.set(cursoId);
+    const ctx = this.contextoActivo();
+    const curso = ctx?.cursos.find((c) => c.cursoId === cursoId);
+    if (curso && ctx?.curriculumId) {
+      this.curriculumId.set(ctx.curriculumId);
+    }
+    this.cargar();
+  }
+
+  private aplicarContexto(ctx: CompetencyRegistryContextItem): void {
+    this.selNivel.set(ctx.nivel);
+    this.selGrado.set(ctx.grado);
+    this.selSeccion.set(ctx.seccion);
+    if (ctx.curriculumId) this.curriculumId.set(ctx.curriculumId);
+    const curso = ctx.cursos[0];
+    this.selCursoId.set(curso?.cursoId ?? null);
   }
 
   private aplicarFiltroCursoInicial(): void {
@@ -562,16 +697,31 @@ export class CompetenciasComponent implements OnInit {
         grado: this.selGrado(),
         seccion: this.selSeccion(),
         bimestre: this.selBimestre(),
-        cursoId: this.modoEmbeddido() ? curso!.cursoId : undefined,
+        anio: this.anioEscolarConsulta ?? undefined,
+        curriculumId: this.modoEmbeddido()
+          ? (curso!.curriculumId ?? this.curriculumId() ?? undefined)
+          : (this.curriculumId() ?? undefined),
+        cursoId: this.modoEmbeddido()
+          ? curso!.cursoId
+          : (this.selCursoId() ?? undefined),
+        areaId: undefined,
       })
       .subscribe({
         next: (data) => {
+          this.validacion.set(data.validacion);
           this.bimestreActual.set(data.bimestreActual);
           this.bimestreHabilitado.set(data.bimestreHabilitado);
           if (this.selBimestre() > data.bimestreActual) {
             this.selBimestre.set(data.bimestreActual);
             this.bimestreHabilitado.set(true);
             this.cargar();
+            return;
+          }
+
+          if (data.validacion.codigo !== 'ok' && data.validacion.codigo !== 'acta_cerrada') {
+            this.areas.set([]);
+            this.alumnos.set([]);
+            this.selAreaId.set(null);
             return;
           }
 
@@ -641,6 +791,21 @@ export class CompetenciasComponent implements OnInit {
     this.bimestreHabilitado.set(bim <= this.bimestreActual());
     this.selAlumno.set(null);
     this.closePicker();
+    if (!this.modoEmbeddido() && this.contextos().length) {
+      this.service.loadRegistryContext(bim).subscribe({
+        next: (res) => {
+          this.contextos.set(res.contexts);
+          this.bimestreActual.set(res.bimestreActual);
+          if (res.contexts.length && !res.contexts.some((c) => c.id === this.contextoId())) {
+            this.contextoId.set(res.contexts[0].id);
+            this.aplicarContexto(res.contexts[0]);
+          }
+          this.cargar();
+        },
+        error: () => this.cargar(),
+      });
+      return;
+    }
     this.cargar();
   }
 
@@ -687,7 +852,7 @@ export class CompetenciasComponent implements OnInit {
   }
 
   setNivel(alumnoId: number, compId: number, nivel: NivelLogro): void {
-    if (!this.bimestreHabilitado()) return;
+    if (!this.edicionPermitida()) return;
     const key = eKey(alumnoId, compId, this.selBimestre());
     this.evalMap.update((m) => {
       const nm = new Map(m);
@@ -700,7 +865,7 @@ export class CompetenciasComponent implements OnInit {
   }
 
   clearNivel(alumnoId: number, compId: number): void {
-    if (!this.bimestreHabilitado()) return;
+    if (!this.edicionPermitida()) return;
     const key = eKey(alumnoId, compId, this.selBimestre());
     this.evalMap.update((m) => {
       const nm = new Map(m);
@@ -713,7 +878,7 @@ export class CompetenciasComponent implements OnInit {
   }
 
   togglePicker(alumnoId: number, compId: number): void {
-    if (!this.bimestreHabilitado()) return;
+    if (!this.edicionPermitida()) return;
     const k = `${alumnoId}-${compId}`;
     this.activePicker.set(this.activePicker() === k ? null : k);
   }
@@ -727,7 +892,7 @@ export class CompetenciasComponent implements OnInit {
   }
 
   guardar(): void {
-    if (!this.bimestreHabilitado()) return;
+    if (!this.edicionPermitida()) return;
     const entries: SaveCompetencyEntry[] = [];
     const bim = this.selBimestre();
     for (const key of this.pendingKeys()) {
@@ -747,7 +912,10 @@ export class CompetenciasComponent implements OnInit {
         seccion: this.selSeccion(),
         bimestre: bim,
         anio: this.anioEscolar() ?? undefined,
-        cursoId: this.modoEmbeddido() ? this.cursoInicial()?.cursoId : undefined,
+        cursoId: this.modoEmbeddido()
+          ? this.cursoInicial()?.cursoId
+          : (this.selCursoId() ?? undefined),
+        motivo: 'Registro desde módulo de competencias',
         entries,
       })
       .subscribe({

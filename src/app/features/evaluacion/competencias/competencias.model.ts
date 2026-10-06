@@ -33,6 +33,33 @@ export interface EvaluacionCompetencia {
   nivelLogro: NivelLogro;
 }
 
+export interface CompetencyMatrixValidation {
+  cursoEnMalla: boolean;
+  gradoEnMalla: boolean;
+  competenciasConfiguradas: boolean;
+  competenciasCount: number;
+  bimestre: number;
+  bimestreActual: number;
+  bimestreHabilitado: boolean;
+  anioEscolar: number;
+  periodosConfigurados: number;
+  periodoBimestreConfigurado: boolean;
+  mallaHoras?: number | null;
+  mallaDocente?: string | null;
+  enMallaPorAsignacion?: boolean;
+  actaCerrada?: boolean;
+  edicionBloqueada?: boolean;
+  codigo:
+    | 'ok'
+    | 'curso_no_malla'
+    | 'grado_no_malla'
+    | 'sin_competencias'
+    | 'bimestre_no_habilitado'
+    | 'periodo_no_configurado'
+    | 'acta_cerrada';
+  mensaje: string;
+}
+
 export interface CompetencyMatrixResponse {
   curriculum: {
     id: number;
@@ -52,6 +79,7 @@ export interface CompetencyMatrixResponse {
   areas: AreaCompetencia[];
   alumnos: AlumnoCompetencia[];
   evaluaciones: EvaluacionCompetencia[];
+  validacion: CompetencyMatrixValidation;
 }
 
 export interface CompetencyMatrixFilters {
@@ -61,7 +89,56 @@ export interface CompetencyMatrixFilters {
   bimestre: number;
   anio?: number;
   curriculumId?: number;
+  areaId?: number;
   cursoId?: number;
+}
+
+export interface CompetencyRegistryContextCurso {
+  cursoId: number;
+  nombre: string;
+  areaId: number;
+  areaNombre: string;
+  competenciasCount: number;
+  conEvaluaciones: boolean;
+}
+
+export interface CompetencyRegistryContextItem {
+  id: string;
+  nivel: string;
+  grado: string;
+  seccion: string;
+  totalAlumnos: number;
+  curriculumId: number | null;
+  cursos: CompetencyRegistryContextCurso[];
+}
+
+export interface CompetencyRegistryContextResponse {
+  bimestreActual: number;
+  anioEscolar: number;
+  institucion: {
+    id: number;
+    nombre: string;
+    siglas: string;
+    ugel: string;
+    dre: string;
+  } | null;
+  permisos: { consultar: boolean; registrar: boolean };
+  contexts: CompetencyRegistryContextItem[];
+}
+
+export interface CompetencyChangeAuditItem {
+  id: number;
+  evaluationId: number | null;
+  studentId: number;
+  competenciaId: number;
+  bimestre: number;
+  anio: number;
+  accion: string;
+  actorNombre: string;
+  actorRol: string;
+  motivo: string;
+  cambios: Record<string, { anterior?: unknown; nuevo?: unknown }>;
+  createdAt: string;
 }
 
 export interface SaveCompetencyEntry {
@@ -79,6 +156,7 @@ export interface SaveCompetencyBulkPayload {
   anio?: number;
   curriculumId?: number;
   cursoId?: number;
+  motivo?: string;
   entries: SaveCompetencyEntry[];
 }
 
