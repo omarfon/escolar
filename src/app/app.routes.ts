@@ -2,6 +2,7 @@ import { Routes } from '@angular/router';
 import { authGuard } from './core/auth/guards/auth.guard';
 import { roleGuard, permisoGuard, staffAreaGuard, dashboardGuard, portalDocenteGuard, portalEstudianteGuard, portalPadreGuard } from './core/auth/guards/role.guard';
 import { MainLayoutComponent } from './core/layout/components/main-layout/main-layout.component';
+import { trasladosDefaultGuard } from './features/traslados/traslados-default.guard';
 
 export const routes: Routes = [
   // ── Redirección raíz ──────────────────────────────────
@@ -24,6 +25,7 @@ export const routes: Routes = [
     path: '',
     component: MainLayoutComponent,
     canActivate: [authGuard],
+    runGuardsAndResolvers: 'paramsChange',
     children: [
 
       // Dashboard
@@ -31,6 +33,13 @@ export const routes: Routes = [
         path: 'dashboard',
         canActivate: [dashboardGuard],
         loadComponent: () => import('./features/dashboard/dashboard.component').then(m => m.DashboardComponent)
+      },
+
+      // Cuenta (todos los usuarios autenticados)
+      {
+        path: 'cuenta/cambiar-contrasena',
+        loadComponent: () =>
+          import('./features/cuenta/change-password.component').then(m => m.ChangePasswordComponent),
       },
 
       // ── Administración ─────────────────────────────────
@@ -85,6 +94,28 @@ export const routes: Routes = [
             path: 'conducta',
             loadComponent: () => import('./features/estudiantes/conducta/conducta.component').then(m => m.ConductaComponent)
           },
+          {
+            path: 'auditoria-cambios',
+            canActivate: [permisoGuard('estudiantes.expediente', 'admin.reportes')],
+            loadComponent: () =>
+              import('./features/estudiantes/auditoria-cambios/estudiante-auditoria.component').then(
+                m => m.EstudianteAuditoriaComponent,
+              ),
+          },
+          {
+            path: 'representante-vinculos',
+            canActivate: [
+              permisoGuard(
+                'estudiantes.representantes',
+                'estudiantes.expediente',
+                'estudiantes.editar',
+              ),
+            ],
+            loadComponent: () =>
+              import('./features/estudiantes/representante-vinculos/representante-vinculos.component').then(
+                m => m.RepresentanteVinculosComponent,
+              ),
+          },
         ]
       },
 
@@ -126,19 +157,106 @@ export const routes: Routes = [
             path: 'cambio-seccion',
             loadComponent: () => import('./features/matricula/cambio-seccion/cambio-seccion.component').then(m => m.CambioSeccionComponent)
           },
+          {
+            path: 'retiro',
+            canActivate: [permisoGuard('matricula.retiro', 'matricula.ver', 'matricula.exportar')],
+            loadComponent: () => import('./features/matricula/retiro/retiro.component').then(m => m.RetiroEstudianteComponent)
+          },
+          {
+            path: 'reingreso',
+            canActivate: [permisoGuard('matricula.reingreso', 'matricula.ver', 'matricula.exportar')],
+            loadComponent: () => import('./features/matricula/reingreso/reingreso.component').then(m => m.ReingresoEstudianteComponent)
+          },
+          {
+            path: 'evaluaciones',
+            canActivate: [permisoGuard('matricula.evaluacion', 'matricula.ver', 'matricula.exportar')],
+            loadComponent: () => import('./features/matricula/evaluaciones/evaluaciones-matricula.component').then(m => m.EvaluacionesMatriculaComponent)
+          },
+          {
+            path: 'retroalimentacion',
+            canActivate: [permisoGuard('matricula.retroalimentacion', 'matricula.ver', 'matricula.exportar')],
+            loadComponent: () => import('./features/matricula/retroalimentacion/retroalimentacion-matricula.component').then(m => m.RetroalimentacionMatriculaComponent)
+          },
+          {
+            path: 'historial',
+            canActivate: [permisoGuard('matricula.historial', 'matricula.ver', 'matricula.exportar')],
+            loadComponent: () => import('./features/matricula/historial/historial-matricula.component').then(m => m.HistorialMatriculaComponent)
+          },
+          {
+            path: 'excepcional',
+            canActivate: [permisoGuard('matricula.excepcional', 'matricula.crear')],
+            loadComponent: () => import('./features/matricula/excepcional/matricula-excepcional.component').then(m => m.MatriculaExcepcionalComponent)
+          },
         ]
+      },
+
+      {
+        path: 'traslados',
+        canActivate: [
+          staffAreaGuard,
+          permisoGuard('traslados.ver', 'traslados.solicitar', 'traslados.resolver', 'traslados.aprobar_destino'),
+        ],
+        loadComponent: () =>
+          import('./features/traslados/traslados-layout.component').then(m => m.TrasladosLayoutComponent),
+        children: [
+          {
+            path: '',
+            pathMatch: 'full',
+            canActivate: [trasladosDefaultGuard],
+            children: [],
+          },
+          {
+            path: 'solicitar',
+            canActivate: [permisoGuard('traslados.solicitar', 'traslados.ver', 'traslados.resolver')],
+            loadComponent: () =>
+              import('./features/traslados/traslados-origen.component').then(m => m.TrasladosOrigenComponent),
+          },
+          {
+            path: 'recibidos',
+            canActivate: [permisoGuard('traslados.aprobar_destino', 'traslados.ver', 'traslados.resolver')],
+            loadComponent: () =>
+              import('./features/traslados/traslados-destino.component').then(m => m.TrasladosDestinoComponent),
+          },
+          {
+            path: 'supervision',
+            canActivate: [permisoGuard('traslados.resolver', 'traslados.ver')],
+            loadComponent: () =>
+              import('./features/traslados/traslados-supervision.component').then(m => m.TrasladosSupervisionComponent),
+          },
+          {
+            path: 'seguimiento',
+            canActivate: [permisoGuard('traslados.ver', 'traslados.solicitar', 'traslados.resolver', 'traslados.aprobar_destino')],
+            loadComponent: () =>
+              import('./features/traslados/traslados-seguimiento.component').then(m => m.TrasladosSeguimientoComponent),
+          },
+        ],
+      },
+
+      {
+        path: 'instituciones',
+        canActivate: [roleGuard('SIAGIE')],
+        loadComponent: () =>
+          import('./features/instituciones/directorio-instituciones.component').then(m => m.DirectorioInstitucionesComponent),
       },
 
       // ── Maestros ───────────────────────────────────────
       {
         path: 'maestros',
-        canActivate: [staffAreaGuard, permisoGuard('matricula.vacantes', 'matricula.ver', 'matricula.crear', 'horarios.ver', 'docentes.ver', 'estudiantes.ver', 'admin.institucional', 'asistencia.ver', 'comunicados.ver', 'evaluacion.ver', 'evaluacion.registrar')],
+        canActivate: [staffAreaGuard, permisoGuard('matricula.vacantes', 'matricula.ver', 'matricula.crear', 'horarios.ver', 'docentes.ver', 'estudiantes.ver', 'admin.institucional', 'asistencia.ver', 'comunicados.ver', 'evaluacion.ver', 'evaluacion.registrar', 'calendarizacion.ver', 'calendarizacion.gestionar', 'curricula.ver', 'curricula.gestionar')],
         loadComponent: () => import('./features/matricula/maestros/maestros.component').then(m => m.MaestrosComponent),
         children: [
           { path: '', redirectTo: 'salones', pathMatch: 'full' },
           {
             path: 'salones',
             loadComponent: () => import('./features/matricula/maestros/salones/salones.component').then(m => m.SalonesComponent),
+          },
+          {
+            path: 'plan-estudios-areas',
+            canActivate: [permisoGuard('curricula.ver', 'curricula.gestionar', 'admin.institucional', 'horarios.ver', 'evaluacion.ver', 'matricula.ver')],
+            loadComponent: () =>
+              import('./features/matricula/maestros/plan-estudios-areas/plan-estudios-areas.component').then(
+                m => m.PlanEstudiosAreasComponent,
+              ),
           },
           {
             path: 'sedes',
@@ -157,11 +275,22 @@ export const routes: Routes = [
             loadComponent: () => import('./features/matricula/maestros/faltas-reconocimientos/faltas-reconocimientos.component').then(m => m.MaestrosFaltasReconocimientosComponent),
           },
           {
+            path: 'calendario',
+            canActivate: [permisoGuard('calendarizacion.ver', 'calendarizacion.gestionar', 'admin.institucional', 'horarios.ver', 'evaluacion.ver', 'matricula.ver', 'comunicados.ver', 'asistencia.ver')],
+            loadComponent: () => import('./features/matricula/maestros/calendario/calendario-escolar.component').then(m => m.MaestrosCalendarioEscolarComponent),
+          },
+          {
+            path: 'anios-escolares',
+            canActivate: [permisoGuard('calendarizacion.ver', 'calendarizacion.gestionar', 'admin.institucional', 'horarios.ver', 'matricula.ver')],
+            loadComponent: () => import('./features/matricula/maestros/anios-escolares/anios-escolares.component').then(m => m.MaestrosAniosEscolaresComponent),
+          },
+          {
             path: 'feriados',
             loadComponent: () => import('./features/matricula/maestros/feriados/feriados.component').then(m => m.MaestrosFeriadosComponent),
           },
           {
             path: 'periodos-academicos',
+            canActivate: [permisoGuard('calendarizacion.ver', 'calendarizacion.gestionar', 'admin.institucional', 'horarios.ver', 'evaluacion.ver', 'matricula.ver')],
             loadComponent: () => import('./features/matricula/maestros/periodos-academicos/periodos-academicos.component').then(m => m.MaestrosPeriodosAcademicosComponent),
           },
           {
@@ -246,9 +375,36 @@ export const routes: Routes = [
             loadComponent: () => import('./features/evaluacion/notas/evaluacion-notas.component').then(m => m.EvaluacionNotasComponent)
           },
           {
+            path: 'escala',
+            canActivate: [permisoGuard('evaluacion.ver', 'evaluacion.configurar', 'admin.institucional')],
+            loadComponent: () =>
+              import('./features/evaluacion/escala/escala-evaluacion.component').then(
+                m => m.EscalaEvaluacionComponent,
+              ),
+          },
+          {
             path: 'competencias',
-            redirectTo: 'notas',
-            pathMatch: 'full',
+            canActivate: [permisoGuard('evaluacion.registrar', 'evaluacion.ver', 'evaluacion.editar')],
+            loadComponent: () =>
+              import('./features/evaluacion/competencias/competencias.component').then(
+                m => m.CompetenciasComponent,
+              ),
+          },
+          {
+            path: 'diagnostica',
+            canActivate: [permisoGuard('evaluacion.registrar', 'evaluacion.ver', 'evaluacion.editar')],
+            loadComponent: () =>
+              import('./features/evaluacion/diagnostica/diagnostica.component').then(
+                m => m.DiagnosticaComponent,
+              ),
+          },
+          {
+            path: 'auditoria-diagnostica',
+            canActivate: [permisoGuard('evaluacion.reportes', 'admin.reportes')],
+            loadComponent: () =>
+              import('./features/evaluacion/auditoria-diagnostica/diagnostic-auditoria.component').then(
+                m => m.DiagnosticAuditoriaComponent,
+              ),
           },
           {
             path: 'promedios',
@@ -261,6 +417,30 @@ export const routes: Routes = [
           {
             path: 'actas',
             loadComponent: () => import('./features/evaluacion/actas/actas.component').then(m => m.ActasComponent)
+          },
+          {
+            path: 'rectificacion-notas',
+            canActivate: [permisoGuard('evaluacion.rectificar', 'evaluacion.aprobar')],
+            loadComponent: () =>
+              import('./features/evaluacion/notas/rectificacion-notas.component').then(
+                m => m.RectificacionNotasComponent,
+              ),
+          },
+          {
+            path: 'auditoria-cambios',
+            canActivate: [permisoGuard('evaluacion.reportes', 'admin.reportes')],
+            loadComponent: () =>
+              import('./features/evaluacion/auditoria-cambios/grade-auditoria.component').then(
+                m => m.GradeAuditoriaComponent,
+              ),
+          },
+          {
+            path: 'auditoria-competencias',
+            canActivate: [permisoGuard('evaluacion.reportes', 'admin.reportes')],
+            loadComponent: () =>
+              import('./features/evaluacion/auditoria-competencias/competency-auditoria.component').then(
+                m => m.CompetencyAuditoriaComponent,
+              ),
           },
         ]
       },
@@ -332,6 +512,11 @@ export const routes: Routes = [
             path: 'comunicados',
             loadComponent: () => import('./features/portal-docente/comunicados/comunicados-docente.component').then(m => m.ComunicadosDocenteComponent)
           },
+          {
+            path: 'calendario',
+            loadComponent: () => import('./features/matricula/maestros/calendario/calendario-escolar.component').then(m => m.MaestrosCalendarioEscolarComponent),
+            data: { calendarioVariant: 'docente' },
+          },
         ]
       },
 
@@ -352,6 +537,11 @@ export const routes: Routes = [
           { path: 'perfil',        loadComponent: () => import('./features/portal-estudiante/perfil/perfil-estudiante.component').then(m => m.PerfilEstudianteComponent) },
           { path: 'temario', redirectTo: 'clases', pathMatch: 'full' },
           { path: 'comunicados',   loadComponent: () => import('./features/portal-estudiante/comunicados/comunicados-estudiante.component').then(m => m.ComunicadosEstudianteComponent) },
+          {
+            path: 'calendario',
+            loadComponent: () => import('./features/matricula/maestros/calendario/calendario-escolar.component').then(m => m.MaestrosCalendarioEscolarComponent),
+            data: { calendarioVariant: 'alumno' },
+          },
         ]
       },
 
@@ -371,6 +561,11 @@ export const routes: Routes = [
           { path: 'comunicacion', loadComponent: () => import('./features/portal-padre/comunicacion/comunicacion.component').then(m => m.ComunicacionPadreComponent) },
           { path: 'correo-docentes', loadComponent: () => import('./features/portal-padre/correo-docentes/correo-docentes.component').then(m => m.CorreoDocentesComponent) },
           { path: 'finanzas',     loadComponent: () => import('./features/portal-padre/finanzas/finanzas.component').then(m => m.FinanzasPadreComponent) },
+          {
+            path: 'calendario',
+            loadComponent: () => import('./features/matricula/maestros/calendario/calendario-escolar.component').then(m => m.MaestrosCalendarioEscolarComponent),
+            data: { calendarioVariant: 'padre' },
+          },
         ]
       },
 

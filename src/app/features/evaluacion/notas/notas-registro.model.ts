@@ -19,6 +19,15 @@ export interface RegistryComponenteNota {
   nota: number | null;
 }
 
+export interface ValidacionRangos {
+  min: number;
+  max: number;
+  notaMinimaAprobatoria: number;
+  escalaLogro: FormulaEscalaLogro;
+  mensaje: string;
+  mensajeAprobacion: string;
+}
+
 export interface GradeRegistryResponse {
   formula: MaestroFormulaEvaluacionItem;
   bimestre: number;
@@ -29,6 +38,9 @@ export interface GradeRegistryResponse {
   alumnos: RegistryAlumnoRow[];
   bimestreActual: number;
   bimestreHabilitado: boolean;
+  validacionRangos?: ValidacionRangos;
+  actaCerrada?: boolean;
+  edicionBloqueada?: boolean;
 }
 
 export interface RegistryContextsResponse {
@@ -58,6 +70,14 @@ export interface RegistryContextItem {
   alumnosCount: number;
   cursos: RegistryContextCurso[];
   cursoSugerido: string;
+  actaCerrada?: boolean;
+}
+
+export interface RectifyRegistryContextResponse {
+  bimestreActual: number;
+  anioEscolar: number;
+  permisos: { rectificar: boolean };
+  contexts: RegistryContextItem[];
 }
 
 export interface SaveNotasRegistroPayload {
@@ -73,6 +93,10 @@ export interface SaveNotasRegistroPayload {
     gradeId?: number;
     nota: number;
   }>;
+}
+
+export interface RectifyNotasRegistroPayload extends SaveNotasRegistroPayload {
+  motivo: string;
 }
 
 export function calcNotaPonderada(

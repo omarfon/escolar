@@ -5,6 +5,8 @@ import { environment } from '@environments/environment';
 import {
   GradeRegistryResponse,
   NotasRegistroFilters,
+  RectifyNotasRegistroPayload,
+  RectifyRegistryContextResponse,
   RegistryContextsResponse,
   SaveNotasRegistroPayload,
 } from './notas-registro.model';
@@ -53,5 +55,31 @@ export class NotasRegistroService {
       catchError(err => throwError(() => err)),
       finalize(() => this.saving.set(false)),
     );
+  }
+
+  loadRectifyContext(bimestre = 2): Observable<RectifyRegistryContextResponse> {
+    this.loadingContexts.set(true);
+    const params = new HttpParams().set('bimestre', String(bimestre));
+    return this.http
+      .get<RectifyRegistryContextResponse>(`${this.base}/registry/rectify/context`, { params })
+      .pipe(
+        catchError(err => throwError(() => err)),
+        finalize(() => this.loadingContexts.set(false)),
+      );
+  }
+
+  saveRectify(
+    payload: RectifyNotasRegistroPayload,
+  ): Observable<{ saved: number; registry: GradeRegistryResponse; actaCerrada: boolean }> {
+    this.saving.set(true);
+    return this.http
+      .post<{ saved: number; registry: GradeRegistryResponse; actaCerrada: boolean }>(
+        `${this.base}/registry/rectify`,
+        payload,
+      )
+      .pipe(
+        catchError(err => throwError(() => err)),
+        finalize(() => this.saving.set(false)),
+      );
   }
 }

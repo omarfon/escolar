@@ -1,19 +1,30 @@
-﻿import { Component, computed, inject, input, OnInit, signal } from '@angular/core';
+import { Component, computed, inject, input, OnInit, signal } from '@angular/core';
 import { PortalDocenteCursoCard } from '../../portal-docente/portal-docente.model';
 import { FormsModule } from '@angular/forms';
 import { NgClass } from '@angular/common';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
+import { AuthService } from '../../../core/auth/services/auth.service';
 import { LayoutService } from '../../../core/layout/services/layout.service';
 import { GradingConfigService } from '../../../core/grading/grading-config.service';
+import {
+  cellKey,
+  isNotaEnRango,
+  validateNotaInRange,
+} from '../../../core/grading/grading-range.validation';
 import { CompetenciasComponent } from '../competencias/competencias.component';
 import { NotasRegistroService } from './notas-registro.service';
 import { PortalDocenteService } from '../../portal-docente/portal-docente.service';
+import { MaestrosPeriodosAcademicosService } from '../../matricula/maestros/periodos-academicos/periodos-academicos.service';
 import {
   GradeRegistryResponse,
   NotasRegistroFilters,
   RegistryAlumnoRow,
   RegistryContextItem,
+  RectifyNotasRegistroPayload,
+  RectifyRegistryContextResponse,
+  RegistryContextsResponse,
   SaveNotasRegistroPayload,
+  ValidacionRangos,
 } from './notas-registro.model';
 
 interface ConfirmGuardadoResumen {
@@ -26,10 +37,26 @@ interface ConfirmGuardadoResumen {
   calificacionesCount: number;
 }
 
+function normalizeGradoFiltro(value: string): string {
+  let t = (value ?? '').trim();
+  const withNivel = t.match(/^(.+?)\s+(Inicial|Primaria|Secundaria)$/i);
+  if (withNivel) t = withNivel[1].trim();
+  if (/^\d+\s*°?$/.test(t)) {
+    return `${t.replace(/[^\d]/g, '')}°`;
+  }
+  const num = t.match(/^(\d+)/);
+  if (num) return `${num[1]}°`;
+  return t;
+}
+
+function gradosCoincidenFiltro(a: string, b: string): boolean {
+  return normalizeGradoFiltro(a) === normalizeGradoFiltro(b);
+}
+
 @Component({
   selector: 'app-evaluacion-notas',
   standalone: true,
-  imports: [FormsModule, NgClass, CompetenciasComponent],
+  imports: [FormsModule, NgClass, RouterLink, CompetenciasComponent],
   template: `
     @if (modoSoloCompetencias()) {
       <app-competencias [cursoInicial]="cursoInicial()" />
@@ -43,18 +70,44 @@ interface ConfirmGuardadoResumen {
       </div>
     } @else {
     <div class="space-y-5">
+      @if (modoMixto()) {
+        <div class="flex gap-1 p-1 bg-gray-100 rounded-xl w-fit">
+          <button type="button" class="px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+            [ngClass]="tabActivo() === 'notas'
+              ? 'bg-white text-indigo-700 shadow-sm'
+              : 'text-gray-600 hover:text-gray-900'"
+            (click)="tabActivo.set('notas')">
+            Notas numéricas
+          </button>
+          <button type="button" class="px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+            [ngClass]="tabActivo() === 'competencias'
+              ? 'bg-white text-indigo-700 shadow-sm'
+              : 'text-gray-600 hover:text-gray-900'"
+            (click)="tabActivo.set('competencias')">
+            Competencias
+          </button>
+        </div>
+      }
+
+      @if (modoMixto() && tabActivo() === 'competencias') {
+        <app-competencias />
+      } @else {
       <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         @if (!modoEmbeddido()) {
         <div>
           <h2 class="text-xl font-bold text-gray-800">
-            @if (modoDocente()) {
+            @if (modoRectificacion()) {
+              Rectificación de Notas
+            } @else if (modoDocente()) {
               Registro de Notas — Mis cursos
             } @else {
               Registro de Notas
             }
           </h2>
           <p class="text-sm text-gray-400 mt-0.5">
-            @if (modoDocente()) {
+            @if (modoRectificacion()) {
+              Corrección oficial con motivo obligatorio y registro en auditoría
+            } @else if (modoDocente()) {
               Solo salones y cursos asignados a tu perfil docente
             } @else {
               Elija el aula y el curso; la lista se carga automáticamente
@@ -64,11 +117,6 @@ interface ConfirmGuardadoResumen {
             Datos desde tabla <span class="font-mono">grades</span> · API
             <span class="font-mono">/grades/registry</span>
           </p>
-          @if (bimestreActual()) {
-            <p class="text-xs text-amber-600 mt-1">
-              Periodo actual: {{ bimestreActual() }}° bimestre — solo B1 a B{{ bimestreActual() }} habilitados
-            </p>
-          }
           @if (formula()) {
             <p class="text-xs text-indigo-600 mt-1">
               Fórmula: {{ formula()!.nombre }}
@@ -80,11 +128,6 @@ interface ConfirmGuardadoResumen {
         </div>
         } @else {
         <div class="flex-1">
-          @if (bimestreActual()) {
-            <p class="text-xs text-amber-600">
-              Periodo actual: {{ bimestreActual() }}° bimestre — solo B1 a B{{ bimestreActual() }} habilitados
-            </p>
-          }
           @if (formula()) {
             <p class="text-sm text-indigo-700 mt-1">
               Fórmula: <span class="font-medium">{{ formula()!.nombre }}</span>
@@ -95,12 +138,50 @@ interface ConfirmGuardadoResumen {
           }
         </div>
         }
-        <button class="btn btn-primary shrink-0" [disabled]="!puedeGuardar() || svc.saving()" (click)="guardar()">
-          <span class="icon">save</span>
-          {{ svc.saving() ? 'Guardando...' : 'Guardar notas' }}
-        </button>
+        <div class="flex flex-wrap gap-2 shrink-0">
+          @if (puedeVerAuditoria() && filtro().curso) {
+            <a class="btn btn-secondary"
+               [routerLink]="['/evaluacion/auditoria-cambios']"
+               [queryParams]="{ curso: filtro().curso, bimestre: filtro().bimestre }">
+              <span class="icon icon-sm">history_edu</span> Ver historial
+            </a>
+          }
+          <button class="btn btn-primary" [disabled]="!puedeGuardar() || svc.saving()" (click)="guardar()">
+            <span class="icon">{{ modoRectificacion() ? 'edit_note' : 'save' }}</span>
+            {{ svc.saving()
+              ? 'Guardando...'
+              : modoRectificacion() ? 'Rectificar notas' : 'Guardar notas' }}
+          </button>
+        </div>
       </div>
 
+      @if (modoRectificacion()) {
+        <div class="rounded-xl bg-amber-50 border border-amber-200 text-amber-900 px-4 py-3 text-sm">
+          Proceso de rectificación oficial: solo puede modificar calificaciones ya registradas.
+          Cada cambio requiere motivo y queda en auditoría con valores anterior y nuevo.
+        </div>
+      }
+      @if (!modoRectificacion() && actaCerrada()) {
+        <div class="rounded-xl bg-amber-50 border border-amber-200 text-amber-900 px-4 py-3 text-sm flex flex-wrap items-center gap-2">
+          <span>El acta de este salón y bimestre está cerrada. No puede modificar notas desde el registro habitual.</span>
+          @if (auth.hasAnyPermiso('evaluacion.rectificar', 'evaluacion.aprobar')) {
+            <a class="text-indigo-700 font-medium underline" routerLink="/evaluacion/rectificacion-notas"
+              [queryParams]="{ nivel: filtro().nivel, grado: filtro().grado, seccion: filtro().seccion, curso: filtro().curso, bimestre: filtro().bimestre }">
+              Ir a rectificación autorizada
+            </a>
+          }
+        </div>
+      }
+      @if (validacionRangos(); as vr) {
+        <div class="rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-800 px-4 py-2 text-sm">
+          {{ vr.mensaje }} {{ vr.mensajeAprobacion }}
+        </div>
+      }
+      @if (hayNotasInvalidas()) {
+        <div class="rounded-xl bg-red-50 border border-red-200 text-red-700 px-4 py-3 text-sm" role="alert">
+          Hay calificaciones fuera del rango permitido. Corrija las celdas resaltadas antes de guardar.
+        </div>
+      }
       @if (error()) {
         <div class="rounded-xl bg-red-50 border border-red-200 text-red-700 px-4 py-3 text-sm">{{ error() }}</div>
       }
@@ -252,12 +333,14 @@ interface ConfirmGuardadoResumen {
                     <td class="font-medium">{{ a.apellido }}, {{ a.nombre }}</td>
                     @for (c of formula()?.componentes ?? []; track c.codigo) {
                       <td class="text-center">
-                        <input type="number" min="0" [max]="grading.notaMaxima()" step="0.1"
+                        <input type="number" min="0" [max]="notaMaxima()" step="0.1"
                           [ngModel]="a.componentes[c.codigo]?.nota"
                           (ngModelChange)="setNota(a, c.codigo, $event)"
-                          [disabled]="!bimestreHabilitado()"
+                          [disabled]="!edicionPermitida() || celdaRectificacionBloqueada(a, c.codigo)"
                           class="w-16 text-center form-input px-1 py-1 text-sm"
-                          [class.bg-gray-50]="!bimestreHabilitado()">
+                          [class.bg-gray-50]="!edicionPermitida() || celdaRectificacionBloqueada(a, c.codigo)"
+                          [class.border-red-500]="celdaInvalida(a.studentId, c.codigo)"
+                          [title]="celdaInvalida(a.studentId, c.codigo) ? mensajeRangoInvalido(a.componentes[c.codigo]?.nota) : ''">
                       </td>
                     }
                     <td class="text-center font-bold" [ngClass]="colorPromedio(promedioAlumno(a))">
@@ -275,7 +358,6 @@ interface ConfirmGuardadoResumen {
           </div>
         }
       </div>
-    </div>
 
     @if (confirmModalAbierto()) {
       <div class="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4"
@@ -288,8 +370,14 @@ interface ConfirmGuardadoResumen {
                 <span class="icon">save</span>
               </div>
               <div>
-                <h3 class="font-bold text-gray-900">Actualizar notas</h3>
-                <p class="text-xs text-gray-500">Confirma antes de registrar en el sistema</p>
+                <h3 class="font-bold text-gray-900">
+                  {{ modoRectificacion() ? 'Confirmar rectificación' : 'Actualizar notas' }}
+                </h3>
+                <p class="text-xs text-gray-500">
+                  {{ modoRectificacion()
+                    ? 'Indique el motivo oficial del cambio'
+                    : 'Confirma antes de registrar en el sistema' }}
+                </p>
               </div>
             </div>
             <button type="button" class="btn-icon text-gray-400" (click)="cerrarConfirmModal()">
@@ -316,9 +404,22 @@ interface ConfirmGuardadoResumen {
                 </div>
               </div>
 
-              <p class="text-sm text-gray-600">
-                Se actualizarán las notas ingresadas para este curso y bimestre. Esta acción reemplazará los valores previos de los componentes registrados.
-              </p>
+              @if (modoRectificacion()) {
+                <div>
+                  <label class="form-label" for="motivo-rectificacion">Motivo de rectificación</label>
+                  <textarea id="motivo-rectificacion" rows="3" class="form-input w-full text-sm"
+                    [ngModel]="motivoRectificacion()"
+                    (ngModelChange)="motivoRectificacion.set($event)"
+                    placeholder="Describa el motivo oficial (mínimo 10 caracteres)"></textarea>
+                  @if (motivoRectificacion().trim().length > 0 && motivoRectificacion().trim().length < 10) {
+                    <p class="text-xs text-red-600 mt-1">El motivo debe tener al menos 10 caracteres.</p>
+                  }
+                </div>
+              } @else {
+                <p class="text-sm text-gray-600">
+                  Se actualizarán las notas ingresadas para este curso y bimestre. Esta acción reemplazará los valores previos de los componentes registrados.
+                </p>
+              }
             </div>
           }
 
@@ -326,14 +427,19 @@ interface ConfirmGuardadoResumen {
             <button type="button" class="btn btn-secondary" (click)="cerrarConfirmModal()" [disabled]="svc.saving()">
               Cancelar
             </button>
-            <button type="button" class="btn btn-primary" (click)="confirmarGuardado()" [disabled]="svc.saving()">
+            <button type="button" class="btn btn-primary" (click)="confirmarGuardado()"
+              [disabled]="svc.saving() || (modoRectificacion() && motivoRectificacion().trim().length < 10)">
               <span class="icon icon-sm">check</span>
-              {{ svc.saving() ? 'Guardando...' : 'Confirmar actualización' }}
+              {{ svc.saving()
+                ? 'Guardando...'
+                : modoRectificacion() ? 'Confirmar rectificación' : 'Confirmar actualización' }}
             </button>
           </div>
         </div>
       </div>
     }
+      }
+    </div>
     }
   `,
 })
@@ -341,10 +447,12 @@ export class EvaluacionNotasComponent implements OnInit {
   private readonly layout = inject(LayoutService);
   private readonly route = inject(ActivatedRoute);
   private readonly portalDocente = inject(PortalDocenteService);
+  private readonly periodosSvc = inject(MaestrosPeriodosAcademicosService);
   readonly grading = inject(GradingConfigService);
   readonly svc = inject(NotasRegistroService);
 
   readonly modoDocente = input(false);
+  readonly modoRectificacion = input(false);
   readonly cursoInicial = input<PortalDocenteCursoCard | null>(null);
 
   readonly modoEmbeddido = computed(() => {
@@ -356,9 +464,18 @@ export class EvaluacionNotasComponent implements OnInit {
     () => this.grading.usesCompetencias() && !this.grading.usesNumeric(),
   );
 
+  readonly modoMixto = computed(
+    () => this.grading.usesCompetencias() && this.grading.usesNumeric() && !this.modoEmbeddido(),
+  );
+
+  readonly tabActivo = signal<'notas' | 'competencias'>('notas');
+
   readonly bimestres = [1, 2, 3, 4];
-  readonly bimestreActual = signal(2);
+  readonly bimestreActual = signal(1);
   readonly bimestreHabilitado = signal(true);
+  readonly actaCerrada = signal(false);
+  readonly puedeRectificar = signal(false);
+  readonly motivoRectificacion = signal('');
   readonly contextos = signal<RegistryContextItem[]>([]);
   readonly contextoId = signal('');
   readonly formula = signal<GradeRegistryResponse['formula'] | null>(null);
@@ -371,13 +488,17 @@ export class EvaluacionNotasComponent implements OnInit {
     grado: '',
     seccion: '',
     curso: '',
-    bimestre: 2,
+    bimestre: 1,
   });
+  private anioEscolarActual: number | null = null;
   readonly error = signal('');
   readonly toast = signal('');
   readonly confirmModalAbierto = signal(false);
   readonly confirmResumen = signal<ConfirmGuardadoResumen | null>(null);
+  readonly validacionRangos = signal<ValidacionRangos | null>(null);
+  readonly celdasInvalidas = signal<Set<string>>(new Set());
   private pendingPayload: SaveNotasRegistroPayload | null = null;
+  private readonly originalNotas = new Map<string, number | null>();
 
   readonly contextoActivo = computed(() =>
     this.contextos().find(c => c.id === this.contextoId()) ?? null,
@@ -386,14 +507,35 @@ export class EvaluacionNotasComponent implements OnInit {
   colorPromedio = (nota: number | null) => this.grading.colorPromedio(nota);
   badgeNivel = (nivel: string | null) => this.grading.badgeNivel(nivel);
 
+  readonly auth = inject(AuthService);
+
+  puedeVerAuditoria(): boolean {
+    return this.auth.hasAnyPermiso('evaluacion.reportes', 'admin.reportes');
+  }
+
+  edicionPermitida(): boolean {
+    if (!this.bimestreHabilitado()) return false;
+    if (this.modoRectificacion()) {
+      return this.puedeRectificar();
+    }
+    return !this.actaCerrada();
+  }
+
+  celdaRectificacionBloqueada(alumno: RegistryAlumnoRow, codigo: string): boolean {
+    if (!this.modoRectificacion()) return false;
+    return !alumno.componentes[codigo]?.gradeId;
+  }
+
   ngOnInit(): void {
     const soloCompetencias = this.modoSoloCompetencias();
     this.layout.setTitle(
-      this.modoEmbeddido()
-        ? soloCompetencias ? 'Competencias — Curso asignado' : 'Notas — Curso asignado'
-        : this.modoDocente()
-          ? soloCompetencias ? 'Competencias — Mis cursos' : 'Notas — Mis cursos'
-          : soloCompetencias ? 'Calificaciones por competencias' : 'Registro de Notas',
+      this.modoRectificacion()
+        ? 'Rectificación de Notas'
+        : this.modoEmbeddido()
+          ? soloCompetencias ? 'Competencias — Curso asignado' : 'Notas — Curso asignado'
+          : this.modoDocente()
+            ? soloCompetencias ? 'Competencias — Mis cursos' : 'Notas — Mis cursos'
+            : soloCompetencias ? 'Calificaciones por competencias' : 'Registro de Notas',
     );
 
     this.route.queryParamMap.subscribe((params) => {
@@ -415,13 +557,29 @@ export class EvaluacionNotasComponent implements OnInit {
       }
     });
 
-    if (this.modoEmbeddido()) {
-      this.inicializarCursoEmbeddido(true);
-    } else if (this.modoDocente()) {
-      this.cargarAsignacionesDocente(true);
-    } else {
-      this.cargarContextos(true);
-    }
+    this.iniciarConPeriodoAcademico(() => {
+      if (this.modoEmbeddido()) {
+        this.inicializarCursoEmbeddido(true);
+      } else if (this.modoDocente()) {
+        this.cargarAsignacionesDocente(true);
+      } else {
+        this.cargarContextos(true);
+      }
+    });
+  }
+
+  /** Resuelve bimestre y año escolar desde maestros / configuración institucional. */
+  private iniciarConPeriodoAcademico(fn: () => void): void {
+    this.periodosSvc.resolveContext().subscribe({
+      next: (ctx) => {
+        const bimestre = ctx.periodoActual?.numero ?? 1;
+        this.anioEscolarActual = ctx.anioEscolar;
+        this.bimestreActual.set(bimestre);
+        this.filtro.update((f) => ({ ...f, bimestre }));
+        fn();
+      },
+      error: () => fn(),
+    });
   }
 
   filtrosCompletos(): boolean {
@@ -429,8 +587,69 @@ export class EvaluacionNotasComponent implements OnInit {
     return !!(f.nivel && f.grado && f.seccion && f.curso && f.bimestre);
   }
 
+  hayNotasInvalidas(): boolean {
+    return this.celdasInvalidas().size > 0;
+  }
+
+  notaMaxima(): number {
+    return this.validacionRangos()?.max ?? this.grading.notaMaxima();
+  }
+
+  notaMinimaRango(): number {
+    return this.validacionRangos()?.min ?? 0;
+  }
+
+  celdaInvalida(studentId: number, codigo: string): boolean {
+    return this.celdasInvalidas().has(cellKey(studentId, codigo));
+  }
+
+  mensajeRangoInvalido(nota: number | null | undefined): string {
+    if (nota === null || nota === undefined) return '';
+    return validateNotaInRange(nota, this.notaMinimaRango(), this.notaMaxima()).message ?? '';
+  }
+
   puedeGuardar(): boolean {
-    return this.filtrosCompletos() && this.alumnos().length > 0 && this.bimestreHabilitado();
+    if (
+      !this.filtrosCompletos() ||
+      !this.alumnos().length ||
+      !this.edicionPermitida() ||
+      this.hayNotasInvalidas()
+    ) {
+      return false;
+    }
+    if (this.modoRectificacion()) {
+      return this.tieneCambiosRectificacion();
+    }
+    return true;
+  }
+
+  private notaKey(studentId: number, codigo: string): string {
+    return `${studentId}:${codigo}`;
+  }
+
+  private tieneCambiosRectificacion(): boolean {
+    for (const alumno of this.alumnos()) {
+      for (const [codigo, cell] of Object.entries(alumno.componentes)) {
+        if (!cell?.gradeId) continue;
+        const original = this.originalNotas.get(this.notaKey(alumno.studentId, codigo));
+        if (cell.nota !== null && cell.nota !== undefined && cell.nota !== original) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  private snapshotOriginalNotas(): void {
+    this.originalNotas.clear();
+    for (const alumno of this.alumnos()) {
+      for (const [codigo, cell] of Object.entries(alumno.componentes)) {
+        this.originalNotas.set(
+          this.notaKey(alumno.studentId, codigo),
+          cell?.nota ?? null,
+        );
+      }
+    }
   }
 
   bimestrePermitido(bimestre: number): boolean {
@@ -490,7 +709,9 @@ export class EvaluacionNotasComponent implements OnInit {
     this.svc.loadContexts(this.filtro().bimestre).subscribe({
       next: (res) => {
         this.bimestreActual.set(res.bimestreActual);
-        if (inicial && this.filtro().bimestre > res.bimestreActual) {
+        if (inicial) {
+          this.filtro.update((f) => ({ ...f, bimestre: res.bimestreActual }));
+        } else if (this.filtro().bimestre > res.bimestreActual) {
           this.filtro.update((f) => ({ ...f, bimestre: res.bimestreActual }));
         }
         if (inicial || this.filtrosCompletos()) {
@@ -504,10 +725,21 @@ export class EvaluacionNotasComponent implements OnInit {
 
   cargarContextos(inicial = false): void {
     let bimestre = this.filtro().bimestre;
-    this.svc.loadContexts(bimestre).subscribe({
-      next: res => {
+    const loader = this.modoRectificacion()
+      ? this.svc.loadRectifyContext(bimestre)
+      : this.svc.loadContexts(bimestre);
+
+    loader.subscribe({
+      next: (res: RegistryContextsResponse | RectifyRegistryContextResponse) => {
+        if (this.modoRectificacion()) {
+          this.puedeRectificar.set(
+            (res as RectifyRegistryContextResponse).permisos?.rectificar ?? false,
+          );
+        }
         this.bimestreActual.set(res.bimestreActual);
-        if (inicial || bimestre > res.bimestreActual) {
+        if (inicial) {
+          bimestre = res.bimestreActual;
+        } else if (bimestre > res.bimestreActual) {
           bimestre = res.bimestreActual;
         }
 
@@ -563,7 +795,7 @@ export class EvaluacionNotasComponent implements OnInit {
   private cargarAsignacionesDocente(inicial = false): void {
     this.cargandoAsignaciones.set(true);
     this.error.set('');
-    this.portalDocente.loadMiAula(2026).subscribe({
+    this.portalDocente.loadMiAula(this.anioEscolarActual ?? undefined).subscribe({
       next: (res) => {
         this.asignacionesDocente.set(res.cursos);
         this.cargandoAsignaciones.set(false);
@@ -589,7 +821,7 @@ export class EvaluacionNotasComponent implements OnInit {
         const cursosAsignados = asignaciones.filter(
           (a) =>
             a.nivel === ctx.nivel &&
-            a.grado === ctx.grado &&
+            gradosCoincidenFiltro(a.grado, ctx.grado) &&
             a.seccion.toUpperCase() === ctx.seccion.toUpperCase(),
         );
         if (!cursosAsignados.length) return null;
@@ -620,7 +852,7 @@ export class EvaluacionNotasComponent implements OnInit {
     const actual = contextos.find(
       (c) =>
         c.nivel === q.nivel &&
-        c.grado === q.grado &&
+        gradosCoincidenFiltro(c.grado, q.grado) &&
         c.seccion.toUpperCase() === q.seccion.toUpperCase(),
     );
     if (!actual) return false;
@@ -650,27 +882,66 @@ export class EvaluacionNotasComponent implements OnInit {
       next: (res: GradeRegistryResponse) => {
         this.bimestreActual.set(res.bimestreActual);
         this.bimestreHabilitado.set(res.bimestreHabilitado);
+        this.actaCerrada.set(!!res.actaCerrada);
         this.formula.set(res.formula);
+        if (res.validacionRangos) {
+          this.validacionRangos.set(res.validacionRangos);
+        }
         this.alumnos.set(res.alumnos.map(a => ({
           ...a,
           componentes: Object.fromEntries(
             Object.entries(a.componentes).map(([k, v]) => [k, { ...v }]),
           ),
         })));
+        this.snapshotOriginalNotas();
+        this.revalidarTodasLasCeldas();
       },
       error: err => this.error.set(err?.error?.message ?? err?.message ?? 'No se pudo cargar el registro'),
     });
   }
 
   setNota(alumno: RegistryAlumnoRow, codigo: string, value: string | number | null): void {
-    if (!this.bimestreHabilitado()) return;
+    if (!this.edicionPermitida()) return;
+    if (this.celdaRectificacionBloqueada(alumno, codigo)) return;
     const nota = value === '' || value === null ? null : Number(value);
     if (!alumno.componentes[codigo]) {
       alumno.componentes[codigo] = { nota: null };
     }
     alumno.componentes[codigo].nota = Number.isFinite(nota as number) ? nota : null;
+    this.actualizarValidezCelda(alumno.studentId, codigo, alumno.componentes[codigo].nota);
     this.recalcularAlumno(alumno);
     this.alumnos.set([...this.alumnos()]);
+  }
+
+  private actualizarValidezCelda(
+    studentId: number,
+    codigo: string,
+    nota: number | null,
+  ): void {
+    const key = cellKey(studentId, codigo);
+    const invalidas = new Set(this.celdasInvalidas());
+    if (isNotaEnRango(nota, this.notaMinimaRango(), this.notaMaxima())) {
+      invalidas.delete(key);
+    } else if (nota !== null) {
+      invalidas.add(key);
+    } else {
+      invalidas.delete(key);
+    }
+    this.celdasInvalidas.set(invalidas);
+  }
+
+  private revalidarTodasLasCeldas(): void {
+    const invalidas = new Set<string>();
+    const min = this.notaMinimaRango();
+    const max = this.notaMaxima();
+    for (const alumno of this.alumnos()) {
+      for (const [codigo, cell] of Object.entries(alumno.componentes)) {
+        if (cell?.nota != null && !isNotaEnRango(cell.nota, min, max)) {
+          invalidas.add(cellKey(alumno.studentId, codigo));
+        }
+      }
+    }
+    this.celdasInvalidas.set(invalidas);
   }
 
   recalcularAlumno(alumno: RegistryAlumnoRow): void {
@@ -714,6 +985,11 @@ export class EvaluacionNotasComponent implements OnInit {
       for (const comp of formula.componentes) {
         const cell = alumno.componentes[comp.codigo];
         if (cell?.nota === null || cell?.nota === undefined) continue;
+        if (this.modoRectificacion()) {
+          if (!cell.gradeId) continue;
+          const original = this.originalNotas.get(this.notaKey(alumno.studentId, comp.codigo));
+          if (cell.nota === original) continue;
+        }
         entries.push({
           studentId: alumno.studentId,
           componenteCodigo: comp.codigo,
@@ -724,7 +1000,16 @@ export class EvaluacionNotasComponent implements OnInit {
     }
 
     if (!entries.length) {
-      this.error.set('Ingrese al menos una nota antes de guardar.');
+      this.error.set(
+        this.modoRectificacion()
+          ? 'Modifique al menos una calificación existente antes de rectificar.'
+          : 'Ingrese al menos una nota antes de guardar.',
+      );
+      return;
+    }
+
+    if (this.hayNotasInvalidas()) {
+      this.error.set('Corrija las calificaciones fuera del rango permitido antes de guardar.');
       return;
     }
 
@@ -740,6 +1025,9 @@ export class EvaluacionNotasComponent implements OnInit {
     };
 
     this.pendingPayload = payload;
+    if (this.modoRectificacion()) {
+      this.motivoRectificacion.set('');
+    }
     this.confirmResumen.set({
       curso: f.curso,
       nivel: f.nivel,
@@ -757,11 +1045,38 @@ export class EvaluacionNotasComponent implements OnInit {
     this.confirmModalAbierto.set(false);
     this.confirmResumen.set(null);
     this.pendingPayload = null;
+    this.motivoRectificacion.set('');
   }
 
   confirmarGuardado(): void {
     const payload = this.pendingPayload;
     if (!payload) return;
+
+    if (this.modoRectificacion()) {
+      const motivo = this.motivoRectificacion().trim();
+      if (motivo.length < 10) {
+        this.error.set('El motivo de rectificación debe tener al menos 10 caracteres.');
+        return;
+      }
+      const rectifyPayload: RectifyNotasRegistroPayload = { ...payload, motivo };
+      this.svc.saveRectify(rectifyPayload).subscribe({
+        next: res => {
+          this.confirmModalAbierto.set(false);
+          this.confirmResumen.set(null);
+          this.pendingPayload = null;
+          this.motivoRectificacion.set('');
+          this.formula.set(res.registry.formula);
+          this.alumnos.set(res.registry.alumnos);
+          this.actaCerrada.set(!!res.registry.actaCerrada);
+          this.snapshotOriginalNotas();
+          this.toast.set(`Se rectificaron ${res.saved} calificaciones.`);
+          this.cargarContextos(false);
+        },
+        error: err =>
+          this.error.set(err?.error?.message ?? err?.message ?? 'Error al rectificar'),
+      });
+      return;
+    }
 
     this.svc.saveBulk(payload).subscribe({
       next: res => {
@@ -770,6 +1085,8 @@ export class EvaluacionNotasComponent implements OnInit {
         this.pendingPayload = null;
         this.formula.set(res.registry.formula);
         this.alumnos.set(res.registry.alumnos);
+        this.actaCerrada.set(!!res.registry.actaCerrada);
+        this.snapshotOriginalNotas();
         this.toast.set(`Se guardaron ${res.saved} calificaciones.`);
         if (this.modoEmbeddido()) {
           this.cargar();

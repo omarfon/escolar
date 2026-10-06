@@ -13,6 +13,8 @@ export interface NavItem {
   exact?: boolean;
   /** staff = módulos administrativos; portal-* = portales por rol */
   zone?: 'staff' | 'portal-docente' | 'portal-estudiante' | 'portal-padre' | 'shared';
+  /** Solo el superusuario SIAGIE ve este ítem. El administrador de sede no. */
+  soloSiagie?: boolean;
   /** Filtra ítems según sistema de calificación institucional */
   evalMode?: EvalNavMode;
 }
@@ -55,12 +57,13 @@ export class LayoutService {
   /** Navegación lateral plana del portal docente */
   readonly docenteSidebarNav: NavItem[] = [
     { label: 'Inicio', icon: 'home', route: '/portal-docente/inicio', exact: true },
-    { label: 'Mi Aula', icon: 'class', route: '/portal-docente/mi-aula' },
+    { label: 'Mis Aulas', icon: 'class', route: '/portal-docente/mi-aula' },
     { label: 'Asistencia', icon: 'fact_check', route: '/portal-docente/asistencia' },
     { label: 'Notas', icon: 'grading', route: '/portal-docente/notas' },
     { label: 'Tareas', icon: 'assignment', route: '/portal-docente/tareas' },
     { label: 'Recursos', icon: 'folder', route: '/portal-docente/recursos' },
     { label: 'Comunicados', icon: 'campaign', route: '/portal-docente/comunicados' },
+    { label: 'Calendario escolar', icon: 'calendar_view_month', route: '/portal-docente/calendario' },
     { label: 'Temario', icon: 'calendar_month', route: '/portal-docente/temario' },
   ];
 
@@ -73,6 +76,7 @@ export class LayoutService {
     { label: 'Tareas', icon: 'assignment', route: '/portal-padre/tareas' },
     { label: 'Clases', icon: 'menu_book', route: '/portal-padre/clases' },
     { label: 'Horarios', icon: 'schedule', route: '/portal-padre/horarios' },
+    { label: 'Calendario escolar', icon: 'calendar_view_month', route: '/portal-padre/calendario' },
     { label: 'Comunicados', icon: 'campaign', route: '/portal-padre/comunicacion' },
     { label: 'Correo a docentes', icon: 'mail', route: '/portal-padre/correo-docentes' },
     { label: 'Estado de Cuenta', icon: 'account_balance_wallet', route: '/portal-padre/finanzas' },
@@ -87,6 +91,7 @@ export class LayoutService {
     { label: 'Tareas', icon: 'assignment', route: '/portal-estudiante/tareas' },
     { label: 'Clases', icon: 'menu_book', route: '/portal-estudiante/clases' },
     { label: 'Comunicados', icon: 'campaign', route: '/portal-estudiante/comunicados' },
+    { label: 'Calendario escolar', icon: 'calendar_view_month', route: '/portal-estudiante/calendario' },
     { label: 'Contactos', icon: 'contacts', route: '/portal-estudiante/contactos' },
     { label: 'Mi ficha', icon: 'badge', route: '/portal-estudiante/perfil' },
   ];
@@ -108,6 +113,8 @@ export class LayoutService {
         { label: 'Expedientes', icon: 'folder_open',  route: '/estudiantes/expedientes', permisos: ['estudiantes.ver'] },
         { label: 'Documentos',  icon: 'description',  route: '/estudiantes/documentos',  permisos: ['estudiantes.ver'] },
         { label: 'Conducta',    icon: 'gavel',         route: '/estudiantes/conducta',    permisos: ['estudiantes.ver'] },
+        { label: 'Auditoría de cambios', icon: 'history_edu', route: '/estudiantes/auditoria-cambios', permisos: ['estudiantes.expediente', 'admin.reportes'] },
+        { label: 'Vínculos representante', icon: 'family_restroom', route: '/estudiantes/representante-vinculos', permisos: ['estudiantes.representantes', 'estudiantes.expediente', 'estudiantes.editar'] },
       ]
     },
     {
@@ -116,13 +123,47 @@ export class LayoutService {
       children: [
         { label: 'Alumnos Matriculados', icon: 'list_alt',           route: '/matricula/matriculados',   permisos: ['matricula.ver'] },
         { label: 'Nueva Matrícula',      icon: 'person_add',        route: '/matricula/nueva',          permisos: ['matricula.crear', 'matricula.ver'] },
+        { label: 'Matrícula excepcional', icon: 'priority_high',   route: '/matricula/excepcional',    permisos: ['matricula.excepcional', 'matricula.crear'] },
         { label: 'Continuidad',      icon: 'autorenew',         route: '/matricula/continuidad',    permisos: ['matricula.ver'] },
         { label: 'Matrícula Masiva', icon: 'group_add',         route: '/matricula/masiva',         permisos: ['matricula.ver'] },
-        { label: 'Historial Académico', icon: 'history_edu',   route: '/matricula/historial-academico', permisos: ['matricula.ver', 'matricula.crear', 'estudiantes.ver', 'estudiantes.editar', 'evaluacion.ver', 'horarios.ver'] },
+        { label: 'Carga historial académico', icon: 'upload_file', route: '/matricula/historial-academico', permisos: ['matricula.ver', 'matricula.crear', 'estudiantes.ver', 'estudiantes.editar', 'evaluacion.ver', 'horarios.ver'] },
+        { label: 'Historial de matrícula', icon: 'history', route: '/matricula/historial', permisos: ['matricula.historial', 'matricula.ver'] },
         { label: 'Vacantes',         icon: 'event_seat',        route: '/matricula/vacantes',       permisos: ['matricula.vacantes', 'matricula.ver'] },
         { label: 'Lista de Espera',  icon: 'hourglass_empty',   route: '/matricula/espera',         permisos: ['matricula.ver'] },
         { label: 'Cambio de Sección',icon: 'compare_arrows',    route: '/matricula/cambio-seccion', permisos: ['matricula.editar', 'matricula.ver'] },
+        { label: 'Retiro de estudiante', icon: 'person_off', route: '/matricula/retiro', permisos: ['matricula.retiro', 'matricula.ver'] },
+        { label: 'Reingreso de estudiante', icon: 'person_add', route: '/matricula/reingreso', permisos: ['matricula.reingreso', 'matricula.ver'] },
+        { label: 'Evaluaciones de matrícula', icon: 'fact_check', route: '/matricula/evaluaciones', permisos: ['matricula.evaluacion', 'matricula.ver'] },
+        { label: 'Retroalimentación', icon: 'forum', route: '/matricula/retroalimentacion', permisos: ['matricula.retroalimentacion', 'matricula.ver'] },
       ]
+    },
+    {
+      label: 'Traslados', icon: 'swap_horiz', zone: 'staff',
+      permisos: ['traslados.ver', 'traslados.solicitar', 'traslados.resolver', 'traslados.aprobar_destino'],
+      children: [
+        {
+          label: 'Solicitar traslado',
+          icon: 'outbound',
+          route: '/traslados/solicitar',
+          permisos: ['traslados.solicitar', 'traslados.ver'],
+        },
+        {
+          label: 'Traslados recibidos',
+          icon: 'move_to_inbox',
+          route: '/traslados/recibidos',
+          permisos: ['traslados.aprobar_destino', 'traslados.ver'],
+        },
+        {
+          label: 'Supervisión territorial',
+          icon: 'policy',
+          route: '/traslados/supervision',
+          permisos: ['traslados.resolver', 'traslados.ver'],
+        },
+      ],
+    },
+    {
+      label: 'Instituciones', icon: 'account_balance', route: '/instituciones', zone: 'staff',
+      soloSiagie: true,
     },
     {
       label: 'Académico', icon: 'menu_book', zone: 'staff',
@@ -150,6 +191,13 @@ export class LayoutService {
       permisos: ['evaluacion.ver'],
       children: [
         { label: 'Calificaciones', icon: 'grading', route: '/evaluacion/notas', permisos: ['evaluacion.registrar', 'evaluacion.ver'] },
+        { label: 'Competencias', icon: 'stars', route: '/evaluacion/competencias', permisos: ['evaluacion.registrar', 'evaluacion.ver', 'evaluacion.editar'] },
+        { label: 'Evaluación diagnóstica', icon: 'fact_check', route: '/evaluacion/diagnostica', permisos: ['evaluacion.registrar', 'evaluacion.ver', 'evaluacion.editar'] },
+        { label: 'Auditoría diagnóstica', icon: 'history_edu', route: '/evaluacion/auditoria-diagnostica', permisos: ['evaluacion.reportes', 'admin.reportes'] },
+        { label: 'Escala de evaluación', icon: 'tune', route: '/evaluacion/escala', permisos: ['evaluacion.ver', 'evaluacion.configurar', 'admin.institucional'] },
+        { label: 'Rectificación de notas', icon: 'edit_note', route: '/evaluacion/rectificacion-notas', permisos: ['evaluacion.rectificar', 'evaluacion.aprobar'] },
+        { label: 'Auditoría de notas', icon: 'history_edu', route: '/evaluacion/auditoria-cambios', permisos: ['evaluacion.reportes', 'admin.reportes'] },
+        { label: 'Auditoría de competencias', icon: 'history_edu', route: '/evaluacion/auditoria-competencias', permisos: ['evaluacion.reportes', 'admin.reportes'] },
         { label: 'Promedios',         icon: 'calculate',      route: '/evaluacion/promedios',   permisos: ['evaluacion.reportes', 'evaluacion.ver'] },
         { label: 'Libretas',          icon: 'picture_as_pdf', route: '/evaluacion/libretas',    permisos: ['evaluacion.ver'] },
         { label: 'Actas',             icon: 'article',        route: '/evaluacion/actas',       permisos: ['evaluacion.aprobar', 'evaluacion.ver'] },
@@ -169,11 +217,12 @@ export class LayoutService {
       label: 'Portal Docente', icon: 'co_present', zone: 'portal-docente', roles: ['DOCENTE'],
       children: [
         { label: 'Inicio',       icon: 'home',         route: '/portal-docente/inicio', exact: true },
-        { label: 'Mi Aula',    icon: 'class',      route: '/portal-docente/mi-aula'    },
+        { label: 'Mis Aulas',    icon: 'class',      route: '/portal-docente/mi-aula'    },
         { label: 'Asistencia', icon: 'fact_check', route: '/portal-docente/asistencia' },
         { label: 'Notas',      icon: 'grading',    route: '/portal-docente/notas'      },
         { label: 'Tareas',     icon: 'assignment', route: '/portal-docente/tareas' },
         { label: 'Recursos',   icon: 'folder',     route: '/portal-docente/recursos'   },
+        { label: 'Calendario escolar', icon: 'calendar_view_month', route: '/portal-docente/calendario' },
         { label: 'Temario',    icon: 'calendar_month', route: '/portal-docente/temario' },
       ]
     },
@@ -186,6 +235,7 @@ export class LayoutService {
         { label: 'Asistencia',   icon: 'fact_check', route: '/portal-estudiante/asistencia' },
         { label: 'Tareas',       icon: 'assignment', route: '/portal-estudiante/tareas'     },
         { label: 'Clases',       icon: 'menu_book',  route: '/portal-estudiante/clases'     },
+        { label: 'Calendario escolar', icon: 'calendar_view_month', route: '/portal-estudiante/calendario' },
         { label: 'Contactos',    icon: 'contacts',   route: '/portal-estudiante/contactos'  },
         { label: 'Mi ficha',     icon: 'badge',      route: '/portal-estudiante/perfil'     },
       ]
@@ -200,6 +250,7 @@ export class LayoutService {
         { label: 'Tareas',        icon: 'assignment',             route: '/portal-padre/tareas'       },
         { label: 'Clases',        icon: 'menu_book',              route: '/portal-padre/clases'       },
         { label: 'Horarios',      icon: 'schedule',               route: '/portal-padre/horarios'     },
+        { label: 'Calendario escolar', icon: 'calendar_view_month', route: '/portal-padre/calendario' },
         { label: 'Comunicados', icon: 'campaign', route: '/portal-padre/comunicacion' },
         { label: 'Correo a docentes', icon: 'mail',               route: '/portal-padre/correo-docentes' },
         { label: 'Estado de Cuenta', icon: 'account_balance_wallet', route: '/portal-padre/finanzas'  },
@@ -237,13 +288,15 @@ export class LayoutService {
     },
     {
       label: 'Maestros', icon: 'tune', zone: 'staff',
-      permisos: ['matricula.vacantes', 'matricula.ver', 'matricula.crear', 'horarios.ver', 'docentes.ver', 'estudiantes.ver', 'admin.institucional', 'comunicados.ver', 'evaluacion.ver', 'asistencia.ver'],
+      permisos: ['matricula.vacantes', 'matricula.ver', 'matricula.crear', 'horarios.ver', 'docentes.ver', 'estudiantes.ver', 'admin.institucional', 'comunicados.ver', 'evaluacion.ver', 'asistencia.ver', 'calendarizacion.ver', 'calendarizacion.gestionar', 'curricula.ver', 'curricula.gestionar'],
       children: [
         { label: 'Salones', icon: 'meeting_room', route: '/maestros/salones', permisos: ['matricula.vacantes', 'matricula.ver'] },
+        { label: 'Plan de estudios (áreas)', icon: 'category', route: '/maestros/plan-estudios-areas', permisos: ['curricula.ver', 'curricula.gestionar', 'admin.institucional', 'horarios.ver', 'evaluacion.ver', 'matricula.ver'] },
         { label: 'Sedes', icon: 'location_city', route: '/maestros/sedes', permisos: ['admin.institucional', 'matricula.ver', 'matricula.vacantes', 'horarios.ver', 'docentes.ver', 'estudiantes.ver'] },
         { label: 'Cursos', icon: 'menu_book', route: '/maestros/cursos', permisos: ['horarios.ver', 'docentes.ver', 'matricula.ver'] },
         { label: 'Docentes', icon: 'school', route: '/maestros/docentes', permisos: ['docentes.ver', 'docentes.crear', 'docentes.editar', 'horarios.ver', 'matricula.ver', 'matricula.vacantes'] },
         { label: 'Faltas y Reconocimientos', icon: 'gavel', route: '/maestros/faltas-reconocimientos', permisos: ['estudiantes.ver', 'matricula.ver', 'matricula.vacantes', 'horarios.ver', 'docentes.ver'] },
+        { label: 'Años escolares', icon: 'calendar_month', route: '/maestros/anios-escolares', permisos: ['calendarizacion.ver', 'calendarizacion.gestionar', 'admin.institucional', 'horarios.ver', 'matricula.ver'] },
         { label: 'Feriados', icon: 'event_busy', route: '/maestros/feriados', permisos: ['asistencia.ver', 'matricula.ver', 'horarios.ver'] },
         { label: 'Períodos Académicos', icon: 'date_range', route: '/maestros/periodos-academicos', permisos: ['horarios.ver', 'evaluacion.ver', 'matricula.ver'] },
         { label: 'Eventos', icon: 'event', route: '/maestros/eventos', permisos: ['comunicados.ver', 'matricula.ver', 'horarios.ver'] },
