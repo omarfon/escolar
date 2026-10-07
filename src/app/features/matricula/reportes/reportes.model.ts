@@ -1,12 +1,7 @@
-export type ReporteTipo =
-  | 'promedios'
-  | 'notas'
-  | 'competencias'
-  | 'diagnostico'
-  | 'avance_evaluacion';
+export type ReporteMatriculaTipo = 'matricula_global' | 'matricula_resumen';
 export type ReporteFormato = 'csv' | 'xlsx' | 'pdf';
 
-export interface ReporteContext {
+export interface ReporteMatriculaContext {
   institucion: {
     id: number;
     nombre: string;
@@ -23,21 +18,21 @@ export interface ReporteContext {
     consolidado: boolean;
     institucionesCount: number;
   };
-  bimestreActual: number;
+  periodoActual: number;
   anioEscolar: number;
-  tiposDisponibles: ReporteTipo[];
+  tiposDisponibles: ReporteMatriculaTipo[];
   permisoConsulta: string;
   permisoExportacion: string;
   filtros: {
     niveles: string[];
     grados: string[];
     secciones: string[];
-    cursos: string[];
-    bimestres: number[];
+    periodos: number[];
+    estadosMatricula: string[];
     dres: string[];
     ugels: string[];
   };
-  fuentes: Record<ReporteTipo, string>;
+  fuentes: Record<ReporteMatriculaTipo, string>;
 }
 
 export interface ReporteColumn {
@@ -46,13 +41,9 @@ export interface ReporteColumn {
 }
 
 export interface ReporteRow {
-  _tipoFila?: 'encabezado' | 'detalle' | string;
+  _tipoFila?: string;
   tituloGrupo?: string;
   [key: string]: string | number | null | undefined;
-}
-
-export function esFilaEncabezadoGrupo(row: ReporteRow): boolean {
-  return row._tipoFila === 'encabezado';
 }
 
 export interface ReportePagination {
@@ -66,11 +57,11 @@ export interface ReporteMeta {
   fechaCorte: string;
   anioEscolar: number;
   bimestre: number | null;
-  tipo: ReporteTipo;
+  tipo: ReporteMatriculaTipo;
   fuente: string;
   parametros: Record<string, unknown>;
-  institucion: ReporteContext['institucion'];
-  alcance?: ReporteContext['alcance'];
+  institucion: ReporteMatriculaContext['institucion'];
+  alcance?: ReporteMatriculaContext['alcance'];
   totales: Record<string, number | null>;
 }
 
@@ -82,15 +73,15 @@ export interface ReporteResponse {
 }
 
 export interface ReporteFilters {
-  tipo: ReporteTipo;
+  tipo: ReporteMatriculaTipo;
   anio?: number;
-  bimestre?: number;
+  periodo?: number;
   dre?: string;
   ugel?: string;
   nivel?: string;
   grado?: string;
   seccion?: string;
-  curso?: string;
+  estadoMatricula?: string;
   busqueda?: string;
   page?: number;
   pageSize?: number;
@@ -99,7 +90,7 @@ export interface ReporteFilters {
 export interface ReporteJob {
   id: number;
   status: 'pending' | 'processing' | 'completed' | 'failed';
-  reportType: ReporteTipo;
+  reportType: ReporteMatriculaTipo;
   format: ReporteFormato;
   totalFilas: number;
   archivoNombre?: string;
@@ -108,14 +99,15 @@ export interface ReporteJob {
   completedAt?: string;
 }
 
-export const TIPOS_REPORTE: { value: ReporteTipo; label: string }[] = [
-  { value: 'promedios', label: 'Promedios por aula' },
-  { value: 'notas', label: 'Registro de notas' },
-  { value: 'competencias', label: 'Evaluación por competencias' },
-  { value: 'diagnostico', label: 'Evaluación diagnóstica' },
-  { value: 'avance_evaluacion', label: 'Avance de evaluación' },
+export const TIPOS_REPORTE_MATRICULA: { value: ReporteMatriculaTipo; label: string }[] = [
+  { value: 'matricula_global', label: 'Matrícula global por IE' },
+  { value: 'matricula_resumen', label: 'Resumen por aula' },
 ];
 
-export function tipoReporteLabel(tipo: ReporteTipo): string {
-  return TIPOS_REPORTE.find((t) => t.value === tipo)?.label ?? tipo;
+export function tipoReporteMatriculaLabel(tipo: ReporteMatriculaTipo): string {
+  return TIPOS_REPORTE_MATRICULA.find((t) => t.value === tipo)?.label ?? tipo;
+}
+
+export function esFilaEncabezadoGrupo(row: ReporteRow): boolean {
+  return row._tipoFila === 'encabezado';
 }

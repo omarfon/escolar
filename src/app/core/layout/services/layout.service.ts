@@ -1,5 +1,6 @@
 import { Injectable, signal, computed } from '@angular/core';
 import type { EvalNavMode } from '../../grading/grading-config.model';
+import { REPORTES_NAV_ITEMS } from '../../../features/reportes/reportes-nav.model';
 
 export interface NavItem {
   label: string;
@@ -107,6 +108,23 @@ export class LayoutService {
   readonly nav: NavItem[] = [
     { label: 'Dashboard', icon: 'dashboard', route: '/dashboard', permisos: ['dashboard.ver'], zone: 'shared' },
     {
+      label: 'Reportería', icon: 'analytics', zone: 'staff',
+      permisos: [
+        'dashboard.reportes',
+        'matricula.reportes',
+        'asistencia.reportes',
+        'evaluacion.reportes',
+        'tesoreria.reportes',
+        'admin.reportes',
+      ],
+      children: REPORTES_NAV_ITEMS.map(({ label, icon, route, permisos }) => ({
+        label,
+        icon,
+        route,
+        permisos,
+      })),
+    },
+    {
       label: 'Estudiantes', icon: 'school', zone: 'staff',
       permisos: ['estudiantes.ver'],
       children: [
@@ -183,7 +201,6 @@ export class LayoutService {
         { label: 'Control de Faltas', icon: 'cancel_presentation',      route: '/asistencia/control',          permisos: ['asistencia.ver'] },
         { label: 'Justificaciones',   icon: 'assignment_turned_in',     route: '/asistencia/justificaciones',  permisos: ['asistencia.ver'] },
         { label: 'Alertas',           icon: 'notification_important',   route: '/asistencia/alertas',          permisos: ['asistencia.ver'] },
-        { label: 'Reportes',          icon: 'bar_chart',                route: '/asistencia/reportes',         permisos: ['asistencia.reportes', 'asistencia.ver'] },
       ]
     },
     {
@@ -198,7 +215,6 @@ export class LayoutService {
         { label: 'Rectificación de notas', icon: 'edit_note', route: '/evaluacion/rectificacion-notas', permisos: ['evaluacion.rectificar', 'evaluacion.aprobar'] },
         { label: 'Auditoría de notas', icon: 'history_edu', route: '/evaluacion/auditoria-cambios', permisos: ['evaluacion.reportes', 'admin.reportes'] },
         { label: 'Auditoría de competencias', icon: 'history_edu', route: '/evaluacion/auditoria-competencias', permisos: ['evaluacion.reportes', 'admin.reportes'] },
-        { label: 'Reportes',          icon: 'bar_chart',      route: '/evaluacion/reportes',    permisos: ['evaluacion.reportes', 'admin.reportes'] },
         { label: 'Promedios',         icon: 'calculate',      route: '/evaluacion/promedios',   permisos: ['evaluacion.reportes', 'evaluacion.ver'] },
         { label: 'Libretas',          icon: 'picture_as_pdf', route: '/evaluacion/libretas',    permisos: ['evaluacion.ver'] },
         { label: 'Actas',             icon: 'article',        route: '/evaluacion/actas',       permisos: ['evaluacion.aprobar', 'evaluacion.ver'] },
@@ -264,7 +280,6 @@ export class LayoutService {
         { label: 'Conceptos de Pago', icon: 'receipt',     route: '/tesoreria/conceptos', permisos: ['tesoreria.conceptos', 'tesoreria.ver'] },
         { label: 'Registro de Pagos', icon: 'payment',     route: '/tesoreria/pagos',     permisos: ['tesoreria.registrar', 'tesoreria.ver'] },
         { label: 'Morosidad',         icon: 'money_off',   route: '/tesoreria/morosidad', permisos: ['tesoreria.ver'] },
-        { label: 'Reportes',          icon: 'bar_chart',   route: '/tesoreria/reportes',  permisos: ['tesoreria.reportes', 'tesoreria.ver'] },
       ]
     },
     {

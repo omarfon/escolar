@@ -5,35 +5,35 @@ import { LayoutService } from '../../../core/layout/services/layout.service';
 import { AuthService } from '../../../core/auth/services/auth.service';
 import {
   ReporteColumn,
-  ReporteContext,
   ReporteFilters,
   ReporteFormato,
   ReporteJob,
+  ReporteMatriculaContext,
   ReporteMeta,
   ReportePagination,
   ReporteRow,
-  ReporteTipo,
-  TIPOS_REPORTE,
+  ReporteMatriculaTipo,
+  TIPOS_REPORTE_MATRICULA,
   esFilaEncabezadoGrupo,
-  tipoReporteLabel,
+  tipoReporteMatriculaLabel,
 } from './reportes.model';
-import { ReportesService, triggerFileDownload } from './reportes.service';
+import { MatriculaReportesService, triggerFileDownload } from './reportes.service';
 
 @Component({
-  selector: 'app-evaluacion-reportes',
+  selector: 'app-matricula-reportes',
   standalone: true,
   imports: [FormsModule, DatePipe, UpperCasePipe],
   template: `
     <div class="space-y-5 animate-fade-in">
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h3 class="text-lg font-semibold text-gray-900">Evaluación</h3>
+          <h3 class="text-lg font-semibold text-gray-900">Matrícula</h3>
           @if (context(); as ctx) {
             <p class="text-sm text-gray-500 mt-0.5">{{ ctx.alcance.label }}</p>
             <p class="text-xs text-gray-400 mt-1">
-              Ruta: <span class="font-mono">/reportes/evaluacion</span>
-              · Menú: Reportería → Evaluación
-              · Año {{ ctx.anioEscolar }} · B{{ ctx.bimestreActual }}
+              Ruta: <span class="font-mono">/reportes/matricula</span>
+              · Menú: Reportería → Matrícula
+              · Año {{ ctx.anioEscolar }}
             </p>
             @if (ctx.alcance.consolidado) {
               <p class="text-xs text-indigo-600 mt-1 font-medium">
@@ -45,13 +45,13 @@ import { ReportesService, triggerFileDownload } from './reportes.service';
         </div>
         <div class="flex flex-wrap gap-2">
           @if (puedeExportar()) {
-            <button class="btn btn-secondary btn-sm" (click)="exportar('csv')" [disabled]="svc.exporting() || !puedeConsultar()">
+            <button class="btn btn-secondary btn-sm" (click)="exportar('csv')" [disabled]="svc.exporting()">
               <span class="icon icon-sm">download</span> CSV
             </button>
-            <button class="btn btn-secondary btn-sm" (click)="exportar('xlsx')" [disabled]="svc.exporting() || !puedeConsultar()">
+            <button class="btn btn-secondary btn-sm" (click)="exportar('xlsx')" [disabled]="svc.exporting()">
               <span class="icon icon-sm">table_view</span> XLSX
             </button>
-            <button class="btn btn-secondary btn-sm" (click)="exportar('pdf')" [disabled]="svc.exporting() || !puedeConsultar()">
+            <button class="btn btn-secondary btn-sm" (click)="exportar('pdf')" [disabled]="svc.exporting()">
               <span class="icon icon-sm">picture_as_pdf</span> PDF
             </button>
           }
@@ -65,7 +65,7 @@ import { ReportesService, triggerFileDownload } from './reportes.service';
         <div class="card p-4 bg-indigo-50/50 border border-indigo-100 text-sm">
           <div class="flex flex-wrap gap-x-6 gap-y-1 text-gray-600">
             <span><strong>Fecha de corte:</strong> {{ m.fechaCorte | date:'dd/MM/yyyy HH:mm' }}</span>
-            <span><strong>Tipo:</strong> {{ tipoReporteLabel(m.tipo) }}</span>
+            <span><strong>Tipo:</strong> {{ tipoReporteMatriculaLabel(m.tipo) }}</span>
             <span><strong>Fuente:</strong> {{ m.fuente }}</span>
           </div>
           @if (totalesEntries().length) {
@@ -85,18 +85,14 @@ import { ReportesService, triggerFileDownload } from './reportes.service';
               <label class="form-label mb-1 block">DRE</label>
               <select class="form-select" [ngModel]="filtro().dre ?? ''" (ngModelChange)="setTerritorial('dre', $event)">
                 <option value="">Todas</option>
-                @for (d of dres(); track d) {
-                  <option [value]="d">{{ d }}</option>
-                }
+                @for (d of dres(); track d) { <option [value]="d">{{ d }}</option> }
               </select>
             </div>
             <div>
               <label class="form-label mb-1 block">UGEL</label>
               <select class="form-select" [ngModel]="filtro().ugel ?? ''" (ngModelChange)="setTerritorial('ugel', $event)">
                 <option value="">Todas</option>
-                @for (u of ugels(); track u) {
-                  <option [value]="u">{{ u }}</option>
-                }
+                @for (u of ugels(); track u) { <option [value]="u">{{ u }}</option> }
               </select>
             </div>
           }
@@ -109,49 +105,47 @@ import { ReportesService, triggerFileDownload } from './reportes.service';
             </select>
           </div>
           <div>
+            <label class="form-label mb-1 block">Año escolar</label>
+            <input class="form-input" type="number" [ngModel]="filtro().anio" (ngModelChange)="setFiltro('anio', $event ? +$event : undefined)">
+          </div>
+          <div>
+            <label class="form-label mb-1 block">Periodo</label>
+            <select class="form-select" [ngModel]="filtro().periodo ?? ''" (ngModelChange)="setPeriodo($event)">
+              <option value="">Todos</option>
+              @for (p of periodos(); track p) { <option [value]="p">{{ p }}° periodo</option> }
+            </select>
+          </div>
+          <div>
             <label class="form-label mb-1 block">Nivel</label>
-            <select class="form-select" [ngModel]="filtro().nivel" (ngModelChange)="setFiltro('nivel', $event)">
-              <option value="">— Seleccionar —</option>
-              @for (n of niveles(); track n) {
-                <option [value]="n">{{ n }}</option>
-              }
+            <select class="form-select" [ngModel]="filtro().nivel ?? ''" (ngModelChange)="setFiltro('nivel', $event)">
+              <option value="">Todos</option>
+              @for (n of niveles(); track n) { <option [value]="n">{{ n }}</option> }
             </select>
           </div>
           <div>
             <label class="form-label mb-1 block">Grado</label>
-            <select class="form-select" [ngModel]="filtro().grado" (ngModelChange)="setFiltro('grado', $event)">
-              <option value="">— Seleccionar —</option>
-              @for (g of grados(); track g) {
-                <option [value]="g">{{ g }}</option>
-              }
+            <select class="form-select" [ngModel]="filtro().grado ?? ''" (ngModelChange)="setFiltro('grado', $event)">
+              <option value="">Todos</option>
+              @for (g of grados(); track g) { <option [value]="g">{{ g }}</option> }
             </select>
           </div>
           <div>
             <label class="form-label mb-1 block">Sección</label>
-            <select class="form-select" [ngModel]="filtro().seccion" (ngModelChange)="setFiltro('seccion', $event)">
-              <option value="">— Seleccionar —</option>
-              @for (s of secciones(); track s) {
-                <option [value]="s">{{ s }}</option>
-              }
+            <select class="form-select" [ngModel]="filtro().seccion ?? ''" (ngModelChange)="setFiltro('seccion', $event)">
+              <option value="">Todas</option>
+              @for (s of secciones(); track s) { <option [value]="s">{{ s }}</option> }
             </select>
           </div>
           <div>
-            <label class="form-label mb-1 block">Bimestre</label>
-            <select class="form-select" [ngModel]="filtro().bimestre ?? ''" (ngModelChange)="setBimestre($event)">
+            <label class="form-label mb-1 block">Estado matrícula</label>
+            <select class="form-select" [ngModel]="filtro().estadoMatricula ?? ''" (ngModelChange)="setFiltro('estadoMatricula', $event)">
               <option value="">Todos</option>
-              @for (b of bimestres(); track b) {
-                <option [value]="b">{{ b }}° bimestre</option>
-              }
+              @for (e of estadosMatricula(); track e) { <option [value]="e">{{ e }}</option> }
             </select>
-          </div>
-          <div>
-            <label class="form-label mb-1 block">Curso / área</label>
-            <input class="form-input" placeholder="Opcional"
-              [ngModel]="filtro().curso" (ngModelChange)="setFiltro('curso', $event)">
           </div>
           <div class="sm:col-span-2">
             <label class="form-label mb-1 block">Buscar</label>
-            <input class="form-input" placeholder="Estudiante, curso..."
+            <input class="form-input" placeholder="Estudiante, código, DNI..."
               [ngModel]="filtro().busqueda" (ngModelChange)="setFiltro('busqueda', $event)">
           </div>
         </div>
@@ -174,9 +168,6 @@ import { ReportesService, triggerFileDownload } from './reportes.service';
                     <span class="icon icon-sm">download</span> Descargar
                   </button>
                 }
-                @if (job.status === 'failed') {
-                  <span class="text-red-600 text-xs">{{ job.errorMensaje }}</span>
-                }
               </div>
             }
           </div>
@@ -184,11 +175,8 @@ import { ReportesService, triggerFileDownload } from './reportes.service';
       }
 
       @if (jobMensaje()) {
-        <div class="rounded-xl bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 text-sm" role="status">
-          {{ jobMensaje() }}
-        </div>
+        <div class="rounded-xl bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 text-sm">{{ jobMensaje() }}</div>
       }
-
       @if (error()) {
         <div class="card p-8 text-center text-red-600" role="alert">{{ error() }}</div>
       } @else if (svc.loading()) {
@@ -198,8 +186,8 @@ import { ReportesService, triggerFileDownload } from './reportes.service';
         </div>
       } @else if (!items().length) {
         <div class="card p-16 text-center text-gray-500">
-          <span class="icon icon-2xl text-indigo-300 mb-3 block">bar_chart</span>
-          Configure los filtros y pulse <strong>Generar</strong> para consultar el reporte.
+          <span class="icon icon-2xl text-indigo-300 mb-3 block">groups</span>
+          Configure los filtros y pulse <strong>Generar</strong> para consultar el reporte de matrícula.
         </div>
       } @else {
         <div class="card overflow-x-auto">
@@ -231,10 +219,7 @@ import { ReportesService, triggerFileDownload } from './reportes.service';
           </table>
           @if (pagination(); as p) {
             <div class="px-4 py-3 flex justify-between items-center text-sm text-gray-500 border-t">
-              <span>
-                Página {{ p.page }} / {{ p.totalPages }}
-                · {{ etiquetaConteoRegistros() }}
-              </span>
+              <span>Página {{ p.page }} / {{ p.totalPages }} · {{ p.totalItems }} registro(s)</span>
               <div class="flex gap-2">
                 <button class="btn btn-secondary btn-sm" [disabled]="p.page <= 1" (click)="irPagina(p.page - 1)">Anterior</button>
                 <button class="btn btn-secondary btn-sm" [disabled]="p.page >= p.totalPages" (click)="irPagina(p.page + 1)">Siguiente</button>
@@ -246,16 +231,16 @@ import { ReportesService, triggerFileDownload } from './reportes.service';
     </div>
   `,
 })
-export class EvaluacionReportesComponent implements OnInit {
-  readonly svc = inject(ReportesService);
+export class MatriculaReportesComponent implements OnInit {
+  readonly svc = inject(MatriculaReportesService);
   private readonly layout = inject(LayoutService);
   private readonly auth = inject(AuthService);
 
-  readonly tipos = TIPOS_REPORTE;
-  readonly tipoReporteLabel = tipoReporteLabel;
+  readonly tipos = TIPOS_REPORTE_MATRICULA;
+  readonly tipoReporteMatriculaLabel = tipoReporteMatriculaLabel;
   readonly esFilaEncabezadoGrupo = esFilaEncabezadoGrupo;
 
-  readonly context = signal<ReporteContext | null>(null);
+  readonly context = signal<ReporteMatriculaContext | null>(null);
   readonly meta = signal<ReporteMeta | null>(null);
   readonly columns = signal<ReporteColumn[]>([]);
   readonly items = signal<ReporteRow[]>([]);
@@ -265,7 +250,7 @@ export class EvaluacionReportesComponent implements OnInit {
   readonly jobs = signal<ReporteJob[]>([]);
 
   readonly filtro = signal<ReporteFilters>({
-    tipo: 'promedios',
+    tipo: 'matricula_global',
     page: 1,
     pageSize: 25,
   });
@@ -273,7 +258,8 @@ export class EvaluacionReportesComponent implements OnInit {
   readonly niveles = computed(() => this.context()?.filtros.niveles ?? []);
   readonly grados = computed(() => this.context()?.filtros.grados ?? []);
   readonly secciones = computed(() => this.context()?.filtros.secciones ?? []);
-  readonly bimestres = computed(() => this.context()?.filtros.bimestres ?? []);
+  readonly periodos = computed(() => this.context()?.filtros.periodos ?? []);
+  readonly estadosMatricula = computed(() => this.context()?.filtros.estadosMatricula ?? []);
   readonly dres = computed(() => this.context()?.filtros.dres ?? []);
   readonly ugels = computed(() => this.context()?.filtros.ugels ?? []);
   readonly mostrarFiltrosTerritoriales = computed(() => {
@@ -285,28 +271,15 @@ export class EvaluacionReportesComponent implements OnInit {
   readonly totalesEntries = computed(() => {
     const totales = this.meta()?.totales ?? {};
     const labels: Record<string, string> = {
-      totalAlumnos: 'Alumnos',
-      totalRegistros: 'Registros',
-      totalCursos: 'Cursos',
-      promedioAula: 'Promedio aula',
-      aprobados: 'Aprobados',
-      desaprobados: 'Desaprobados',
-      enRiesgo: 'En riesgo',
-      destacados: 'Destacados',
-      promedioNotas: 'Promedio notas',
-      alumnosUnicos: 'Alumnos únicos',
+      totalAlumnos: 'Total alumnos',
+      activos: 'Activos',
+      inactivos: 'Inactivos',
+      retirados: 'Retirados',
+      mujeres: 'Mujeres',
+      varones: 'Varones',
+      aulasReportadas: 'Aulas',
       institucionesIncluidas: 'Instituciones',
-      componentesEsperados: 'Componentes esperados',
-      componentesRegistrados: 'Componentes registrados',
-      avanceGlobalPct: 'Avance notas (%)',
-      alumnosCompletos: 'Alumnos completos',
-      alumnosPendientes: 'Alumnos pendientes',
-      competenciasEsperadas: 'Competencias esperadas',
-      competenciasRegistradas: 'Competencias registradas',
-      avanceCompetenciasPct: 'Avance competencias (%)',
-      diagnosticosEsperados: 'Diagnósticos esperados',
-      diagnosticosRegistrados: 'Diagnósticos registrados',
-      avanceDiagnosticosPct: 'Avance diagnóstico (%)',
+      totalRegistros: 'Registros',
     };
     return Object.entries(totales).map(([key, value]) => ({
       key,
@@ -316,11 +289,9 @@ export class EvaluacionReportesComponent implements OnInit {
   });
 
   ngOnInit(): void {
-    this.layout.setTitle('Reportes de evaluación');
+    this.layout.setTitle('Reportes de matrícula');
     this.cargarContexto();
-    if (this.puedeExportar()) {
-      this.refrescarJobs();
-    }
+    if (this.puedeExportar()) this.refrescarJobs();
   }
 
   private cargarContexto(): void {
@@ -328,15 +299,12 @@ export class EvaluacionReportesComponent implements OnInit {
     this.svc.loadContext({ dre: f.dre, ugel: f.ugel }).subscribe({
       next: (ctx) => {
         this.context.set(ctx);
-        this.filtro.set({
-          ...f,
-          anio: ctx.anioEscolar,
-          dre: f.dre ?? ctx.alcance.dre ?? (ctx.institucion.dre || undefined),
-          ugel: f.ugel ?? ctx.alcance.ugel ?? (ctx.institucion.ugel || undefined),
-          nivel: f.nivel ?? ctx.filtros.niveles[0],
-          grado: f.grado ?? ctx.filtros.grados[0],
-          seccion: f.seccion ?? ctx.filtros.secciones[0],
-        });
+        this.filtro.update((cur) => ({
+          ...cur,
+          anio: cur.anio ?? ctx.anioEscolar,
+          dre: cur.dre ?? ctx.alcance.dre ?? (ctx.institucion.dre || undefined),
+          ugel: cur.ugel ?? ctx.alcance.ugel ?? (ctx.institucion.ugel || undefined),
+        }));
       },
       error: () => this.error.set('No se pudo cargar el contexto institucional'),
     });
@@ -355,33 +323,22 @@ export class EvaluacionReportesComponent implements OnInit {
   }
 
   jobStatusLabel(status: ReporteJob['status']): string {
-    const map: Record<ReporteJob['status'], string> = {
-      pending: 'Pendiente',
-      processing: 'Procesando',
-      completed: 'Listo',
-      failed: 'Fallido',
-    };
-    return map[status];
+    return ({ pending: 'Pendiente', processing: 'Procesando', completed: 'Listo', failed: 'Fallido' })[status];
   }
 
   descargarJob(job: ReporteJob): void {
     const f = this.filtro();
     this.svc.downloadJob(job.id, { dre: f.dre, ugel: f.ugel }).subscribe({
-      next: (blob) =>
-        triggerFileDownload(blob, job.archivoNombre ?? `reporte-${job.id}.${job.format}`),
+      next: (blob) => triggerFileDownload(blob, job.archivoNombre ?? `matricula-${job.id}.${job.format}`),
       error: () => this.error.set('Error al descargar el archivo'),
     });
   }
 
   puedeExportar(): boolean {
-    return this.auth.hasAnyPermiso('evaluacion.exportar', 'admin.reportes');
+    return this.auth.hasAnyPermiso('matricula.exportar', 'admin.reportes');
   }
 
-  puedeConsultar(): boolean {
-    return !!this.filtro().nivel && !!this.filtro().grado && !!this.filtro().seccion;
-  }
-
-  setTipo(tipo: ReporteTipo): void {
+  setTipo(tipo: ReporteMatriculaTipo): void {
     this.filtro.update((f) => ({ ...f, tipo, page: 1 }));
   }
 
@@ -389,19 +346,11 @@ export class EvaluacionReportesComponent implements OnInit {
     this.filtro.update((f) => ({ ...f, [key]: value || undefined, page: 1 }));
   }
 
-  setBimestre(value: string): void {
-    this.filtro.update((f) => ({
-      ...f,
-      bimestre: value ? Number(value) : undefined,
-      page: 1,
-    }));
+  setPeriodo(value: string): void {
+    this.filtro.update((f) => ({ ...f, periodo: value ? Number(value) : undefined, page: 1 }));
   }
 
   cargar(): void {
-    if (!this.puedeConsultar()) {
-      this.error.set('Seleccione nivel, grado y sección');
-      return;
-    }
     this.error.set(null);
     this.jobMensaje.set(null);
     this.svc.load(this.filtro()).subscribe({
@@ -424,72 +373,45 @@ export class EvaluacionReportesComponent implements OnInit {
   }
 
   exportar(format: ReporteFormato): void {
-    if (!this.puedeConsultar()) return;
     this.error.set(null);
     this.jobMensaje.set(null);
-
     const total = this.pagination()?.totalItems ?? 0;
     if (total > 500) {
       this.svc.createJob(this.filtro(), format).subscribe({
         next: (res) => {
           if (res.async && res.jobId) {
-            this.jobMensaje.set(
-              `Exportación encolada (job #${res.jobId}). Se notificará cuando esté lista.`,
-            );
+            this.jobMensaje.set(`Exportación encolada (job #${res.jobId}).`);
             this.pollJob(res.jobId, format);
             this.refrescarJobs();
           } else {
-            this.jobMensaje.set(res.message ?? 'Use exportación directa');
             this.exportarSync(format);
           }
         },
-        error: (err) =>
-          this.error.set(err?.error?.message ?? 'No se pudo encolar la exportación'),
+        error: (err) => this.error.set(err?.error?.message ?? 'No se pudo encolar la exportación'),
       });
       return;
     }
-
     this.exportarSync(format);
   }
 
   private exportarSync(format: ReporteFormato): void {
     this.svc.exportSync(this.filtro(), format).subscribe({
-      next: (blob) => {
-        triggerFileDownload(blob, `reporte-${this.filtro().tipo}.${format}`);
-      },
-      error: (err) =>
-        this.error.set(err?.error?.message ?? 'Error al exportar el reporte'),
+      next: (blob) => triggerFileDownload(blob, `matricula-${this.filtro().tipo}.${format}`),
+      error: (err) => this.error.set(err?.error?.message ?? 'Error al exportar el reporte'),
     });
   }
 
   private pollJob(jobId: number, format: ReporteFormato, intentos = 0): void {
-    if (intentos > 30) {
-      this.jobMensaje.set('La exportación está tardando. Consulte más tarde.');
-      return;
-    }
+    if (intentos > 30) return;
     setTimeout(() => {
-      this.svc.getJob(jobId, {
-        dre: this.filtro().dre,
-        ugel: this.filtro().ugel,
-      }).subscribe({
+      this.svc.getJob(jobId, { dre: this.filtro().dre, ugel: this.filtro().ugel }).subscribe({
         next: (job) => {
           if (job.status === 'completed') {
             this.refrescarJobs();
-            this.svc.downloadJob(jobId, {
-              dre: this.filtro().dre,
-              ugel: this.filtro().ugel,
-            }).subscribe({
-              next: (blob) =>
-                triggerFileDownload(
-                  blob,
-                  job.archivoNombre ?? `reporte.${format}`,
-                ),
-              error: () => this.error.set('Error al descargar el archivo generado'),
+            this.svc.downloadJob(jobId, { dre: this.filtro().dre, ugel: this.filtro().ugel }).subscribe({
+              next: (blob) => triggerFileDownload(blob, job.archivoNombre ?? `matricula.${format}`),
             });
-          } else if (job.status === 'failed') {
-            this.refrescarJobs();
-            this.error.set(job.errorMensaje ?? 'La exportación falló');
-          } else {
+          } else if (job.status !== 'failed') {
             this.pollJob(jobId, format, intentos + 1);
           }
         },
@@ -503,20 +425,6 @@ export class EvaluacionReportesComponent implements OnInit {
   }
 
   tituloGrupo(row: ReporteRow): string {
-    return String(row.tituloGrupo ?? row['estudiante'] ?? 'Estudiante');
-  }
-
-  etiquetaConteoRegistros(): string {
-    const p = this.pagination();
-    const meta = this.meta();
-    if (!p) return '0 registro(s)';
-    if (meta?.tipo === 'notas' && meta.totales['totalRegistros'] != null) {
-      const notas = meta.totales['totalRegistros'];
-      const alumnos = meta.totales['alumnosUnicos'];
-      const alumnosTxt =
-        alumnos != null ? ` · ${alumnos} alumno(s)` : '';
-      return `${notas} nota(s)${alumnosTxt}`;
-    }
-    return `${p.totalItems} registro(s)`;
+    return String(row.tituloGrupo ?? row['estudiante'] ?? 'Grupo');
   }
 }

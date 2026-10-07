@@ -113,7 +113,7 @@ interface RecentActivity {
         <div class="card p-6">
           <div class="flex items-center justify-between mb-5">
             <h3 class="font-semibold text-gray-800">Asistencia Hoy</h3>
-            <a routerLink="/asistencia/reportes" class="text-xs text-indigo-600 hover:underline">Ver reporte</a>
+            <a routerLink="/reportes/asistencia" class="text-xs text-indigo-600 hover:underline">Ver reporte</a>
           </div>
 
           <!-- Donut visual simple -->
@@ -159,7 +159,7 @@ interface RecentActivity {
         <div class="card p-6">
           <div class="flex items-center justify-between mb-5">
             <h3 class="font-semibold text-gray-800">Estado Financiero</h3>
-            <a routerLink="/tesoreria/reportes" class="text-xs text-indigo-600 hover:underline">Detalle</a>
+            <a routerLink="/reportes/tesoreria" class="text-xs text-indigo-600 hover:underline">Detalle</a>
           </div>
           <div class="space-y-4">
             @for (item of finanzas; track item.label) {

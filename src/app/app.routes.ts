@@ -3,6 +3,7 @@ import { authGuard } from './core/auth/guards/auth.guard';
 import { roleGuard, permisoGuard, staffAreaGuard, dashboardGuard, portalDocenteGuard, portalEstudianteGuard, portalPadreGuard } from './core/auth/guards/role.guard';
 import { MainLayoutComponent } from './core/layout/components/main-layout/main-layout.component';
 import { trasladosDefaultGuard } from './features/traslados/traslados-default.guard';
+import { reportesModuloGuard } from './features/reportes/reportes-modulo.guard';
 
 export const routes: Routes = [
   // ── Redirección raíz ──────────────────────────────────
@@ -40,6 +41,40 @@ export const routes: Routes = [
         path: 'cuenta/cambiar-contrasena',
         loadComponent: () =>
           import('./features/cuenta/change-password.component').then(m => m.ChangePasswordComponent),
+      },
+
+      // ── Reportería (centralizada) ───────────────────────
+      {
+        path: 'reportes',
+        canActivate: [
+          staffAreaGuard,
+          permisoGuard(
+            'dashboard.reportes',
+            'matricula.reportes',
+            'asistencia.reportes',
+            'evaluacion.reportes',
+            'tesoreria.reportes',
+            'admin.reportes',
+          ),
+        ],
+        children: [
+          {
+            path: '',
+            pathMatch: 'full',
+            loadComponent: () =>
+              import('./features/reportes/reportes-redirect.component').then(
+                (m) => m.ReportesRedirectComponent,
+              ),
+          },
+          {
+            path: ':modulo',
+            canActivate: [reportesModuloGuard],
+            loadComponent: () =>
+              import('./features/reportes/reportes-shell.component').then(
+                (m) => m.ReportesShellComponent,
+              ),
+          },
+        ],
       },
 
       // ── Administración ─────────────────────────────────
@@ -125,6 +160,11 @@ export const routes: Routes = [
         canActivate: [staffAreaGuard, permisoGuard('matricula.ver')],
         children: [
           { path: '', redirectTo: 'matriculados', pathMatch: 'full' },
+          {
+            path: 'reportes',
+            redirectTo: '/reportes/matricula',
+            pathMatch: 'full',
+          },
           {
             path: 'matriculados',
             loadComponent: () => import('./features/matricula/matriculados/matriculados.component').then(m => m.MatriculadosComponent)
@@ -359,7 +399,8 @@ export const routes: Routes = [
           },
           {
             path: 'reportes',
-            loadComponent: () => import('./features/asistencia/reportes/reportes.component').then(m => m.AsistenciaReportesComponent)
+            redirectTo: '/reportes/asistencia',
+            pathMatch: 'full',
           },
         ]
       },
@@ -408,11 +449,8 @@ export const routes: Routes = [
           },
           {
             path: 'reportes',
-            canActivate: [permisoGuard('evaluacion.reportes', 'admin.reportes')],
-            loadComponent: () =>
-              import('./features/evaluacion/reportes/reportes.component').then(
-                m => m.EvaluacionReportesComponent,
-              ),
+            redirectTo: '/reportes/evaluacion',
+            pathMatch: 'full',
           },
           {
             path: 'promedios',
@@ -597,7 +635,8 @@ export const routes: Routes = [
           },
           {
             path: 'reportes',
-            loadComponent: () => import('./features/tesoreria/reportes/reportes.component').then(m => m.TesoreriaReportesComponent)
+            redirectTo: '/reportes/tesoreria',
+            pathMatch: 'full',
           },
         ]
       },

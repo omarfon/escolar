@@ -1,45 +1,35 @@
-﻿import { Component, computed, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DatePipe } from '@angular/common';
-import { LayoutService } from '../../../core/layout/services/layout.service';
 import { AuthService } from '../../../core/auth/services/auth.service';
 import {
-  ESTADO_ASISTENCIA_LABEL,
-  ReporteAsistenciaContext,
-  ReporteAsistenciaTipo,
   ReporteColumn,
   ReporteFilters,
   ReporteFormato,
-  ReporteJob,
   ReporteMeta,
   ReportePagination,
   ReporteRow,
-  TIPOS_REPORTE_ASISTENCIA,
-  tipoReporteAsistenciaLabel,
+  ReporteTerritorialContext,
 } from './reportes.model';
-import { AsistenciaReportesService, triggerFileDownload } from './reportes.service';
+import {
+  TerritorialReportesService,
+  triggerFileDownload,
+} from './reportes.service';
 
 @Component({
-  selector: 'app-asistencia-reportes',
+  selector: 'app-territorial-reportes',
   standalone: true,
   imports: [FormsModule, DatePipe],
   template: `
-    <div class="space-y-5 animate-fade-in">
+    <div class="space-y-5">
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h3 class="text-lg font-semibold text-gray-900">Asistencia</h3>
+          <h3 class="text-lg font-semibold text-gray-900">UGEL / DRE consolidado</h3>
           @if (context(); as ctx) {
             <p class="text-sm text-gray-500 mt-0.5">{{ ctx.alcance.label }}</p>
             <p class="text-xs text-gray-400 mt-1">
-              Ruta: <span class="font-mono">/reportes/asistencia</span>
-              · Menú: Reportería → Asistencia
-              · Año {{ ctx.anioEscolar }} · Mes {{ filtro().mes ?? ctx.mesActual }}
+              Matrícula · Asistencia · Evaluación · {{ ctx.alcance.institucionesCount }} IE
             </p>
-            @if (ctx.alcance.consolidado) {
-              <p class="text-xs text-indigo-600 mt-1 font-medium">
-                Vista consolidada · {{ ctx.alcance.institucionesCount }} institución(es)
-              </p>
-            }
           }
         </div>
         <div class="flex flex-wrap gap-2">
@@ -64,8 +54,8 @@ import { AsistenciaReportesService, triggerFileDownload } from './reportes.servi
         <div class="card p-4 bg-indigo-50/50 border border-indigo-100 text-sm">
           <div class="flex flex-wrap gap-x-6 gap-y-1 text-gray-600">
             <span><strong>Fecha de corte:</strong> {{ m.fechaCorte | date:'dd/MM/yyyy HH:mm' }}</span>
-            <span><strong>Tipo:</strong> {{ tipoReporteAsistenciaLabel(m.tipo) }}</span>
             <span><strong>Fuente:</strong> {{ m.fuente }}</span>
+            <span><strong>Bimestre:</strong> {{ m.bimestre ?? '—' }}</span>
           </div>
           @if (totalesEntries().length) {
             <div class="flex flex-wrap gap-3 mt-3">
@@ -96,76 +86,32 @@ import { AsistenciaReportesService, triggerFileDownload } from './reportes.servi
             </div>
           }
           <div>
-            <label class="form-label mb-1 block">Tipo de reporte</label>
-            <select class="form-select" [ngModel]="filtro().tipo" (ngModelChange)="setTipo($event)">
-              @for (t of tipos; track t.value) {
-                <option [value]="t.value">{{ t.label }}</option>
+            <label class="form-label mb-1 block">Bimestre</label>
+            <select class="form-select" [ngModel]="filtro().bimestre ?? ''" (ngModelChange)="setBimestre($event)">
+              @for (b of bimestres(); track b) {
+                <option [value]="b">{{ b }}° bimestre</option>
               }
             </select>
           </div>
           <div>
-            <label class="form-label mb-1 block">Mes (YYYY-MM)</label>
+            <label class="form-label mb-1 block">Mes asistencia</label>
             <input class="form-input" type="month" [ngModel]="filtro().mes" (ngModelChange)="setFiltro('mes', $event)">
           </div>
-          <div>
-            <label class="form-label mb-1 block">Nivel</label>
-            <select class="form-select" [ngModel]="filtro().nivel ?? ''" (ngModelChange)="setFiltro('nivel', $event)">
-              <option value="">Todos</option>
-              @for (n of niveles(); track n) { <option [value]="n">{{ n }}</option> }
-            </select>
-          </div>
-          <div>
-            <label class="form-label mb-1 block">Grado</label>
-            <select class="form-select" [ngModel]="filtro().grado ?? ''" (ngModelChange)="setFiltro('grado', $event)">
-              <option value="">Todos</option>
-              @for (g of grados(); track g) { <option [value]="g">{{ g }}</option> }
-            </select>
-          </div>
-          <div>
-            <label class="form-label mb-1 block">Sección</label>
-            <select class="form-select" [ngModel]="filtro().seccion ?? ''" (ngModelChange)="setFiltro('seccion', $event)">
-              <option value="">Todas</option>
-              @for (s of secciones(); track s) { <option [value]="s">{{ s }}</option> }
-            </select>
-          </div>
-          <div>
-            <label class="form-label mb-1 block">Estado</label>
-            <select class="form-select" [ngModel]="filtro().estado ?? ''" (ngModelChange)="setFiltro('estado', $event)">
-              <option value="">Todos</option>
-              @for (e of estados(); track e) {
-                <option [value]="e">{{ estadoLabel(e) }}</option>
-              }
-            </select>
-          </div>
           <div class="sm:col-span-2">
-            <label class="form-label mb-1 block">Buscar</label>
-            <input class="form-input" placeholder="Estudiante, DNI..."
+            <label class="form-label mb-1 block">Buscar IE</label>
+            <input class="form-input" placeholder="Institución, DRE, UGEL..."
               [ngModel]="filtro().busqueda" (ngModelChange)="setFiltro('busqueda', $event)">
           </div>
         </div>
       </div>
 
-      @if (puedeExportar() && jobs().length) {
-        <div class="card p-4">
-          <h3 class="text-sm font-semibold text-gray-800 mb-3">Exportaciones en cola</h3>
-          @for (job of jobs(); track job.id) {
-            <div class="flex flex-wrap items-center justify-between gap-2 text-sm border rounded-lg px-3 py-2 mb-2">
-              <span>#{{ job.id }} · {{ job.reportType }} · {{ jobStatusLabel(job.status) }}</span>
-              @if (job.status === 'completed') {
-                <button class="btn btn-secondary btn-sm" (click)="descargarJob(job)">Descargar</button>
-              }
-            </div>
-          }
-        </div>
-      }
-
       @if (error()) {
         <div class="card p-8 text-center text-red-600" role="alert">{{ error() }}</div>
       } @else if (svc.loading()) {
-        <div class="card p-12 text-center text-gray-400">Generando reporte…</div>
+        <div class="card p-12 text-center text-gray-400">Generando reporte territorial…</div>
       } @else if (!items().length) {
         <div class="card p-16 text-center text-gray-500">
-          Configure los filtros y pulse <strong>Generar</strong>.
+          Pulse <strong>Generar</strong> para consolidar matrícula, asistencia y evaluación por IE.
         </div>
       } @else {
         <div class="card overflow-x-auto">
@@ -189,7 +135,7 @@ import { AsistenciaReportesService, triggerFileDownload } from './reportes.servi
           </table>
           @if (pagination(); as p) {
             <div class="px-4 py-3 flex justify-between items-center text-sm border-t">
-              <span>Página {{ p.page }} / {{ p.totalPages }} · {{ p.totalItems }} registro(s)</span>
+              <span>Página {{ p.page }} / {{ p.totalPages }} · {{ p.totalItems }} IE(s)</span>
               <div class="flex gap-2">
                 <button class="btn btn-secondary btn-sm" [disabled]="p.page <= 1" (click)="irPagina(p.page - 1)">Anterior</button>
                 <button class="btn btn-secondary btn-sm" [disabled]="p.page >= p.totalPages" (click)="irPagina(p.page + 1)">Siguiente</button>
@@ -201,49 +147,41 @@ import { AsistenciaReportesService, triggerFileDownload } from './reportes.servi
     </div>
   `,
 })
-export class AsistenciaReportesComponent implements OnInit {
-  readonly svc = inject(AsistenciaReportesService);
-  private readonly layout = inject(LayoutService);
+export class TerritorialReportesComponent implements OnInit {
+  readonly svc = inject(TerritorialReportesService);
   private readonly auth = inject(AuthService);
 
-  readonly tipos = TIPOS_REPORTE_ASISTENCIA;
-  readonly tipoReporteAsistenciaLabel = tipoReporteAsistenciaLabel;
-
-  readonly context = signal<ReporteAsistenciaContext | null>(null);
+  readonly context = signal<ReporteTerritorialContext | null>(null);
   readonly meta = signal<ReporteMeta | null>(null);
   readonly columns = signal<ReporteColumn[]>([]);
   readonly items = signal<ReporteRow[]>([]);
   readonly pagination = signal<ReportePagination | null>(null);
   readonly error = signal<string | null>(null);
-  readonly jobs = signal<ReporteJob[]>([]);
 
   readonly filtro = signal<ReporteFilters>({
-    tipo: 'asistencia_resumen',
+    tipo: 'consolidado_ugel_dre',
     page: 1,
     pageSize: 25,
   });
 
-  readonly niveles = computed(() => this.context()?.filtros.niveles ?? []);
-  readonly grados = computed(() => this.context()?.filtros.grados ?? []);
-  readonly secciones = computed(() => this.context()?.filtros.secciones ?? []);
-  readonly estados = computed(() => this.context()?.filtros.estados ?? []);
+  readonly bimestres = computed(() => this.context()?.filtros.bimestres ?? []);
   readonly dres = computed(() => this.context()?.filtros.dres ?? []);
   readonly ugels = computed(() => this.context()?.filtros.ugels ?? []);
   readonly mostrarFiltrosTerritoriales = computed(() => {
     const ctx = this.context();
-    return ctx?.alcance.consolidado || ctx?.alcance.nivel === 'MINEDU';
+    return ctx?.alcance.nivel === 'MINEDU' || ctx?.alcance.consolidado;
   });
 
   readonly totalesEntries = computed(() => {
     const totales = this.meta()?.totales ?? {};
     const labels: Record<string, string> = {
-      totalAlumnos: 'Alumnos',
-      totalRegistros: 'Registros',
-      presentes: 'Presentes',
-      faltas: 'Faltas',
-      tardanzas: 'Tardanzas',
-      justificadas: 'Justificadas',
       institucionesIncluidas: 'Instituciones',
+      alumnosTotal: 'Alumnos total',
+      alumnosActivos: 'Matrícula activa',
+      asistenciaPromedioPct: '% Asistencia prom.',
+      notasRegistradas: 'Notas registradas',
+      alumnosConNotas: 'Alumnos con notas',
+      evaluacionAvancePct: '% Avance evaluación',
     };
     return Object.entries(totales).map(([key, value]) => ({
       key,
@@ -253,13 +191,7 @@ export class AsistenciaReportesComponent implements OnInit {
   });
 
   ngOnInit(): void {
-    this.layout.setTitle('Reportes de asistencia');
     this.cargarContexto();
-    if (this.puedeExportar()) this.refrescarJobs();
-  }
-
-  estadoLabel(code: string): string {
-    return ESTADO_ASISTENCIA_LABEL[code] ?? code;
   }
 
   private cargarContexto(): void {
@@ -269,11 +201,15 @@ export class AsistenciaReportesComponent implements OnInit {
         this.context.set(ctx);
         this.filtro.update((cur) => ({
           ...cur,
-          anio: cur.anio ?? ctx.anioEscolar,
+          anio: ctx.anioEscolar,
+          bimestre: cur.bimestre ?? ctx.bimestreActual,
           mes: cur.mes ?? ctx.mesActual,
+          dre: cur.dre ?? ctx.alcance.dre ?? undefined,
+          ugel: cur.ugel ?? ctx.alcance.ugel ?? undefined,
         }));
       },
-      error: () => this.error.set('No se pudo cargar el contexto institucional'),
+      error: (err) =>
+        this.error.set(err?.error?.message ?? 'No se pudo cargar el contexto territorial'),
     });
   }
 
@@ -282,34 +218,20 @@ export class AsistenciaReportesComponent implements OnInit {
     this.cargarContexto();
   }
 
-  refrescarJobs(): void {
-    const f = this.filtro();
-    this.svc.listJobs({ dre: f.dre, ugel: f.ugel }).subscribe({
-      next: (list) => this.jobs.set(list),
-    });
-  }
-
-  jobStatusLabel(status: ReporteJob['status']): string {
-    return ({ pending: 'Pendiente', processing: 'Procesando', completed: 'Listo', failed: 'Fallido' })[status];
-  }
-
-  descargarJob(job: ReporteJob): void {
-    const f = this.filtro();
-    this.svc.downloadJob(job.id, { dre: f.dre, ugel: f.ugel }).subscribe({
-      next: (blob) => triggerFileDownload(blob, job.archivoNombre ?? `asistencia-${job.id}.${job.format}`),
-    });
-  }
-
-  puedeExportar(): boolean {
-    return this.auth.hasAnyPermiso('asistencia.exportar', 'admin.reportes');
-  }
-
-  setTipo(tipo: ReporteAsistenciaTipo): void {
-    this.filtro.update((f) => ({ ...f, tipo, page: 1 }));
+  setBimestre(value: string): void {
+    this.filtro.update((f) => ({
+      ...f,
+      bimestre: value ? Number(value) : undefined,
+      page: 1,
+    }));
   }
 
   setFiltro<K extends keyof ReporteFilters>(key: K, value: ReporteFilters[K]): void {
     this.filtro.update((f) => ({ ...f, [key]: value || undefined, page: 1 }));
+  }
+
+  puedeExportar(): boolean {
+    return this.auth.hasAnyPermiso('dashboard.reportes', 'admin.reportes');
   }
 
   cargar(): void {
@@ -323,7 +245,7 @@ export class AsistenciaReportesComponent implements OnInit {
       },
       error: (err) => {
         this.items.set([]);
-        this.error.set(err?.error?.message ?? 'Error al generar el reporte');
+        this.error.set(err?.error?.message ?? 'Error al generar el reporte territorial');
       },
     });
   }
@@ -334,22 +256,8 @@ export class AsistenciaReportesComponent implements OnInit {
   }
 
   exportar(format: ReporteFormato): void {
-    const total = this.pagination()?.totalItems ?? 0;
-    if (total > 500) {
-      this.svc.createJob(this.filtro(), format).subscribe({
-        next: (res) => {
-          if (res.async && res.jobId) this.refrescarJobs();
-          else this.exportarSync(format);
-        },
-      });
-      return;
-    }
-    this.exportarSync(format);
-  }
-
-  private exportarSync(format: ReporteFormato): void {
     this.svc.exportSync(this.filtro(), format).subscribe({
-      next: (blob) => triggerFileDownload(blob, `asistencia-${this.filtro().tipo}.${format}`),
+      next: (blob) => triggerFileDownload(blob, `territorial-ugel-dre.${format}`),
       error: (err) => this.error.set(err?.error?.message ?? 'Error al exportar'),
     });
   }

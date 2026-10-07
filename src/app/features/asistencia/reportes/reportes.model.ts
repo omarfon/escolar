@@ -1,12 +1,7 @@
-export type ReporteTipo =
-  | 'promedios'
-  | 'notas'
-  | 'competencias'
-  | 'diagnostico'
-  | 'avance_evaluacion';
+export type ReporteAsistenciaTipo = 'asistencia_detalle' | 'asistencia_resumen';
 export type ReporteFormato = 'csv' | 'xlsx' | 'pdf';
 
-export interface ReporteContext {
+export interface ReporteAsistenciaContext {
   institucion: {
     id: number;
     nombre: string;
@@ -23,21 +18,22 @@ export interface ReporteContext {
     consolidado: boolean;
     institucionesCount: number;
   };
-  bimestreActual: number;
+  periodoActual: number;
   anioEscolar: number;
-  tiposDisponibles: ReporteTipo[];
+  mesActual: string;
+  tiposDisponibles: ReporteAsistenciaTipo[];
   permisoConsulta: string;
   permisoExportacion: string;
   filtros: {
     niveles: string[];
     grados: string[];
     secciones: string[];
-    cursos: string[];
-    bimestres: number[];
+    periodos: number[];
+    estados: string[];
     dres: string[];
     ugels: string[];
   };
-  fuentes: Record<ReporteTipo, string>;
+  fuentes: Record<ReporteAsistenciaTipo, string>;
 }
 
 export interface ReporteColumn {
@@ -46,13 +42,7 @@ export interface ReporteColumn {
 }
 
 export interface ReporteRow {
-  _tipoFila?: 'encabezado' | 'detalle' | string;
-  tituloGrupo?: string;
   [key: string]: string | number | null | undefined;
-}
-
-export function esFilaEncabezadoGrupo(row: ReporteRow): boolean {
-  return row._tipoFila === 'encabezado';
 }
 
 export interface ReportePagination {
@@ -66,11 +56,11 @@ export interface ReporteMeta {
   fechaCorte: string;
   anioEscolar: number;
   bimestre: number | null;
-  tipo: ReporteTipo;
+  tipo: ReporteAsistenciaTipo;
   fuente: string;
   parametros: Record<string, unknown>;
-  institucion: ReporteContext['institucion'];
-  alcance?: ReporteContext['alcance'];
+  institucion: ReporteAsistenciaContext['institucion'];
+  alcance?: ReporteAsistenciaContext['alcance'];
   totales: Record<string, number | null>;
 }
 
@@ -82,15 +72,16 @@ export interface ReporteResponse {
 }
 
 export interface ReporteFilters {
-  tipo: ReporteTipo;
+  tipo: ReporteAsistenciaTipo;
   anio?: number;
-  bimestre?: number;
+  periodo?: number;
+  mes?: string;
   dre?: string;
   ugel?: string;
   nivel?: string;
   grado?: string;
   seccion?: string;
-  curso?: string;
+  estado?: string;
   busqueda?: string;
   page?: number;
   pageSize?: number;
@@ -99,7 +90,7 @@ export interface ReporteFilters {
 export interface ReporteJob {
   id: number;
   status: 'pending' | 'processing' | 'completed' | 'failed';
-  reportType: ReporteTipo;
+  reportType: ReporteAsistenciaTipo;
   format: ReporteFormato;
   totalFilas: number;
   archivoNombre?: string;
@@ -108,14 +99,18 @@ export interface ReporteJob {
   completedAt?: string;
 }
 
-export const TIPOS_REPORTE: { value: ReporteTipo; label: string }[] = [
-  { value: 'promedios', label: 'Promedios por aula' },
-  { value: 'notas', label: 'Registro de notas' },
-  { value: 'competencias', label: 'Evaluación por competencias' },
-  { value: 'diagnostico', label: 'Evaluación diagnóstica' },
-  { value: 'avance_evaluacion', label: 'Avance de evaluación' },
+export const TIPOS_REPORTE_ASISTENCIA: { value: ReporteAsistenciaTipo; label: string }[] = [
+  { value: 'asistencia_detalle', label: 'Detalle de asistencia' },
+  { value: 'asistencia_resumen', label: 'Resumen por estudiante' },
 ];
 
-export function tipoReporteLabel(tipo: ReporteTipo): string {
-  return TIPOS_REPORTE.find((t) => t.value === tipo)?.label ?? tipo;
+export const ESTADO_ASISTENCIA_LABEL: Record<string, string> = {
+  P: 'Presente',
+  F: 'Falta',
+  T: 'Tardanza',
+  J: 'Justificada',
+};
+
+export function tipoReporteAsistenciaLabel(tipo: ReporteAsistenciaTipo): string {
+  return TIPOS_REPORTE_ASISTENCIA.find((t) => t.value === tipo)?.label ?? tipo;
 }
