@@ -13,6 +13,22 @@ interface PeriodoActualRow {
   fin?: string;
 }
 
+/** Alinea institution.anio con el calendario actual (validación UI + backend en E2E). */
+export async function ensureInstitutionAnioEscolarCoherente(
+  request: APIRequestContext,
+  session: ApiAuthSession,
+  anio = new Date().getFullYear(),
+): Promise<number> {
+  expect(session.institutionId, 'usuario debe tener IE asignada').toBeTruthy();
+  const headers = authHeaders(session.accessToken, session.institutionId);
+  const patchRes = await request.patch(`${API_V1}/institution`, {
+    headers,
+    data: { anio: String(anio) },
+  });
+  expect(patchRes.ok(), `actualizar año IE → HTTP ${patchRes.status()}`).toBeTruthy();
+  return anio;
+}
+
 /** Año escolar configurado en la IE (campo institution.anio usado por validación de edad). */
 export async function resolveAnioEscolarInstitucion(
   request: APIRequestContext,
@@ -36,7 +52,7 @@ export async function ensureAnioEscolarActivo(
   session: ApiAuthSession,
   anio: number,
 ): Promise<void> {
-  const headers = authHeaders(session.accessToken);
+  const headers = authHeaders(session.accessToken, session.institutionId);
   const listRes = await request.get(`${API_V1}/maestros/anios-escolares`, { headers });
   expect(listRes.ok(), `listar años escolares → HTTP ${listRes.status()}`).toBeTruthy();
 
@@ -56,6 +72,8 @@ export async function ensureAnioEscolarActivo(
       motivo: 'Setup E2E',
     },
   });
+  if (createRes.ok()) return;
+  if (createRes.status() === 409) return;
   expect(createRes.ok(), `crear año ${anio} → HTTP ${createRes.status()}`).toBeTruthy();
 }
 
@@ -65,7 +83,7 @@ export async function createSalonMaestro(
   session: ApiAuthSession,
   data: { anioEscolar: number; nivel: string; grado: string; seccion: string; aforo: number },
 ): Promise<void> {
-  const headers = authHeaders(session.accessToken);
+  const headers = authHeaders(session.accessToken, session.institutionId);
   const res = await request.post(`${API_V1}/maestros/salones`, {
     headers,
     data,

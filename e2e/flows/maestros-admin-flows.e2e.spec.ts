@@ -170,6 +170,10 @@ test.describe('Maestros y administración — CRUD + validación', () => {
 
       const modal = page.locator('[role="dialog"]').first();
       await modal.getByPlaceholder('Ej. Matemática').fill(nombre);
+      await modal.locator('input[type="number"]').fill('1');
+      await modal.getByPlaceholder('Ej. Matemática').blur();
+      await modal.locator('input[type="number"]').blur();
+      await expect(modal.getByRole('button', { name: /^Registrar$/ })).toBeEnabled({ timeout: 10_000 });
       await modal.getByRole('button', { name: /^Registrar$/ }).click();
       await expect(page.getByRole('heading', { name: 'Nueva área curricular' })).toBeHidden({ timeout: 15_000 });
       await expect(page.locator('table tbody').getByText(nombre)).toBeVisible();

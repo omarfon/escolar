@@ -1,4 +1,5 @@
 import { expect, Page } from '@playwright/test';
+import { fechaNacNormativaParaGrado } from './enrollment-age.helper';
 
 export interface EstudianteFormData {
   nombres: string;
@@ -10,18 +11,6 @@ export interface EstudianteFormData {
   anioEscolar?: number;
 }
 
-/** Fecha de nacimiento coherente con edad normativa MINEDU (Primaria) al 31/03 del año escolar. */
-export function fechaNacNormativaParaGrado(
-  grado: string,
-  anioEscolar = new Date().getFullYear(),
-): string {
-  const num = Number.parseInt(grado.match(/(\d+)/)?.[1] ?? '1', 10);
-  const edadEsperada = num + 5;
-  // Nacimiento en junio: al 31/03 aún no cumple años → restar un año más.
-  const year = anioEscolar - edadEsperada - 1;
-  return `${year}-06-15`;
-}
-
 export async function fillEstudianteMinimo(page: Page, data: EstudianteFormData): Promise<void> {
   const grado = data.grado ?? '5° Primaria';
   const anioEscolar = data.anioEscolar ?? new Date().getFullYear();
@@ -31,13 +20,16 @@ export async function fillEstudianteMinimo(page: Page, data: EstudianteFormData)
   await page.getByPlaceholder('12345678').fill(data.dni);
   await page.locator('input[type="date"]').first().fill(fechaNac);
   await page.locator('label:has-text("Grado")').locator('..').locator('select').selectOption(grado);
+  await page.getByPlaceholder('12345678').blur();
 }
 
 export async function submitEstudianteNuevo(page: Page): Promise<void> {
+  const btn = page.getByRole('button', { name: /Registrar estudiante/i });
+  await expect(btn).toBeEnabled({ timeout: 20_000 });
   const createResponse = page.waitForResponse(
     (res) => res.url().includes('/students') && res.request().method() === 'POST',
   );
-  await page.getByRole('button', { name: /Registrar estudiante/i }).click();
+  await btn.click();
   const response = await createResponse;
   expect(response.ok(), `crear estudiante → HTTP ${response.status()}`).toBeTruthy();
 }

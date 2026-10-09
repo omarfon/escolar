@@ -51,7 +51,7 @@ export async function loginApi(
       data: { username, password },
     });
     lastStatus = res.status();
-    if (lastStatus === 429) {
+    if (lastStatus === 429 || lastStatus >= 500) {
       await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
       continue;
     }
@@ -66,7 +66,7 @@ export async function loginApi(
     return session;
   }
 
-  expect(false, `login ${username} → HTTP ${lastStatus} (rate limit)`).toBeTruthy();
+  expect(false, `login ${username} → HTTP ${lastStatus} (reintentos agotados)`).toBeTruthy();
   throw new Error('unreachable');
 }
 
@@ -107,11 +107,21 @@ export async function fetchInstitutionDirectory(
   request: APIRequestContext,
   siagieToken: string,
 ): Promise<InstitucionDirectorio[]> {
-  const res = await request.get(`${API_V1}/institution-directory`, {
-    headers: authHeaders(siagieToken),
-  });
-  expect(res.ok(), `directorio IE → HTTP ${res.status()}`).toBeTruthy();
-  return res.json();
+  let lastStatus = 0;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const res = await request.get(`${API_V1}/institution-directory`, {
+      headers: authHeaders(siagieToken),
+    });
+    lastStatus = res.status();
+    if (lastStatus === 429 || lastStatus >= 500) {
+      await new Promise((r) => setTimeout(r, 1200 * (attempt + 1)));
+      continue;
+    }
+    expect(res.ok(), `directorio IE → HTTP ${lastStatus}`).toBeTruthy();
+    return res.json();
+  }
+  expect(false, `directorio IE → HTTP ${lastStatus} (rate limit)`).toBeTruthy();
+  throw new Error('unreachable');
 }
 
 export async function findInstitutionByCodigoModular(

@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { loginAsUser } from '../helpers/auth.helper';
+import { loginAsSiagieWithInstitution } from '../helpers/siagie.helper';
 import { uniqueSuffix } from '../helpers/crud-audit.helper';
 import { gotoAppRoute } from '../helpers/routing.helper';
 import {
@@ -114,18 +115,25 @@ test.describe('F7 — Aislamiento tenant (multi-institución)', () => {
     test('al elegir IE carga catálogo acotado', async ({ page, request }) => {
       const { admin, adminInstitutionId } = await resolveCrossTenantUsers(request);
 
-      await loginAsUser(page, 'siagie');
-      await page.locator('#tenant-ie-select').selectOption(String(adminInstitutionId));
-      await gotoAppRoute(page, '/maestros/cursos');
+      await loginAsSiagieWithInstitution(page, request, adminInstitutionId);
+      const select = page.locator('#tenant-ie-select');
 
-      await expect(
-        page.getByText(new RegExp(`Contexto activo:.*#${adminInstitutionId}`)),
-      ).toBeVisible();
-      await expect(page.getByText('No hay cursos en el catálogo.')).toHaveCount(0);
+      let apiList = await listCursosApi(request, admin);
+      let cursoE2eId: number | null = null;
+      if (apiList.total === 0) {
+        const created = await createCursoApi(request, admin, `Curso UI tenant ${uniqueSuffix()}`);
+        cursoE2eId = created.id;
+        apiList = await listCursosApi(request, admin);
+      }
+
+      await gotoAppRoute(page, '/maestros/cursos');
+      await expect(select).toHaveValue(String(adminInstitutionId));
+      expect(apiList.total).toBeGreaterThan(0);
       await expect(page.locator('table tbody tr').first()).toBeVisible({ timeout: 20_000 });
 
-      const apiList = await listCursosApi(request, admin);
-      expect(apiList.total).toBeGreaterThan(0);
+      if (cursoE2eId != null) {
+        await deactivateCursoApi(request, admin, cursoE2eId);
+      }
     });
   });
 });

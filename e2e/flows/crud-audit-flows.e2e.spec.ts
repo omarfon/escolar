@@ -12,7 +12,11 @@ import {
   waitForAuditFlush,
 } from '../helpers/crud-audit.helper';
 import { fillEstudianteMinimo, submitEstudianteNuevo } from '../helpers/estudiante-form.helper';
-import { ensureAnioEscolarActivo, resolveAnioEscolarInstitucion } from '../helpers/maestros-setup.helper';
+import {
+  ensureAnioEscolarActivo,
+  ensureInstitutionAnioEscolarCoherente,
+  resolveAnioEscolarInstitucion,
+} from '../helpers/maestros-setup.helper';
 import { loginApi } from '../helpers/tenant.helper';
 
 const anioEscolar = new Date().getFullYear();
@@ -86,7 +90,7 @@ test.describe('CRUD + validación + auditoría', () => {
   test.describe('Estudiantes — Expedientes', () => {
     test('valida, crea, edita con motivo de auditoría y elimina estudiante', async ({ page, request }) => {
       const admin = await loginApi(request, 'admin');
-      const anioInst = await resolveAnioEscolarInstitucion(request, admin);
+      const anioInst = await ensureInstitutionAnioEscolarCoherente(request, admin);
       const dni = `${String(Date.now()).slice(-8)}`;
       const nombres = `Lucia${uniqueLetras(3)}`;
       const apellidos = `Prueba${uniqueLetras(4)}`;

@@ -2,6 +2,7 @@ import { Component, inject, OnInit, signal, computed } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { NgClass } from '@angular/common';
 import { LayoutService } from '../../../core/layout/services/layout.service';
+import { AuthService } from '../../../core/auth/services/auth.service';
 import { RolesService } from '../roles/roles.service';
 import { UsuariosService } from './usuarios.service';
 import {
@@ -630,24 +631,47 @@ export class UsuariosComponent implements OnInit {
   readonly filtro = signal({ busqueda: '', rol: '', estado: '' });
 
   private readonly rolesApi = inject(RolesService);
+  private readonly auth = inject(AuthService);
   readonly rolesDeSede = signal<{ value: string; label: string }[]>([]);
+
+  /** Roles de operación en IE (sin territorial ni superusuario). */
+  private readonly rolesPrincipales = [
+    { value: 'ADMIN',         label: 'Administrador'   },
+    { value: 'DIRECTOR',      label: 'Director'        },
+    { value: 'DOCENTE',       label: 'Docente'         },
+    { value: 'SECRETARIA',    label: 'Secretaria'      },
+    { value: 'TESORERO',      label: 'Tesorero'        },
+    { value: 'PADRE',         label: 'Padre/Madre'     },
+    { value: 'ESTUDIANTE',    label: 'Estudiante'      },
+    { value: 'BIBLIOTECARIO', label: 'Bibliotecario'   },
+  ] as const;
+
+  private readonly rolesReservados = [
+    { value: 'UGEL',   label: 'Personal UGEL'   },
+    { value: 'DRE',    label: 'Personal DRE'    },
+    { value: 'MINEDU', label: 'Personal MINEDU' },
+    { value: 'SIAGIE', label: 'SIAGIE'          },
+  ] as const;
+
   readonly rolesDisponibles = computed(() => {
-    const extra = this.rolesDeSede().filter((rol) => !this.roles.some((base) => base.value === rol.value));
-    return [...extra, ...this.roles];
+    const veCompleto =
+      this.auth.hasRole('ADMIN') || this.auth.hasRole('SIAGIE');
+    const base = veCompleto
+      ? [...this.rolesPrincipales, ...this.rolesReservados]
+      : [...this.rolesPrincipales];
+    const extra = this.rolesDeSede().filter(
+      (rol) => !base.some((b) => b.value === rol.value),
+    );
+    return [...extra, ...base];
   });
 
+  /** Etiquetas de rol en tabla y filtros (incluye reservados aunque no estén en el selector). */
   roles = [
-    { value: 'ADMIN',        label: 'Administrador'   },
-    { value: 'DIRECTOR',     label: 'Director'        },
-    { value: 'DOCENTE',      label: 'Docente'         },
-    { value: 'SECRETARIA',   label: 'Secretaria'      },
-    { value: 'TESORERO',     label: 'Tesorero'        },
-    { value: 'PADRE',        label: 'Padre/Madre'     },
-    { value: 'ESTUDIANTE',   label: 'Estudiante'      },
-    { value: 'BIBLIOTECARIO',label: 'Bibliotecario'   },
-    { value: 'UGEL',         label: 'Personal UGEL'   },
-    { value: 'DRE',          label: 'Personal DRE'    },
-    { value: 'MINEDU',       label: 'Personal MINEDU' },
+    ...this.rolesPrincipales,
+    { value: 'UGEL', label: 'Personal UGEL' },
+    { value: 'DRE', label: 'Personal DRE' },
+    { value: 'MINEDU', label: 'Personal MINEDU' },
+    { value: 'SIAGIE', label: 'SIAGIE' },
   ];
 
   ambitos: { value: AmbitoTerritorial; label: string }[] = [

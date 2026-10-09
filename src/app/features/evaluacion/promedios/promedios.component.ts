@@ -16,6 +16,7 @@ import {
   PromediosResumen,
 } from './promedios.model';
 import type { GradingConfig } from '../../../core/grading/grading-config.model';
+import { mensajeErrorHttp } from '../../../core/api/api-error.util';
 
 @Component({
   selector: 'app-promedios',
@@ -518,7 +519,7 @@ export class PromediosComponent implements OnInit {
         this.cargar();
       },
       error: err =>
-        this.error.set(this.mensajeErrorApi(err, 'No se pudieron cargar las aulas')),
+        this.error.set(mensajeErrorHttp(err, 'No se pudieron cargar las aulas')),
     });
   }
 
@@ -543,25 +544,11 @@ export class PromediosComponent implements OnInit {
         this.actualizarColumnasResumen(res);
       },
       error: err => {
-        this.error.set(this.mensajeErrorApi(err, 'No se pudieron calcular promedios'));
+        this.error.set(mensajeErrorHttp(err, 'No se pudieron calcular promedios'));
         this._alumnos.set([]);
         this._resumen.set(null);
       },
     });
-  }
-
-  /** Distingue caída del proxy/backend (ECONNREFUSED → 500 genérico) de errores reales de la API. */
-  private mensajeErrorApi(err: unknown, fallback: string): string {
-    const http = err as { status?: number; message?: string; error?: { message?: string } };
-    const msg = http.error?.message ?? http.message;
-    if (
-      http.status === 0 ||
-      (http.status === 500 &&
-        (!msg || String(msg).startsWith('Http failure response')))
-    ) {
-      return 'No se pudo conectar con el servidor. Verifique que el backend esté en ejecución (puerto 3000).';
-    }
-    return typeof msg === 'string' && msg.trim() ? msg : fallback;
   }
 
   private findCursoData(alumno: AlumnoPromedio, nombre: string, tipo?: ColumnaPromedio['tipo']): CursoPromedio | undefined {

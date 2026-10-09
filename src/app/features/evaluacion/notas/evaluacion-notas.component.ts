@@ -3,6 +3,7 @@ import { PortalDocenteCursoCard } from '../../portal-docente/portal-docente.mode
 import { FormsModule } from '@angular/forms';
 import { NgClass } from '@angular/common';
 import { ActivatedRoute, RouterLink } from '@angular/router';
+import { mensajeErrorHttp } from '../../../core/api/api-error.util';
 import { AuthService } from '../../../core/auth/services/auth.service';
 import { LayoutService } from '../../../core/layout/services/layout.service';
 import { GradingConfigService } from '../../../core/grading/grading-config.service';
@@ -719,7 +720,7 @@ export class EvaluacionNotasComponent implements OnInit {
         }
       },
       error: (err) =>
-        this.error.set(err?.error?.message ?? err?.message ?? 'No se pudo cargar el periodo'),
+        this.error.set(mensajeErrorHttp(err, 'No se pudo cargar el periodo')),
     });
   }
 
@@ -788,7 +789,7 @@ export class EvaluacionNotasComponent implements OnInit {
         }
       },
       error: err =>
-        this.error.set(err?.error?.message ?? err?.message ?? 'No se pudieron cargar las aulas'),
+        this.error.set(mensajeErrorHttp(err, 'No se pudieron cargar las aulas')),
     });
   }
 
@@ -896,7 +897,7 @@ export class EvaluacionNotasComponent implements OnInit {
         this.snapshotOriginalNotas();
         this.revalidarTodasLasCeldas();
       },
-      error: err => this.error.set(err?.error?.message ?? err?.message ?? 'No se pudo cargar el registro'),
+      error: err => this.error.set(mensajeErrorHttp(err, 'No se pudo cargar el registro')),
     });
   }
 
